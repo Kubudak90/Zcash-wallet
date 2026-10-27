@@ -1,0 +1,39 @@
+{
+  "name": "celari-wallet",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Celari: açık kaynak, tarayıcıda çalışan, gizlilik öncelikli Zcash cüzdanı",
+  "license": "MIT OR Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:fake": "VITE_FAKE_ENGINE=1 vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "typecheck:vendor": "tsc --noEmit -p tsconfig.vendor.json",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "build:webzjs": "bash scripts/build-webzjs.sh",
+    "test:e2e:real": "playwright test -c playwright.real.config.ts"
+  },
+  "dependencies": {
+    "@noble/hashes": "1.8.0",
+    "@scure/base": "1.2.5",
+    "@scure/bip39": "1.6.0",
+    "idb-keyval": "6.2.1",
+    "qrcode": "1.5.4",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@types/qrcode": "1.5.5",
+    "@types/react": "18.3.23",
+    "@types/react-dom": "18.3.7",
+    "@vitejs/plugin-react": "4.5.0",
+    "typescript": "5.8.3",
+    "vite": "6.3.5",
+    "vitest": "3.1.4"
+  }
+}

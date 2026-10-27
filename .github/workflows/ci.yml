@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  app:
+    name: Typecheck, unit and UI tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npx playwright install --with-deps chromium
+      - name: UI tests (fake engine)
+        run: npm run test:e2e
+        env:
+          CI: '1'
+
+  webzjs:
+    name: Build WebZjs from source, production build, mainnet smoke test
+    # Same runner image upstream WebZjs builds on.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install wasm-pack
+        uses: jetli/wasm-pack-action@v0.4.0
+        with:
+          version: latest
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: .webzjs
+          cache-on-failure: true
+      - name: Build WebZjs wasm packages
+        run: bash scripts/build-webzjs.sh
+      - run: npm ci
+      - name: Check the adapter against the generated WebZjs typings
+        run: npm run typecheck:vendor
+      - name: Production build
+        run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: celari-dist
+          path: dist
+      - run: npx playwright install --with-deps chromium
+      - name: Mainnet smoke test (real engine)
+        run: npm run test:e2e:real
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-traces
+          path: test-results

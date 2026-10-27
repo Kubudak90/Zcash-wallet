@@ -1,0 +1,7 @@
+# Netlify / Cloudflare Pages: WebZjs needs a cross-origin isolated page.
+/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp
+  Referrer-Policy: no-referrer
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY

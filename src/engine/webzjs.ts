@@ -1,0 +1,286 @@
+// ZcashEngine backed by ChainSafe's WebZjs (built from source into vendor/ by
+// scripts/build-webzjs.sh).
+//
+// Two wasm modules are used, mirroring upstream's own wallet + snap split:
+//  - webzjs-wallet: the light client (sync, balances, building and proving PCZTs)
+//  - webzjs-keys:   key derivation and PCZT signing
+// Objects cannot cross wasm modules, so PCZTs move between them as bytes.
+
+import initWalletWasm, {
+  initThreadPool,
+  Pczt as WalletPczt,
+  WebWallet,
+  type WalletSummary,
+} from '@chainsafe/webzjs-wallet';
+import * as walletModule from '@chainsafe/webzjs-wallet';
+import initKeysWasm, {
+  Pczt as KeysPczt,
+  SeedFingerprint,
+  UnifiedFullViewingKey,
+  UnifiedSpendingKey,
+  pczt_sign,
+} from '@chainsafe/webzjs-keys';
+
+import { seedBytes } from '../lib/seed';
+import type {
+  Addresses,
+  HistoryItem,
+  SpendAuthority,
+  Summary,
+  TxStatus,
+  TxType,
+  ZcashEngine,
+} from './types';
+
+const NETWORK = 'main';
+const ACCOUNT_HD_INDEX = 0;
+// Notes are spendable after one confirmation, as in upstream's web wallet.
+const MIN_CONFIRMATIONS_TRUSTED = 1;
+const MIN_CONFIRMATIONS_UNTRUSTED = 1;
+
+interface RawBalance {
+  sapling_balance: number;
+  orchard_balance: number;
+  unshielded_balance: number;
+  pending_change: number;
+  pending_spendable: number;
+}
+
+interface RawHistoryEntry {
+  txid: string;
+  tx_type: 'Received' | 'Sent' | 'Shielded';
+  value: number;
+  fee: number | null;
+  block_height: number | null;
+  confirmations: number;
+  status: 'Confirmed' | 'Pending' | 'Expired';
+  memo: string | null;
+  timestamp: number | null;
+  pool: string;
+}
+
+const TX_TYPES: Record<RawHistoryEntry['tx_type'], TxType> = {
+  Received: 'received',
+  Sent: 'sent',
+  Shielded: 'shielded',
+};
+
+const TX_STATUSES: Record<RawHistoryEntry['status'], TxStatus> = {
+  Confirmed: 'confirmed',
+  Pending: 'pending',
+  Expired: 'expired',
+};
+
+/**
+ * Builds the spending key and seed fingerprint for one signing operation.
+ * The raw seed is wiped as soon as wasm has its own copies.
+ */
+function spendingKeys(phrase: string): { usk: UnifiedSpendingKey; fingerprint: SeedFingerprint } {
+  const seed = seedBytes(phrase);
+  try {
+    return {
+      // wasm-bindgen copies the bytes into wasm memory on each call.
+      usk: new UnifiedSpendingKey(NETWORK, seed, ACCOUNT_HD_INDEX),
+      fingerprint: new SeedFingerprint(seed),
+    };
+  } finally {
+    seed.fill(0);
+  }
+}
+
+/**
+ * The Sapling proof generation key, needed only when Sapling notes are spent.
+ * It has to come from the wallet module's own key classes; if this build does
+ * not export them, proving falls back to Orchard/transparent-only spends.
+ */
+function saplingProofKey(phrase: string) {
+  const WalletUsk = (walletModule as Partial<typeof import('@chainsafe/webzjs-keys')>).UnifiedSpendingKey;
+  if (!WalletUsk) return undefined;
+  const seed = seedBytes(phrase);
+  try {
+    const usk = new WalletUsk(NETWORK, seed, ACCOUNT_HD_INDEX);
+    const key = usk.to_sapling_proof_generation_key();
+    usk.free();
+    return key;
+  } finally {
+    seed.fill(0);
+  }
+}
+
+export class WebzjsEngine implements ZcashEngine {
+  private serverUrl = '';
+  private wallet: WebWallet | null = null;
+  // A throwaway wallet for chain queries before the real one is unlocked.
+  private probe: WebWallet | null = null;
+
+  async init(serverUrl: string): Promise<void> {
+    this.serverUrl = serverUrl;
+    await initWalletWasm();
+    await initKeysWasm();
+    await initThreadPool(Math.max(2, navigator.hardwareConcurrency || 4));
+    this.probe = this.newWallet(null);
+  }
+
+  private newWallet(db: Uint8Array | null): WebWallet {
+    return new WebWallet(
+      NETWORK,
+      this.serverUrl,
+      MIN_CONFIRMATIONS_TRUSTED,
+      MIN_CONFIRMATIONS_UNTRUSTED,
+      db ?? undefined,
+    );
+  }
+
+  private get chain(): WebWallet {
+    const wallet = this.wallet ?? this.probe;
+    if (!wallet) throw new Error('engine not initialized');
+    return wallet;
+  }
+
+  private get open_(): WebWallet {
+    if (!this.wallet) throw new Error('wallet not open');
+    return this.wallet;
+  }
+
+  async latestHeight(): Promise<number> {
+    return Number(await this.chain.get_latest_block());
+  }
+
+  async detectBirthday(secret: { phrase: string } | { ufvk: string }): Promise<number | null> {
+    let ufvk: UnifiedFullViewingKey;
+    if ('phrase' in secret) {
+      const { usk, fingerprint } = spendingKeys(secret.phrase);
+      fingerprint.free();
+      ufvk = usk.to_unified_full_viewing_key();
+      usk.free();
+    } else {
+      ufvk = new UnifiedFullViewingKey(NETWORK, secret.ufvk);
+    }
+    const taddr = ufvk.get_transparent_address(NETWORK);
+    ufvk.free();
+    if (!taddr) return null;
+    return (await this.chain.detect_birthday_from_transparent_address(taddr)) ?? null;
+  }
+
+  async isValidViewingKey(ufvk: string): Promise<boolean> {
+    try {
+      new UnifiedFullViewingKey(NETWORK, ufvk.trim()).free();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async viewingKey(phrase: string): Promise<string> {
+    const { usk, fingerprint } = spendingKeys(phrase);
+    fingerprint.free();
+    const ufvk = usk.to_unified_full_viewing_key();
+    usk.free();
+    const encoded = ufvk.encode(NETWORK);
+    ufvk.free();
+    return encoded;
+  }
+
+  async open(db: Uint8Array | null): Promise<number | null> {
+    this.wallet = this.newWallet(db);
+    const summary = await this.wallet.get_wallet_summary();
+    if (!summary) return null;
+    const first = (summary.account_balances as [number, RawBalance][])[0];
+    summary.free();
+    return first ? first[0] : null;
+  }
+
+  addSeedAccount(phrase: string, birthday: number): Promise<number> {
+    return this.open_.create_account('Celari', phrase, ACCOUNT_HD_INDEX, birthday);
+  }
+
+  addViewAccount(ufvk: string, birthday: number): Promise<number> {
+    return this.open_.create_account_view_ufvk('Celari (izleme)', ufvk.trim(), birthday);
+  }
+
+  async exportDb(): Promise<Uint8Array> {
+    return new Uint8Array(await this.open_.db_to_bytes());
+  }
+
+  sync(): Promise<void> {
+    return this.open_.sync();
+  }
+
+  async summary(account: number): Promise<Summary | null> {
+    const summary: WalletSummary | undefined = await this.open_.get_wallet_summary();
+    if (!summary) return null;
+    const entry = (summary.account_balances as [number, RawBalance][]).find(([id]) => id === account);
+    const b = entry?.[1];
+    const { chain_tip_height: tipHeight, fully_scanned_height: scannedHeight } = summary;
+    summary.free();
+    return {
+      tipHeight,
+      scannedHeight,
+      balances: {
+        orchard: BigInt(b?.orchard_balance ?? 0),
+        sapling: BigInt(b?.sapling_balance ?? 0),
+        transparent: BigInt(b?.unshielded_balance ?? 0),
+        pending: BigInt((b?.pending_change ?? 0) + (b?.pending_spendable ?? 0)),
+      },
+    };
+  }
+
+  async addresses(account: number): Promise<Addresses> {
+    const unified = await this.open_.get_current_address(account);
+    let transparent: string | null = null;
+    try {
+      transparent = await this.open_.get_current_address_transparent(account);
+    } catch {
+      // Viewing keys without a transparent component have no t-address.
+    }
+    return { unified, transparent };
+  }
+
+  async history(account: number, limit: number): Promise<HistoryItem[]> {
+    const response = await this.open_.get_transaction_history(account, limit, 0);
+    const entries = (response.transactions ?? []) as RawHistoryEntry[];
+    response.free();
+    return entries.map((e) => ({
+      txid: e.txid,
+      type: TX_TYPES[e.tx_type],
+      valueZats: BigInt(e.value),
+      feeZats: e.fee == null ? null : BigInt(e.fee),
+      height: e.block_height,
+      confirmations: e.confirmations,
+      status: TX_STATUSES[e.status],
+      memo: e.memo,
+      timestamp: e.timestamp,
+      pool: e.pool,
+    }));
+  }
+
+  async send(account: number, to: string, zats: bigint, auth: SpendAuthority): Promise<void> {
+    auth.onStage?.('building');
+    const pczt = await this.open_.pczt_create(account, to.trim(), zats);
+    await this.signProveSend(pczt, auth);
+  }
+
+  async shield(account: number, auth: SpendAuthority): Promise<void> {
+    auth.onStage?.('building');
+    const pczt = await this.open_.pczt_shield(account);
+    await this.signProveSend(pczt, auth);
+  }
+
+  private async signProveSend(pczt: WalletPczt, auth: SpendAuthority): Promise<void> {
+    auth.onStage?.('signing');
+    const { usk, fingerprint } = spendingKeys(auth.phrase);
+    // pczt_sign takes ownership of the key objects and frees them.
+    const signed = await pczt_sign(NETWORK, KeysPczt.from_bytes(pczt.serialize()), usk, fingerprint);
+    pczt.free();
+
+    auth.onStage?.('proving');
+    const proved = await this.open_.pczt_prove(
+      WalletPczt.from_bytes(signed.serialize()),
+      saplingProofKey(auth.phrase),
+    );
+    signed.free();
+
+    auth.onStage?.('broadcasting');
+    await this.open_.pczt_send(proved);
+  }
+}
