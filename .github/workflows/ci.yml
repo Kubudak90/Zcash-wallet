@@ -48,6 +48,8 @@ jobs:
           cache-on-failure: true
       - name: Build WebZjs wasm packages
         run: bash scripts/build-webzjs.sh
+      - name: List WebZjs exports
+        run: grep -hE '^export (default )?(class|function)' vendor/webzjs-wallet/webzjs_wallet.d.ts vendor/webzjs-keys/webzjs_keys.d.ts
       - run: npm ci
       - name: Check the adapter against the generated WebZjs typings
         run: npm run typecheck:vendor

@@ -10,6 +10,7 @@ import initWalletWasm, {
   initThreadPool,
   Pczt as WalletPczt,
   WebWallet,
+  type ProofGenerationKey,
   type WalletSummary,
 } from '@chainsafe/webzjs-wallet';
 import * as walletModule from '@chainsafe/webzjs-wallet';
@@ -93,8 +94,15 @@ function spendingKeys(phrase: string): { usk: UnifiedSpendingKey; fingerprint: S
  * It has to come from the wallet module's own key classes; if this build does
  * not export them, proving falls back to Orchard/transparent-only spends.
  */
-function saplingProofKey(phrase: string) {
-  const WalletUsk = (walletModule as Partial<typeof import('@chainsafe/webzjs-keys')>).UnifiedSpendingKey;
+type WalletUskConstructor = new (
+  network: string,
+  seed: Uint8Array,
+  hdIndex: number,
+) => { to_sapling_proof_generation_key(): ProofGenerationKey; free(): void };
+
+function saplingProofKey(phrase: string): ProofGenerationKey | undefined {
+  // Feature-detected: the generated typings do not promise this export.
+  const WalletUsk = (walletModule as unknown as { UnifiedSpendingKey?: WalletUskConstructor }).UnifiedSpendingKey;
   if (!WalletUsk) return undefined;
   const seed = seedBytes(phrase);
   try {
