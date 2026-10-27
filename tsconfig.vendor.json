@@ -1,0 +1,11 @@
+{
+  "//": "Checks the WebZjs adapter against the real generated typings in vendor/ (run after scripts/build-webzjs.sh). The hand-written declarations in src/engine/webzjs-modules.d.ts are excluded so any drift shows up as a type error.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@chainsafe/webzjs-wallet": ["./vendor/webzjs-wallet"],
+      "@chainsafe/webzjs-keys": ["./vendor/webzjs-keys"]
+    }
+  },
+  "include": ["src/engine/webzjs.ts", "src/vite-env.d.ts"]
+}

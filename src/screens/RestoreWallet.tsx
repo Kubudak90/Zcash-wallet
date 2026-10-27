@@ -1,0 +1,180 @@
+import { useState, type FormEvent } from 'react';
+
+import { ErrorDetails, Notice, Screen, Spinner } from '../components/ui';
+import { useI18n } from '../i18n';
+import { SAPLING_ACTIVATION_HEIGHT, estimateBirthday } from '../lib/birthday';
+import { isValidSeedPhrase, normalizeSeedPhrase } from '../lib/seed';
+import type { Secret } from '../lib/vault';
+import { useController } from '../state/wallet';
+import { PasswordSetup } from './PasswordSetup';
+
+type Step = 'secret' | 'birthday' | 'password';
+type Mode = 'seed' | 'view';
+
+const SAPLING_MONTH = '2018-10';
+const thisMonth = () => new Date().toISOString().slice(0, 7);
+
+export function RestoreWallet({ onCancel }: { onCancel: () => void }) {
+  const { t } = useI18n();
+  const controller = useController();
+  const [step, setStep] = useState<Step>('secret');
+  const [mode, setMode] = useState<Mode>('seed');
+  const [input, setInput] = useState('');
+  const [inputError, setInputError] = useState(false);
+  const [secret, setSecret] = useState<Secret | null>(null);
+
+  const [month, setMonth] = useState('');
+  const [unknown, setUnknown] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const [birthday, setBirthday] = useState<number | null>(null);
+
+  async function submitSecret(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      if (mode === 'seed') {
+        const ok = isValidSeedPhrase(input);
+        setInputError(!ok);
+        if (ok) {
+          setSecret({ kind: 'seed', phrase: normalizeSeedPhrase(input) });
+          setStep('birthday');
+        }
+      } else {
+        const ufvk = input.trim();
+        const ok = await controller.isValidViewingKey(ufvk);
+        setInputError(!ok);
+        if (ok) {
+          setSecret({ kind: 'ufvk', ufvk });
+          setStep('birthday');
+        }
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitBirthday(e: FormEvent) {
+    e.preventDefault();
+    if (!secret) return;
+    setBusy(true);
+    setError(null);
+    try {
+      let height: number;
+      if (unknown) {
+        const detected = await controller.detectBirthday(
+          secret.kind === 'seed' ? { phrase: secret.phrase } : { ufvk: secret.ufvk },
+        );
+        height = detected ?? SAPLING_ACTIVATION_HEIGHT;
+      } else {
+        height = estimateBirthday(new Date(`${month}-01T00:00:00Z`), await controller.latestHeight());
+      }
+      setBirthday(height);
+      setStep('password');
+    } catch (err) {
+      setError(err);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (step === 'secret') {
+    return (
+      <Screen title={t('restore.title')} onBack={onCancel}>
+        <div className="segmented" role="tablist">
+          {(['seed', 'view'] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              role="tab"
+              aria-selected={mode === m}
+              className={mode === m ? 'active' : ''}
+              onClick={() => {
+                setMode(m);
+                setInputError(false);
+              }}
+            >
+              {t(m === 'seed' ? 'restore.modeSeed' : 'restore.modeView')}
+            </button>
+          ))}
+        </div>
+        <form className="stack" onSubmit={submitSecret}>
+          {mode === 'view' && <p className="muted">{t('restore.viewHelp')}</p>}
+          <label className="field">
+            <span>{t(mode === 'seed' ? 'restore.seedLabel' : 'restore.viewLabel')}</span>
+            <textarea
+              name={mode === 'seed' ? 'seed-phrase' : 'viewing-key'}
+              rows={mode === 'seed' ? 4 : 5}
+              value={input}
+              autoComplete="off"
+              autoCapitalize="none"
+              spellCheck={false}
+              onChange={(e) => setInput(e.target.value)}
+            />
+          </label>
+          {inputError && (
+            <Notice tone="error">{t(mode === 'seed' ? 'restore.seedInvalid' : 'restore.viewInvalid')}</Notice>
+          )}
+          <button type="submit" className="primary" disabled={busy || input.trim() === ''}>
+            {t('common.continue')}
+          </button>
+        </form>
+      </Screen>
+    );
+  }
+
+  if (step === 'birthday') {
+    return (
+      <Screen title={t('restore.birthdayTitle')} onBack={busy ? undefined : () => setStep('secret')}>
+        <p className="muted">{t('restore.birthdayHelp')}</p>
+        <form className="stack" onSubmit={submitBirthday}>
+          <label className="field">
+            <span>{t('restore.birthdayMonth')}</span>
+            <input
+              type="month"
+              name="birthday-month"
+              min={SAPLING_MONTH}
+              max={thisMonth()}
+              value={month}
+              disabled={unknown}
+              onChange={(e) => setMonth(e.target.value)}
+            />
+          </label>
+          <label className="check">
+            <input type="checkbox" checked={unknown} onChange={(e) => setUnknown(e.target.checked)} />
+            {t('restore.birthdayUnknown')}
+          </label>
+          {unknown && <Notice tone="warn">{t('restore.birthdayUnknownHelp')}</Notice>}
+          {error != null && (
+            <Notice tone="error">
+              {t('common.genericError')}
+              <ErrorDetails error={error} />
+            </Notice>
+          )}
+          <button type="submit" className="primary" disabled={busy || (!unknown && !/^\d{4}-\d{2}$/.test(month))}>
+            {busy ? (
+              <>
+                <Spinner /> {unknown ? t('restore.birthdayDetecting') : t('common.continue')}
+              </>
+            ) : (
+              t('common.continue')
+            )}
+          </button>
+        </form>
+      </Screen>
+    );
+  }
+
+  return (
+    <PasswordSetup
+      note={
+        birthday !== null && <Notice tone="info">{t('restore.birthdayHeight', { height: birthday.toLocaleString() })}</Notice>
+      }
+      onBack={() => setStep('birthday')}
+      onSubmit={async (password) => {
+        if (!secret || birthday === null) return;
+        await controller.createWallet(secret, birthday, password);
+      }}
+    />
+  );
+}
