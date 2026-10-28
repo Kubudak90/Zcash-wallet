@@ -47,7 +47,13 @@ function SyncPill() {
     tone = 'busy';
   }
   return (
-    <span className={`pill pill-${tone}`} role="status" data-testid="sync-status" title={sync.error ?? undefined}>
+    <span
+      className={`pill pill-${tone}`}
+      role="status"
+      data-testid="sync-status"
+      data-sync={sync.status}
+      title={sync.error ?? undefined}
+    >
       {label}
     </span>
   );

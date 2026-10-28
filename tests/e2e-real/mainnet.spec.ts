@@ -3,9 +3,15 @@ import { expect, test } from '@playwright/test';
 const PASSWORD = 'Gizli-Parola-2026';
 
 test('real engine: create a wallet, sync from the tip, lock and unlock', async ({ page }) => {
+  // A wasm panic can leave a call hanging instead of rejecting, and a fresh
+  // wallet already reads as 100% synced, so the UI alone would not show it.
+  const failures: string[] = [];
   page.on('console', (msg) => {
     if (msg.type() === 'error') console.log(`[browser] ${msg.text()}`);
+    if (msg.text().includes('panicked')) failures.push(msg.text());
   });
+  page.on('pageerror', (err) => failures.push(String(err)));
+  const status = page.getByTestId('sync-status');
 
   await page.goto('/');
   // Reaching the welcome screen means wasm, the thread pool and the
@@ -23,7 +29,9 @@ test('real engine: create a wallet, sync from the tip, lock and unlock', async (
   await page.getByLabel('Password (again)').fill(PASSWORD);
   await page.getByRole('button', { name: 'Create wallet' }).click();
 
-  await expect(page.getByTestId('sync-status')).toContainText('Up to date', { timeout: 8 * 60_000 });
+  // `idle` is only set once a sync pass has resolved and the database is saved.
+  await expect(status).toHaveAttribute('data-sync', 'idle', { timeout: 8 * 60_000 });
+  await expect(status).toContainText('Up to date');
   await expect(page.getByTestId('balance-total')).toContainText('0.00');
 
   await page.getByRole('button', { name: 'Receive' }).click();
@@ -41,5 +49,6 @@ test('real engine: create a wallet, sync from the tip, lock and unlock', async (
   await page.getByRole('button', { name: 'Lock' }).click();
   await page.getByLabel('Password').fill(PASSWORD);
   await page.getByRole('button', { name: 'Unlock' }).click();
-  await expect(page.getByTestId('sync-status')).toContainText('Up to date', { timeout: 5 * 60_000 });
+  await expect(status).toHaveAttribute('data-sync', 'idle', { timeout: 5 * 60_000 });
+  expect(failures).toEqual([]);
 });
