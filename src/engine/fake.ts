@@ -26,11 +26,22 @@ const FAIL_AT = new Map<bigint, SendStage>([
 const encoder = new TextEncoder();
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** Set by UI tests (page.addInitScript) to reach behaviour WebZjs does not show today. */
+interface FakeKnobs {
+  /** Report scan progress mid-pass. */
+  midPassProgress?: boolean;
+  /** Answer latestHeight() this many blocks above where sync() stops, like one lightwalletd server ahead of another. */
+  tipAhead?: number;
+}
+const knobs = (): FakeKnobs => (globalThis as { __fakeEngine?: FakeKnobs }).__fakeEngine ?? {};
+
 interface FakeAccount {
   id: number;
   kind: 'seed' | 'view';
   keyHash: string;
   birthday: number;
+  /** Chain tip as the account's database knows it; set by the first sync. */
+  tip: number;
   scanned: number;
   funded: boolean;
   balances: Record<keyof Balances, string>;
@@ -52,13 +63,15 @@ function fakeTransparent(seed: string): string {
 export class FakeEngine implements ZcashEngine {
   private accounts: FakeAccount[] = [];
   private opened = false;
+  /** The running pass; summary() waits for it, as WebZjs waits for its database lock. */
+  private pass: Promise<void> | null = null;
 
   async init(): Promise<void> {
     await sleep(50);
   }
 
   async latestHeight(): Promise<number> {
-    return TIP;
+    return TIP + (knobs().tipAhead ?? 0);
   }
 
   async detectBirthday(): Promise<number | null> {
@@ -88,7 +101,9 @@ export class FakeEngine implements ZcashEngine {
       kind,
       keyHash: hex(hash(kind === 'seed' ? key : fakeKeyFromUfvk(key))),
       birthday,
-      scanned: birthday,
+      // Like WebZjs before its first pass: only the birthday is known.
+      tip: birthday - 1,
+      scanned: birthday - 1,
       funded: false,
       balances: { orchard: '0', sapling: '0', transparent: '0', pending: '0' },
       history: [],
@@ -109,9 +124,24 @@ export class FakeEngine implements ZcashEngine {
   }
 
   async sync(): Promise<void> {
-    for (const step of [0.25, 0.5, 0.75, 1]) {
-      await sleep(250);
-      for (const a of this.accounts) a.scanned = Math.round(a.birthday + (TIP - a.birthday) * step);
+    const pass = this.runPass();
+    // WebZjs holds its database lock for the whole pass, so nothing can watch it move.
+    if (!knobs().midPassProgress) this.pass = pass;
+    try {
+      await pass;
+    } finally {
+      this.pass = null;
+    }
+  }
+
+  private async runPass(): Promise<void> {
+    const start = new Map(this.accounts.map((a) => [a, a.scanned]));
+    const behind = Math.max(0, ...this.accounts.map((a) => TIP - a.scanned));
+    for (const a of this.accounts) a.tip = TIP;
+    for (const step of knobs().midPassProgress ? [0.25, 0.5, 0.75, 1] : [1]) {
+      // Long enough for UI tests to see a restore scan; quick near the tip.
+      await sleep(behind > 1000 ? 2500 : 250);
+      for (const [a, from] of start) a.scanned = Math.round(from + (TIP - from) * step);
     }
     for (const a of this.accounts) {
       if (a.funded) continue;
@@ -140,10 +170,11 @@ export class FakeEngine implements ZcashEngine {
   }
 
   async summary(id: number): Promise<Summary | null> {
+    await this.pass;
     const a = this.accounts.find((x) => x.id === id);
     if (!a) return null;
     return {
-      tipHeight: TIP,
+      tipHeight: a.tip,
       scannedHeight: a.scanned,
       balances: {
         orchard: BigInt(a.balances.orchard),

@@ -4,12 +4,12 @@ import { useI18n } from '../i18n';
 import { formatZec } from '../lib/zec';
 import { useWallet } from '../state/wallet';
 import type { Tab } from './Main';
-import { useSyncPercent } from './Main';
+import { syncLabel, useSyncView } from './Main';
 
 export function Home({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
   const { t, lang } = useI18n();
   const { summary, meta } = useWallet();
-  const pct = useSyncPercent();
+  const sync = useSyncView();
   const fmt = (z: bigint) => formatZec(z, { locale: lang });
 
   const b = summary?.balances;
@@ -26,14 +26,21 @@ export function Home({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
         <div className="balance-total" data-testid="balance-total">
           {b ? fmt(grandTotal(b)) : '—'} <small>ZEC</small>
         </div>
-        {pct !== null && pct < 100 && (
-          <div className="progress" aria-label={t('sync.syncing', { pct })}>
-            <span style={{ width: `${pct}%` }} />
+        {sync.kind === 'syncing' && (
+          <div
+            className={sync.pct === null ? 'progress indeterminate' : 'progress'}
+            role="progressbar"
+            aria-label={syncLabel(sync, t, lang)}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={sync.pct ?? undefined}
+          >
+            <span style={sync.pct === null ? undefined : { width: `${sync.pct}%` }} />
           </div>
         )}
       </div>
 
-      {pct !== null && pct < 100 && <p className="muted small">{t('sync.firstSyncNote')}</p>}
+      {sync.kind === 'syncing' && <p className="muted small">{t('sync.firstSyncNote')}</p>}
 
       <dl className="balance-rows">
         <div>

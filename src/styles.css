@@ -719,6 +719,29 @@ ul.plain {
   transition: width 0.4s;
 }
 
+/* No mid-pass progress from the engine: show activity, not a guessed percentage. */
+.progress.indeterminate span {
+  width: 30%;
+  animation: progress-slide 1.4s ease-in-out infinite;
+}
+
+@keyframes progress-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(340%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress.indeterminate span {
+    width: 100%;
+    opacity: 0.5;
+    animation: none;
+  }
+}
+
 .balance-rows {
   margin: 0;
   display: flex;
