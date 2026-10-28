@@ -1,4 +1,4 @@
-import { useId, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 
 import { CopyButton, ErrorDetails, Notice, PasswordField, Screen } from '../components/ui';
 import { useI18n } from '../i18n';
@@ -45,6 +45,20 @@ function PasswordGate({
   const [busy, setBusy] = useState(false);
   const [value, setValue] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
+  const shown = useRef<HTMLDivElement>(null);
+  const opener = useRef<HTMLButtonElement>(null);
+  const wasOpen = useRef(false);
+
+  // Reveal and Close each replace the button that had focus; without this it
+  // would fall to <body>. The revealed value takes it, so screen readers read
+  // it out, and closing returns it to the button that opened the gate.
+  useEffect(() => {
+    if (value !== null) shown.current?.focus();
+  }, [value]);
+  useEffect(() => {
+    if (wasOpen.current && !open) opener.current?.focus();
+    wasOpen.current = open;
+  }, [open]);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -63,7 +77,7 @@ function PasswordGate({
 
   if (value !== null) {
     return (
-      <div className="stack">
+      <div className="stack" ref={shown} tabIndex={-1}>
         {children(value)}
         <button
           type="button"
@@ -80,7 +94,7 @@ function PasswordGate({
   }
   if (!open) {
     return (
-      <button type="button" className="secondary" onClick={() => setOpen(true)}>
+      <button type="button" className="secondary" ref={opener} onClick={() => setOpen(true)}>
         {label}
       </button>
     );
