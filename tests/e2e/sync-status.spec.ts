@@ -1,62 +1,6 @@
-import { generateMnemonic } from '@scure/bip39';
-import { wordlist } from '@scure/bip39/wordlists/english';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
-import { currentMonth } from '../../src/lib/birthday';
-import { PASSWORD, UA, createWallet } from './helpers';
-
-// The fake engine's chain tip (src/engine/fake.ts).
-const TIP = 3_100_000;
-const en = (n: number) => n.toLocaleString('en-US');
-
-/** Restores a seed wallet from this month's start and returns its birthday. */
-async function restoreFromThisMonth(page: Page, lang: 'en' | 'tr' = 'en'): Promise<number> {
-  const s =
-    lang === 'en'
-      ? { restore: 'Restore an existing wallet', next: 'Continue', month: 'Month', start: /Sync will start at block/ }
-      : { restore: 'Var olan cüzdanı geri yükle', next: 'Devam', month: 'Ay', start: /bloktan başlayacak/ };
-  const pw =
-    lang === 'en'
-      ? { first: 'Password', again: 'Password (again)', submit: 'Create wallet' }
-      : { first: 'Şifre', again: 'Şifre (tekrar)', submit: 'Cüzdanı oluştur' };
-
-  await page.goto('/');
-  if (lang === 'tr') await page.getByRole('button', { name: 'Türkçe' }).click();
-  await page.getByRole('button', { name: s.restore }).click();
-  await page.getByRole('textbox').fill(generateMnemonic(wordlist, 256));
-  await page.getByRole('button', { name: s.next }).click();
-  // The local month, as the app checks it: the UTC one is a month ahead west of UTC at a month's end.
-  await page.getByLabel(s.month, { exact: true }).fill(currentMonth());
-  await page.getByRole('button', { name: s.next }).click();
-  const start = await page.getByText(s.start).textContent();
-  await page.getByLabel(pw.first, { exact: true }).fill(PASSWORD);
-  await page.getByLabel(pw.again).fill(PASSWORD);
-  await page.getByRole('button', { name: pw.submit }).click();
-  return Number(start!.replace(/\D/g, ''));
-}
-
-interface Knobs {
-  midPassProgress?: boolean;
-  passCounters?: boolean;
-  tipAhead?: number;
-  holdPass?: boolean;
-  chainGrowth?: number;
-}
-
-/** Switches on behaviour of the fake engine that WebZjs does not show today. */
-async function fakeEngine(page: Page, knobs: Knobs) {
-  await page.addInitScript((k) => {
-    (window as unknown as { __fakeEngine: typeof k }).__fakeEngine = k;
-  }, knobs);
-}
-
-/** Changes the fake engine's knobs in the running page. */
-async function setKnobs(page: Page, patch: Knobs) {
-  await page.evaluate((p) => {
-    const w = window as unknown as { __fakeEngine?: Knobs };
-    w.__fakeEngine = { ...w.__fakeEngine, ...p };
-  }, patch);
-}
+import { PASSWORD, TIP, UA, createWallet, en, fakeEngine, restoreFromThisMonth, setKnobs } from './helpers';
 
 test('a restore shows how many blocks are left, then up to date', async ({ page }) => {
   const birthday = await restoreFromThisMonth(page);

@@ -3,7 +3,7 @@ import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { ErrorDetails, Notice, PasswordField, Spinner } from '../components/ui';
 import { useI18n } from '../i18n';
 import { WrongPasswordError } from '../lib/vault';
-import { useAutoLockedMinutes } from '../state/autoLockNotice';
+import { clearAutoLocked, useAutoLockReason } from '../state/autoLockNotice';
 import { useController, useWallet } from '../state/wallet';
 import { LanguageSwitch } from './LanguageSwitch';
 import { WipeWallet } from './Settings';
@@ -15,8 +15,8 @@ export function Unlock() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [forgot, setForgot] = useState(false);
-  const { meta } = useWallet();
-  const autoLocked = useAutoLockedMinutes();
+  const { meta, softLocked } = useWallet();
+  const autoLocked = useAutoLockReason();
   const field = useRef<HTMLInputElement>(null);
   const errorId = useId();
 
@@ -35,6 +35,7 @@ export function Unlock() {
     setError(null);
     try {
       await controller.unlock(password);
+      clearAutoLocked();
     } catch (err) {
       setError(err);
       setBusy(false);
@@ -50,7 +51,12 @@ export function Unlock() {
       </div>
       <img src="/celari.svg" alt="" width={56} height={56} className="logo" />
       <h1>{t('unlock.title')}</h1>
-      {autoLocked !== null && <Notice tone="info">{t('unlock.autoLocked', { n: autoLocked })}</Notice>}
+      {autoLocked !== null && (
+        <Notice tone="info">
+          {autoLocked.kind === 'hidden' ? t('unlock.autoLockedHidden') : t('unlock.autoLocked', { n: autoLocked.minutes })}
+        </Notice>
+      )}
+      {softLocked && <p className="muted small">{t('unlock.softLocked')}</p>}
       <form className="stack" onSubmit={submit}>
         <PasswordField
           ref={field}

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { Spinner } from './components/ui';
 import { LangProvider, useI18n } from './i18n';
+import { HIDDEN_LOCK_MS, dueAutoLock } from './lib/autoLock';
 import { CreateWallet } from './screens/CreateWallet';
 import { Main } from './screens/Main';
 import { RestoreWallet } from './screens/RestoreWallet';
@@ -15,45 +16,60 @@ const WAKE_EVENTS = ['focus', 'pageshow'] as const;
 const WAKE_CHECK_MS = 15_000;
 
 /**
- * Locks the wallet after `minutes` without user interaction. Timers stand
- * still while the device sleeps or the tab is frozen, so the elapsed wall-clock
- * time is also checked when the page wakes up, on input and every 15 s.
+ * Locks the wallet after `minutes` without user interaction, or once the tab
+ * has stayed in the background for a minute. Both go through controller.lock,
+ * so a running spend still finishes first. Timers stand still while the
+ * device sleeps or the tab is frozen, so the elapsed wall-clock time is also
+ * checked when the page wakes up, on input and every 15 s.
  */
 function useAutoLock(active: boolean, minutes: number) {
   const controller = useController();
   useEffect(() => {
     if (!active) return;
-    const limit = minutes * 60_000;
     let last = Date.now();
-    let timer: ReturnType<typeof setTimeout>;
+    let hiddenSince: number | null = document.hidden ? last : null;
+    let idleTimer: ReturnType<typeof setTimeout> | undefined;
+    let hiddenTimer: ReturnType<typeof setTimeout> | undefined;
     let locked = false;
-    const lockNow = () => {
-      if (locked) return;
-      locked = true;
-      markAutoLocked(minutes);
-      controller.lock();
-    };
-    const expired = () => Date.now() - last >= limit;
     const check = () => {
-      if (expired()) lockNow();
+      if (locked) return;
+      const reason = dueAutoLock({ now: Date.now(), lastActivity: last, minutes, hiddenSince });
+      if (!reason) return;
+      locked = true;
+      markAutoLocked(reason);
+      controller.lock();
     };
     const reset = () => {
       last = Date.now();
-      clearTimeout(timer);
-      timer = setTimeout(lockNow, limit);
+      clearTimeout(idleTimer);
+      idleTimer = setTimeout(check, minutes * 60_000);
     };
     // The first tap after a long sleep must lock, not restart the countdown.
-    const onActivity = () => (expired() ? lockNow() : reset());
+    const onActivity = () => {
+      check();
+      if (!locked) reset();
+    };
     const onVisibility = () => {
-      if (document.visibilityState === 'visible') check();
+      if (document.visibilityState === 'hidden') {
+        hiddenSince ??= Date.now();
+        clearTimeout(hiddenTimer);
+        hiddenTimer = setTimeout(check, HIDDEN_LOCK_MS);
+      } else {
+        // Back after a sleep, the timers may not have run: the clock decides.
+        check();
+        hiddenSince = null;
+        clearTimeout(hiddenTimer);
+      }
     };
     reset();
+    if (hiddenSince !== null) hiddenTimer = setTimeout(check, HIDDEN_LOCK_MS);
     const interval = setInterval(check, WAKE_CHECK_MS);
     ACTIVITY_EVENTS.forEach((e) => window.addEventListener(e, onActivity, { passive: true }));
     WAKE_EVENTS.forEach((e) => window.addEventListener(e, check));
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
-      clearTimeout(timer);
+      clearTimeout(idleTimer);
+      clearTimeout(hiddenTimer);
       clearInterval(interval);
       ACTIVITY_EVENTS.forEach((e) => window.removeEventListener(e, onActivity));
       WAKE_EVENTS.forEach((e) => window.removeEventListener(e, check));
