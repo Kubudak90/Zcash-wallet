@@ -11,6 +11,7 @@ import type {
   Addresses,
   Balances,
   HistoryItem,
+  NetworkStatus,
   SendStage,
   SpendAuthority,
   Summary,
@@ -49,6 +50,12 @@ export interface FakeKnobs {
   holdStage?: SendStage;
   /** Keep a send or shield at its proving stage until this is cleared. */
   holdSpend?: boolean;
+  /** The network runs NU6.3 (Ironwood), which this engine does not support, like the WebZjs Celari ships today. */
+  networkOutdated?: boolean;
+  /** networkStatus() fails, like a server that does not answer GetLightdInfo. */
+  networkUnreachable?: boolean;
+  /** An upgrade the server announces, as networkStatus() reports it. */
+  upcomingUpgrade?: NetworkStatus['upcoming'];
 }
 const knobs = (): FakeKnobs => (globalThis as { __fakeEngine?: FakeKnobs }).__fakeEngine ?? {};
 const chainTip = () => TIP + (knobs().chainGrowth ?? 0);
@@ -92,6 +99,18 @@ export class FakeEngine implements ZcashEngine {
 
   async latestHeight(): Promise<number> {
     return chainTip() + (knobs().tipAhead ?? 0);
+  }
+
+  async networkStatus(): Promise<NetworkStatus> {
+    const k = knobs();
+    await sleep(20);
+    if (k.networkUnreachable) throw new Error('fake GetLightdInfo failure');
+    // NU6 rules at the fake tip by default; NU6.3 (Ironwood) when outdated.
+    const status: NetworkStatus = k.networkOutdated
+      ? { branchId: '37a5165b', height: chainTip(), supported: false }
+      : { branchId: 'c8e71055', height: chainTip(), supported: true };
+    if (k.upcomingUpgrade) status.upcoming = k.upcomingUpgrade;
+    return status;
   }
 
   async detectBirthday(): Promise<number | null> {
@@ -245,6 +264,7 @@ export class FakeEngine implements ZcashEngine {
     { store, check, failAt }: { store: () => void; check?: () => void; failAt?: SendStage },
   ) {
     for (const stage of ['building', 'signing', 'proving', 'broadcasting'] as const) {
+      if (stage === 'broadcasting') await auth.beforeBroadcast?.();
       auth.onStage?.(stage);
       while (knobs().holdStage === stage) await sleep(50);
       if (stage === 'building') check?.();

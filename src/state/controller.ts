@@ -17,6 +17,7 @@ import {
   type Summary,
   type ZcashEngine,
 } from '../engine';
+import { canSpend, type NetworkCheck } from '../lib/network';
 import { storage, type Settings, type WalletMeta } from '../lib/storage';
 import { catchUpFor, type SyncInfo } from '../lib/syncView';
 import { createVault, decryptDb, encryptDb, unlockVault, type Secret, type VaultRecord } from '../lib/vault';
@@ -33,6 +34,8 @@ export interface WalletState {
   addresses: Addresses | null;
   history: HistoryItem[];
   sync: SyncInfo;
+  /** Whether the network still accepts what the engine builds; read at boot and on every pass. */
+  network: NetworkCheck;
   /** True while a send or shield runs; the UI keeps the user on its progress meanwhile. */
   spending: boolean;
   /** The lock screen shows while a catch-up pass finishes and is saved (see lock()). */
@@ -50,6 +53,14 @@ export class NotASeedWalletError extends Error {
   constructor() {
     super('this wallet has no spending key');
     this.name = 'NotASeedWalletError';
+  }
+}
+
+/** A spend refused before anything left the wallet: the network check did not say yes (see canSpend). */
+export class NetworkNotSupportedError extends Error {
+  constructor() {
+    super('spending is disabled: the engine does not support the network, or that could not be checked');
+    this.name = 'NetworkNotSupportedError';
   }
 }
 
@@ -72,6 +83,7 @@ export class WalletController {
   private unlocking = false;
   private syncing = false;
   private summaryInFlight = false;
+  private networkCheck: Promise<void> | null = null;
   private state: WalletState;
 
   constructor(settings: Settings) {
@@ -85,6 +97,7 @@ export class WalletController {
       addresses: null,
       history: [],
       sync: { status: 'starting', error: null, catchUp: null, networkTip: null, progress: null },
+      network: { status: null, error: null },
       spending: false,
       softLocked: false,
     };
@@ -118,6 +131,8 @@ export class WalletController {
       const engine = await loadEngine();
       await engine.init(this.state.settings.serverUrl);
       this.engine = engine;
+      // Not awaited: the lock screen shows its result when it comes.
+      void this.checkNetwork();
       const meta = (await storage.getMeta()) ?? null;
       const vault = await storage.getVault();
       this.set({ phase: vault && meta ? 'locked' : 'welcome', meta });
@@ -283,6 +298,7 @@ export class WalletController {
   private async syncLoop(): Promise<void> {
     if (this.state.phase !== 'ready' || this.syncing) return;
     this.syncing = true;
+    void this.checkNetwork();
     this.setSync({ status: 'syncing', progress: null, ...this.gapTo(await this.readTip()) });
 
     // Engines that can report progress mid-pass move the bar; WebZjs answers
@@ -427,6 +443,37 @@ export class WalletController {
     await storage.setDb(blob);
   }
 
+  // --- network rules ----------------------------------------------------------
+
+  /**
+   * Asks the engine whether it supports the rules the network runs. Fails
+   * closed: a server that does not answer leaves spending off until one does
+   * (see lib/network.ts). Concurrent callers share one request.
+   */
+  private checkNetwork(): Promise<void> {
+    // Assigned before the request can settle, so .finally never clears a newer one.
+    this.networkCheck ??= this.readNetwork().finally(() => {
+      this.networkCheck = null;
+    });
+    return this.networkCheck;
+  }
+
+  private async readNetwork(): Promise<void> {
+    try {
+      const status = await this.eng.networkStatus();
+      this.set({ network: { status, error: null } });
+    } catch (e) {
+      console.warn('network check failed', e);
+      this.set({ network: { ...this.state.network, error: e instanceof Error ? e.message : String(e) } });
+    }
+  }
+
+  /** Asks the server again and throws unless the engine supports the network. */
+  private async requireSupportedNetwork(): Promise<void> {
+    await this.checkNetwork();
+    if (!canSpend(this.state.network)) throw new NetworkNotSupportedError();
+  }
+
   // --- spending ---------------------------------------------------------------
 
   private async spendingPhrase(password: string): Promise<string> {
@@ -443,25 +490,29 @@ export class WalletController {
     onStage: (s: SendStage) => void,
     memo?: string,
   ): Promise<void> {
-    await this.spend(onStage, async (stage) => {
+    await this.spend(onStage, async (stage, beforeBroadcast) => {
       const id = this.requireAccount();
       const phrase = await this.spendingPhrase(password);
-      await this.eng.send(id, to, zats, { phrase, onStage: stage }, memo);
+      await this.eng.send(id, to, zats, { phrase, onStage: stage, beforeBroadcast }, memo);
     });
   }
 
   async shield(password: string, onStage: (s: SendStage) => void): Promise<void> {
-    await this.spend(onStage, async (stage) => {
+    await this.spend(onStage, async (stage, beforeBroadcast) => {
       const id = this.requireAccount();
       const phrase = await this.spendingPhrase(password);
-      await this.eng.shield(id, { phrase, onStage: stage });
+      await this.eng.shield(id, { phrase, onStage: stage, beforeBroadcast });
     });
   }
 
-  /** Runs one spend at a time, so a second click can never pay twice. */
+  /**
+   * Runs one spend at a time, so a second click can never pay twice. The
+   * network is asked again before anything is built and once more before the
+   * broadcast: a transaction the network would reject never leaves the wallet.
+   */
   private async spend(
     onStage: (s: SendStage) => void,
-    run: (onStage: (s: SendStage) => void) => Promise<void>,
+    run: (onStage: (s: SendStage) => void, beforeBroadcast: () => Promise<void>) => Promise<void>,
   ): Promise<void> {
     if (this.state.spending) throw new Error('another payment is still in progress');
     this.set({ spending: true });
@@ -470,10 +521,14 @@ export class WalletController {
     try {
       let failure: { cause: unknown } | null = null;
       try {
-        await run((s) => {
-          if (s === 'broadcasting') broadcasting = true;
-          onStage(s);
-        });
+        await this.requireSupportedNetwork();
+        await run(
+          (s) => {
+            if (s === 'broadcasting') broadcasting = true;
+            onStage(s);
+          },
+          () => this.requireSupportedNetwork(),
+        );
       } catch (cause) {
         failure = { cause };
       }

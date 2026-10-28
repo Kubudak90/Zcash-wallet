@@ -45,6 +45,32 @@ export interface SpendAuthority {
   /** The wallet's seed phrase; used to sign, then dropped by the caller. */
   phrase: string;
   onStage?: (stage: SendStage) => void;
+  /**
+   * Awaited once the transaction is proved, before the 'broadcasting' stage
+   * starts. Throwing stops the spend there: nothing has left the wallet.
+   */
+  beforeBroadcast?: () => Promise<void>;
+}
+
+/** A network upgrade the lightwalletd server announces but the chain has not reached. */
+export interface UpcomingUpgrade {
+  /** As the server names it, e.g. 'NU7'. */
+  name: string;
+  /** Its activation height. */
+  height: number;
+  /** Whether this engine will still build transactions the network accepts after it. */
+  supported: boolean;
+}
+
+/** The consensus rules the network runs, as the engine's lightwalletd server reports them. */
+export interface NetworkStatus {
+  /** Consensus branch id at the server's chain tip, 8 lowercase hex digits (e.g. '37a5165b'). */
+  branchId: string;
+  /** The server's chain tip. */
+  height: number;
+  /** Whether this engine builds transactions the network accepts under these rules. */
+  supported: boolean;
+  upcoming?: UpcomingUpgrade;
 }
 
 /**
@@ -68,6 +94,12 @@ export interface ZcashEngine {
   /** Loads the wasm runtime and connects to the lightwalletd proxy. Call once per page. */
   init(serverUrl: string): Promise<void>;
   latestHeight(): Promise<number>;
+  /**
+   * Asks the server which consensus rules the network runs and says whether
+   * this engine supports them; only the engine knows which it supports.
+   * Throws if the server does not answer.
+   */
+  networkStatus(): Promise<NetworkStatus>;
   /** Earliest height a key ever received transparent funds, if it can be found. */
   detectBirthday(secret: { phrase: string } | { ufvk: string }): Promise<number | null>;
   isValidViewingKey(ufvk: string): Promise<boolean>;
