@@ -10,6 +10,7 @@ export const en: Record<MessageKey, string> = {
   'common.password': 'Password',
   'common.details': 'Details',
   'common.genericError': 'Something went wrong.',
+  'common.viewHistory': 'View in history',
 
   'boot.loading': 'Preparing the Zcash engine…',
   'boot.errorTitle': 'Celari could not start',
@@ -129,7 +130,7 @@ export const en: Record<MessageKey, string> = {
   'send.stage.proving': 'Generating zero-knowledge proofs (10–60 s)…',
   'send.stage.broadcasting': 'Broadcasting…',
   'send.doNotClose': 'Do not close this tab until it finishes.',
-  'send.success': 'Sent. The transaction will confirm in a few minutes.',
+  'send.success': 'The transaction will confirm in a few minutes.',
   'send.another': 'New payment',
   'send.err.address.empty': 'Enter the recipient address.',
   'send.err.address.invalid': 'This is not a valid Zcash address. There may be a typo.',
@@ -146,11 +147,25 @@ export const en: Record<MessageKey, string> = {
   'send.failed': 'Sending failed.',
   'send.failedHint': 'The balance may not cover the network fee. Lower the amount slightly and try again.',
   'send.uriFilled': 'Amount filled in from the payment link.',
+  'send.sentTitle': '{amount} ZEC sent',
+  'send.stageDone': 'done',
+  'send.failedRetry': 'Nothing was sent. You can try again.',
+  'send.maybeSent': 'The transaction may have reached the network anyway. Check History before you try again.',
+  'send.shieldFirst':
+    'You also have {amount} ZEC of transparent funds. Only shielded funds can be sent, so shield them first.',
+  'send.err.amount.insufficientShieldFirst':
+    'Your shielded balance does not cover this amount plus the fee. Shield your transparent funds first, then send.',
+  'send.err.link.multi': 'Payment links with several recipients are not supported.',
+  'send.err.link.req':
+    'This payment link uses a feature Celari does not support yet, so it cannot be paid. Ask the recipient for a plain address.',
+  'send.err.link.memo':
+    'This link asks for a memo, which Celari cannot send yet. Without it the recipient may not be able to match your payment.',
 
   'shield.title': 'Shield funds',
   'shield.intro': '{amount} ZEC of transparent funds will move to your shielded Orchard balance. The network fee is deducted.',
   'shield.confirm': 'Shield',
-  'shield.success': 'Shielding sent. It will appear in your shielded balance once confirmed.',
+  'shield.success': 'It will appear in your shielded balance once confirmed.',
+  'shield.sentTitle': '{amount} ZEC is being shielded',
 
   'history.title': 'Transaction history',
   'history.empty': 'No transactions yet.',

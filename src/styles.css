@@ -111,6 +111,19 @@ code {
   outline: none;
 }
 
+/* Read by screen readers, not shown. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* --- layout ------------------------------------------------------------- */
 
 .screen {
@@ -827,22 +840,69 @@ ul.plain {
   gap: 10px;
 }
 
+/* A fixed icon column keeps every label at the same x as the steps advance. */
 .stages li {
+  display: grid;
+  grid-template-columns: 1.25rem 1fr;
+  gap: 8px;
+  align-items: start;
   color: var(--muted);
-  padding-left: 4px;
+}
+
+.stage-icon {
+  display: grid;
+  place-items: center;
+  height: 1.5em;
+}
+
+.stage-icon:empty::before {
+  content: '';
+  width: 0.6rem;
+  height: 0.6rem;
+  border: 2px solid var(--border);
+  border-radius: 50%;
 }
 
 .stages li.current {
   color: var(--accent-fg);
-  font-weight: 600;
 }
 
 .stages li.done {
   color: var(--ok);
 }
 
-.stages li.done::before {
-  content: '✓ ';
+.result {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+}
+
+.result h2 {
+  font-size: 1.25rem;
+  margin: 8px 0 0;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Focused only so screen readers start at the outcome; it is not a control. */
+.result h2:focus {
+  outline: none;
+}
+
+.result p {
+  margin: 0;
+}
+
+.result-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 1.75rem;
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 14%, transparent);
 }
 
 /* --- history ------------------------------------------------------------ */
