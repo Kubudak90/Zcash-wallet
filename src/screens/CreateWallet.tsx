@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from 'react';
+import { forwardRef, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 
 import { Notice, Screen } from '../components/ui';
 import { useI18n } from '../i18n';
@@ -9,9 +9,19 @@ import { PasswordSetup } from './PasswordSetup';
 
 type Step = 'seed' | 'verify' | 'password';
 
-export function SeedGrid({ phrase, hidden = false }: { phrase: string; hidden?: boolean }) {
+export const SeedGrid = forwardRef<HTMLOListElement, { phrase: string; hidden?: boolean }>(function SeedGrid(
+  { phrase, hidden = false },
+  ref,
+) {
   return (
-    <ol className={hidden ? 'seed-grid blurred' : 'seed-grid'} data-testid="seed-grid" aria-hidden={hidden}>
+    <ol
+      ref={ref}
+      className={hidden ? 'seed-grid blurred' : 'seed-grid'}
+      data-testid="seed-grid"
+      aria-hidden={hidden}
+      // Focusable from code only, once revealed.
+      tabIndex={hidden ? undefined : -1}
+    >
       {phrase.split(' ').map((word, i) => (
         <li key={i}>
           <span className="seed-index">{i + 1}</span>
@@ -20,7 +30,7 @@ export function SeedGrid({ phrase, hidden = false }: { phrase: string; hidden?: 
       ))}
     </ol>
   );
-}
+});
 
 export function CreateWallet({ onCancel }: { onCancel: () => void }) {
   const { t } = useI18n();
@@ -29,6 +39,12 @@ export function CreateWallet({ onCancel }: { onCancel: () => void }) {
   const [step, setStep] = useState<Step>('seed');
   const [revealed, setRevealed] = useState(false);
   const [wroteDown, setWroteDown] = useState(false);
+  const grid = useRef<HTMLOListElement>(null);
+
+  // The Reveal button disappears when pressed; start reading at the words.
+  useEffect(() => {
+    if (revealed) grid.current?.focus();
+  }, [revealed]);
 
   const positions = useMemo(() => pickVerificationPositions(3), []);
   const [answers, setAnswers] = useState<string[]>(['', '', '']);
@@ -46,7 +62,7 @@ export function CreateWallet({ onCancel }: { onCancel: () => void }) {
           </ul>
         </Notice>
         <div className="seed-wrap">
-          <SeedGrid phrase={phrase} hidden={!revealed} />
+          <SeedGrid ref={grid} phrase={phrase} hidden={!revealed} />
           {!revealed && (
             <button type="button" className="secondary reveal" onClick={() => setRevealed(true)}>
               {t('create.reveal')}

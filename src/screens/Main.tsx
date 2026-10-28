@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { useI18n, type MessageKey } from '../i18n';
 import { syncProgress } from '../lib/birthday';
@@ -63,10 +63,41 @@ export function Main() {
   const { t } = useI18n();
   const controller = useController();
   const [tab, setTab] = useState<Tab>('home');
+  const topbar = useRef<HTMLElement>(null);
+  const tabbar = useRef<HTMLElement>(null);
+  // Shield is reached from Balance, so Balance stays marked there.
+  const navTab = tab === 'shield' ? 'home' : tab;
+
+  // Tab switches keep focus on the tab button, so the title is what tells
+  // assistive tech that the screen changed.
+  const titleKey: MessageKey = NAV.find((n) => n.tab === tab)?.label ?? 'shield.title';
+  useEffect(() => {
+    document.title = `${t(titleKey)} · Celari`;
+    return () => {
+      document.title = 'Celari';
+    };
+  }, [t, titleKey]);
+
+  // The bars' heights feed scroll-padding (styles.css), so a control focused
+  // with the keyboard is never scrolled underneath them.
+  useEffect(() => {
+    const root = document.documentElement.style;
+    const observer = new ResizeObserver(() => {
+      root.setProperty('--topbar-h', `${topbar.current?.offsetHeight ?? 0}px`);
+      root.setProperty('--tabbar-h', `${tabbar.current?.offsetHeight ?? 0}px`);
+    });
+    if (topbar.current) observer.observe(topbar.current);
+    if (tabbar.current) observer.observe(tabbar.current);
+    return () => {
+      observer.disconnect();
+      root.removeProperty('--topbar-h');
+      root.removeProperty('--tabbar-h');
+    };
+  }, []);
 
   return (
     <div className="main">
-      <header className="topbar">
+      <header className="topbar" ref={topbar}>
         <div className="topbar-brand">
           <img src="/celari.svg" alt="" width={28} height={28} />
           <span>Celari</span>
@@ -84,13 +115,13 @@ export function Main() {
         {tab === 'settings' && <Settings />}
         {tab === 'shield' && <Shield onDone={() => setTab('home')} />}
       </main>
-      <nav className="tabbar" aria-label="Celari">
+      <nav className="tabbar" aria-label="Celari" ref={tabbar}>
         {NAV.map((n) => (
           <button
             key={n.tab}
             type="button"
-            className={tab === n.tab ? 'active' : ''}
-            aria-current={tab === n.tab ? 'page' : undefined}
+            className={navTab === n.tab ? 'active' : ''}
+            aria-current={navTab === n.tab ? 'page' : undefined}
             onClick={() => setTab(n.tab)}
           >
             <span className="tab-icon" aria-hidden="true">
