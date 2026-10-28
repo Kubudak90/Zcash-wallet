@@ -13,9 +13,11 @@ import {
   type PaymentRequest,
 } from '../lib/address';
 import { memoBytes, memoProblem } from '../lib/memo';
+import { spendingDisabled } from '../lib/network';
 import { AmountError, formatZec, formatZecInput, parseZec } from '../lib/zec';
 import { useController, useWallet } from '../state/wallet';
 import type { Tab } from './Main';
+import { useNetworkView } from './NetworkBanner';
 import { SpendConfirm } from './SpendSteps';
 
 type Step = 'form' | 'confirm' | 'done';
@@ -52,6 +54,7 @@ export function Send({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
   const { t, lang } = useI18n();
   const controller = useController();
   const { summary, meta, spending } = useWallet();
+  const network = useNetworkView();
   const balances = useHideBalances();
   const fmt = (z: bigint) => formatZec(z, { locale: lang });
 
@@ -222,6 +225,7 @@ export function Send({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
         {draft.kind === 'tex' && <Notice tone="warn">{t('send.texWarn')}</Notice>}
         <SpendConfirm
           submitLabel={t('send.sendNow')}
+          disabledText={t('send.disabledOutdated')}
           failureHint={t('send.failedHint')}
           onViewHistory={() => onNavigate('history')}
           run={async (password, onStage) => {
@@ -234,6 +238,19 @@ export function Send({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
             setStep('done');
           }}
         />
+      </Screen>
+    );
+  }
+
+  // Nothing this version builds would be accepted, so there is no form to fill in.
+  if (spendingDisabled(network)) {
+    return (
+      <Screen title={t('send.title')}>
+        <Notice tone="warn">
+          <p data-testid="spend-disabled">
+            {t(network.kind === 'outdated' ? 'send.disabledOutdated' : 'network.unreachable')}
+          </p>
+        </Notice>
       </Screen>
     );
   }

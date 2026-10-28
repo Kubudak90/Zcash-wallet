@@ -219,7 +219,10 @@ for (const colorScheme of ['light', 'dark'] as const) {
         }
       };
       await inside('Balance');
-      // A short screen leaves no scrolling beyond the frame's margins.
+      // A short screen leaves no scrolling beyond the frame's margins. Balance
+      // runs longer with the Orchard notice; History with one payment is short.
+      await page.getByRole('button', { name: 'History', exact: true }).click();
+      await expect(page.getByTestId('history')).toBeVisible();
       expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThanOrEqual(800);
 
       // A long screen scrolls the page; both bars stay in view and in the frame.

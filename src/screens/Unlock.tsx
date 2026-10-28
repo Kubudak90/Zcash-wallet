@@ -6,6 +6,7 @@ import { WrongPasswordError } from '../lib/vault';
 import { clearAutoLocked, useAutoLockReason } from '../state/autoLockNotice';
 import { useController, useWallet } from '../state/wallet';
 import { LanguageSwitch } from './LanguageSwitch';
+import { NetworkBanner } from './NetworkBanner';
 import { WipeWallet } from './Settings';
 
 export function Unlock() {
@@ -51,6 +52,7 @@ export function Unlock() {
       </div>
       <img src="/celari.svg" alt="" width={56} height={56} className="logo" />
       <h1>{t('unlock.title')}</h1>
+      <NetworkBanner />
       {autoLocked !== null && (
         <Notice tone="info">
           {autoLocked.kind === 'hidden' ? t('unlock.autoLockedHidden') : t('unlock.autoLocked', { n: autoLocked.minutes })}

@@ -3,10 +3,12 @@ import { useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { ErrorDetails, Notice, PasswordField, Spinner } from '../components/ui';
 import type { SendStage } from '../engine';
 import { useI18n } from '../i18n';
+import { spendingDisabled } from '../lib/network';
 import { spendWait } from '../lib/spendWait';
 import { WrongPasswordError } from '../lib/vault';
 import { useWallet } from '../state/wallet';
 import { useSyncView } from './Main';
+import { useNetworkView } from './NetworkBanner';
 
 const STAGES: SendStage[] = ['building', 'signing', 'proving', 'broadcasting'];
 
@@ -14,17 +16,21 @@ const STAGES: SendStage[] = ['building', 'signing', 'proving', 'broadcasting'];
 export function SpendConfirm({
   submitLabel,
   run,
+  disabledText,
   failureHint,
   onViewHistory,
 }: {
   submitLabel: string;
   run: (password: string, onStage: (s: SendStage) => void) => Promise<void>;
+  /** Shown in place of the form while the network runs rules this version does not support. */
+  disabledText: string;
   /** Shown when building the transaction failed, before anything was signed. */
   failureHint?: string;
   onViewHistory: () => void;
 }) {
   const { t, lang } = useI18n();
   const view = useSyncView();
+  const network = useNetworkView();
   const { sync, summary } = useWallet();
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -42,10 +48,12 @@ export function SpendConfirm({
   if (wait?.kind === 'syncing') waitFor = t('send.waitForSync', { blocks: blocks(wait.blocksLeft) });
   else if (wait?.kind === 'behind') waitFor = t('send.waitForRetry', { blocks: blocks(wait.blocksLeft) });
   else if (wait?.kind === 'connecting') waitFor = t('send.waitForConnect');
+  // The first network check has not answered yet; the controller would wait for it too.
+  else if (network.kind === 'checking') waitFor = t('send.waitForConnect');
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (running.current || waitFor) return;
+    if (running.current || waitFor || spendingDisabled(network)) return;
     running.current = true;
     lastStage.current = null;
     setBusy(true);
@@ -108,6 +116,15 @@ export function SpendConfirm({
           {t('common.viewHistory')}
         </button>
       </>
+    );
+  } else if (spendingDisabled(network)) {
+    // The controller refuses too (NetworkNotSupportedError), before anything is built or sent.
+    body = (
+      <Notice tone="warn">
+        <p data-testid="spend-disabled">{network.kind === 'outdated' ? disabledText : t('network.unreachable')}</p>
+        {/* A spend the check stopped before the broadcast: say that nothing went out. */}
+        {error && <p>{t('send.nothingSent')}</p>}
+      </Notice>
     );
   } else {
     body = (

@@ -2,9 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 
 import { Screen } from '../components/ui';
 import { useI18n } from '../i18n';
+import { spendingDisabled } from '../lib/network';
 import { formatZec } from '../lib/zec';
 import { useController, useWallet } from '../state/wallet';
 import type { Tab } from './Main';
+import { useNetworkView } from './NetworkBanner';
 import { SpendConfirm } from './SpendSteps';
 
 /** `onClose` returns to the screen Shield was opened from. */
@@ -12,6 +14,7 @@ export function Shield({ onNavigate, onClose }: { onNavigate: (tab: Tab) => void
   const { t, lang } = useI18n();
   const controller = useController();
   const { summary, spending } = useWallet();
+  const network = useNetworkView();
   // Kept from before the spend: the live transparent balance drops to zero once it is sent.
   const [shielded, setShielded] = useState<bigint | null>(null);
   const resultRef = useRef<HTMLHeadingElement>(null);
@@ -47,9 +50,11 @@ export function Shield({ onNavigate, onClose }: { onNavigate: (tab: Tab) => void
         </>
       ) : (
         <>
-          <p>{t('shield.intro', { amount: fmt(transparent) })}</p>
+          {/* While shielding is disabled SpendConfirm says so in place of the form. */}
+          {!spendingDisabled(network) && <p>{t('shield.intro', { amount: fmt(transparent) })}</p>}
           <SpendConfirm
             submitLabel={t('shield.confirm')}
+            disabledText={t('shield.disabledOutdated')}
             onViewHistory={() => onNavigate('history')}
             run={async (password, onStage) => {
               const amount = transparent;

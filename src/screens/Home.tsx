@@ -1,10 +1,12 @@
 import { Amount, Notice, useHideBalances } from '../components/ui';
 import { SHIELDING_THRESHOLD_ZATS, TYPICAL_FEE_ZATS, grandTotal, shieldedTotal } from '../engine';
 import { useI18n } from '../i18n';
+import { spendingDisabled } from '../lib/network';
 import { formatZec } from '../lib/zec';
 import { useWallet } from '../state/wallet';
 import type { Tab } from './Main';
 import { syncLabel, useSyncView } from './Main';
+import { useNetworkView } from './NetworkBanner';
 
 /** An eye, struck through while balances are hidden. */
 function EyeIcon({ struck }: { struck: boolean }) {
@@ -32,6 +34,7 @@ export function Home({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
   const { t, lang } = useI18n();
   const { summary, meta } = useWallet();
   const sync = useSyncView();
+  const network = useNetworkView();
   const balances = useHideBalances();
   const fmt = (z: bigint) => formatZec(z, { locale: lang });
 
@@ -107,7 +110,9 @@ export function Home({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
         <Notice tone="warn">
           <strong>{t('home.shieldTitle')}</strong>
           <p>{t('home.shieldText', { amount: balances.fmt(b.transparent) })}</p>
-          {shieldable ? (
+          {spendingDisabled(network) ? (
+            <p className="small">{t(network.kind === 'outdated' ? 'shield.disabledOutdated' : 'network.unreachable')}</p>
+          ) : shieldable ? (
             <button type="button" className="primary" onClick={() => onNavigate('shield')}>
               {t('home.shieldButton')}
             </button>
@@ -119,6 +124,9 @@ export function Home({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
           )}
         </Notice>
       )}
+
+      {/* NU6.3 (Ironwood) lets nothing new into Orchard; this engine cannot move funds out of it yet. */}
+      {b && b.orchard > 0n && <Notice tone="info">{t('home.orchardMigrateNotice')}</Notice>}
     </section>
   );
 }
