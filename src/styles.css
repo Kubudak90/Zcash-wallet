@@ -1066,6 +1066,15 @@ button.icon-button[aria-pressed='true'] {
   color: var(--error);
 }
 
+/* A row's privacy label: the mark and the words say it, colour only adds to them. */
+.privacy-shielded {
+  color: var(--ok);
+}
+
+.privacy-transparent {
+  color: var(--warn);
+}
+
 .tx-memo {
   margin: 0;
   font-style: italic;

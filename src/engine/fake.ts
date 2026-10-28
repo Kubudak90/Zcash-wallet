@@ -6,7 +6,7 @@
 import { base58check, bech32m } from '@scure/base';
 import { sha256 } from '@noble/hashes/sha256';
 
-import { acceptsMemo } from '../lib/address';
+import { acceptsMemo, checkAddress } from '../lib/address';
 import type {
   Addresses,
   Balances,
@@ -76,6 +76,7 @@ interface FakeAccount {
 }
 
 const hash = (s: string) => sha256(encoder.encode(s));
+
 const hex = (b: Uint8Array) => [...b].map((x) => x.toString(16).padStart(2, '0')).join('');
 
 function fakeUnified(seed: string, hrp = 'u'): string {
@@ -85,6 +86,18 @@ function fakeUnified(seed: string, hrp = 'u'): string {
 
 function fakeTransparent(seed: string): string {
   return base58check(sha256).encode(new Uint8Array([0x1c, 0xb8, ...hash(seed + 't').slice(0, 20)]));
+}
+
+/**
+ * The pool WebZjs reports for a payment: the recipient's pool and that of the
+ * change (always Orchard), 'mixed' when they differ. WebZjs pays a unified
+ * address's Orchard receiver.
+ */
+function sentPool(to: string, change: bigint): string {
+  const check = checkAddress(to);
+  const kind = check.ok ? check.kind : 'transparent';
+  const recipient = kind === 'sapling' ? 'sapling' : kind === 'unified' && acceptsMemo(to) ? 'orchard' : 'transparent';
+  return change > 0n && recipient !== 'orchard' ? 'mixed' : recipient;
 }
 
 export class FakeEngine implements ZcashEngine {
@@ -296,7 +309,8 @@ export class FakeEngine implements ZcashEngine {
       }
     };
     const store = () => {
-      a.balances.orchard = (spendable - zats - TYPICAL_FEE_ZATS).toString();
+      const change = spendable - zats - TYPICAL_FEE_ZATS;
+      a.balances.orchard = change.toString();
       a.history.unshift({
         txid: hex(hash(a.keyHash + to + zats + Date.now())),
         type: 'sent',
@@ -308,7 +322,7 @@ export class FakeEngine implements ZcashEngine {
         // WebZjs's history reads the memo back from the sent note.
         memo: memo || null,
         timestamp: null,
-        pool: 'orchard',
+        pool: sentPool(to, change),
       });
     };
     await this.stages(auth, { store, check, failAt: FAIL_AT.get(zats) });
@@ -331,7 +345,8 @@ export class FakeEngine implements ZcashEngine {
         status: 'pending',
         memo: null,
         timestamp: null,
-        pool: 'mixed',
+        // The shielded note is the wallet's only output; WebZjs does not count the transparent inputs.
+        pool: 'orchard',
       });
     };
     await this.stages(auth, { store });

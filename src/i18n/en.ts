@@ -217,6 +217,12 @@ export const en: Record<MessageKey, string> = {
   'history.status.expired': 'Expired',
   'history.fee': 'Fee {amount} ZEC',
   'history.copyTxid': 'Copy transaction ID',
+  'history.privacyLabel': 'Privacy',
+  'history.privacy.shielded': 'Shielded',
+  'history.privacy.partial': 'Partly shielded',
+  'history.privacy.transparent': 'Transparent · public',
+  'history.privacyNote':
+    'Labels look only at this wallet’s own outputs (what it received, sent or got back as change), not at the rest of each transaction.',
 
   'settings.title': 'Settings',
   'settings.language': 'Language',

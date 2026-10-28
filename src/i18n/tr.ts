@@ -218,6 +218,12 @@ export const tr = {
   'history.status.expired': 'Süresi doldu',
   'history.fee': 'Ücret {amount} ZEC',
   'history.copyTxid': 'İşlem kimliğini kopyala',
+  'history.privacyLabel': 'Gizlilik',
+  'history.privacy.shielded': 'Gizli',
+  'history.privacy.partial': 'Kısmen gizli',
+  'history.privacy.transparent': 'Şeffaf · herkese açık',
+  'history.privacyNote':
+    'Etiketler yalnızca bu cüzdanın kendi çıktılarına bakar (aldığı, gönderdiği ya da para üstü olarak geri aldığı tutarlar), işlemin geri kalanına bakmaz.',
 
   'settings.title': 'Ayarlar',
   'settings.language': 'Dil',
