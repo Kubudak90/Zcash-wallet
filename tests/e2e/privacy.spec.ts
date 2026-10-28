@@ -40,8 +40,16 @@ test('the eye hides every balance, stays on across a lock, and never hides a spe
   await expect(toggle).toHaveAttribute('aria-pressed', 'true');
   await expect(page.getByTestId('balance-total')).not.toContainText(/\d/);
 
-  // A spend always shows what it pays, on the confirm and the result screen.
+  // History and the Send form's balance hints are masked too.
+  await page.getByRole('button', { name: 'History', exact: true }).click();
+  const received = page.getByTestId('history').locator('.tx').first();
+  await expect(received.locator('.tx-amount [aria-hidden="true"]')).toHaveText('+••••');
+  await expect(page.getByTestId('history')).not.toContainText(/\d[.,]\d{2}/);
   await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect(page.getByText('Spendable shielded balance: •••• ZEC')).toBeVisible();
+  await expect(page.getByText('You also have •••• ZEC of transparent funds.')).toBeVisible();
+
+  // A spend always shows what it pays, on the confirm and the result screen.
   await page.getByLabel('Recipient address').fill(UA);
   await page.getByLabel('Amount (ZEC)').fill('0.1');
   await page.getByRole('button', { name: 'Review' }).click();

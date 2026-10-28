@@ -22,7 +22,9 @@ Token yok, puan yok, "airdrop gelecek" vaadi yok. Sadece iyi çalışan, gizli b
 - **Şifreli not (memo):** Gizli adreslere giden ödemeye 512 bayta kadar not eklenebilir; yalnızca sen ve alıcı okuyabilir. Şeffaf ve TEX adresleri not alamaz, form bunu söyler.
 - **Türkçe ve İngilizce** arayüz, Türkçe ondalık virgül desteği (`0,25`).
 - **Kendi sunucunu kullan:** lightwalletd vekil adresi ayarlardan değiştirilebilir.
-- Otomatik kilit, kurtarma kelimelerini doğrulama adımı, koyu ve açık tema.
+- **Göz önünde gizlilik:** Ana sayfadaki göz düğmesi bakiye ve geçmiş tutarlarını gizler (tercih kalıcıdır; onay ve sonuç ekranlarında gönderilen tutar her zaman görünür). Kopyalanan görüntüleme anahtarı 60 saniye sonra panodan silinir (tarayıcının izin verdiği ölçüde).
+- **Otomatik kilit:** Belirlenen süre işlem yapılmazsa ya da sekme 1 dakika arka planda kalırsa cüzdan kilitlenir; uyku süresi de sayılır. Uzun bir geri yükleme taraması sürerken kilit ekranı hemen gelir, tarama bitip kaydedilince sayfa yeniden yüklenir.
+- Kurtarma kelimelerini doğrulama adımı, koyu ve açık tema, geniş ekranda çerçeveli düzen.
 
 ## Nasıl çalışır?
 

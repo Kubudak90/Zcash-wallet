@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { flushSync } from 'react-dom';
 
-import { Notice, Screen } from '../components/ui';
+import { Notice, Screen, useHideBalances } from '../components/ui';
 import { MEMO_MAX_BYTES, SHIELDING_THRESHOLD_ZATS, TYPICAL_FEE_ZATS, shieldedTotal, type SendStage } from '../engine';
 import { useI18n, type MessageKey } from '../i18n';
 import {
@@ -52,6 +52,7 @@ export function Send({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
   const { t, lang } = useI18n();
   const controller = useController();
   const { summary, meta, spending } = useWallet();
+  const balances = useHideBalances();
   const fmt = (z: bigint) => formatZec(z, { locale: lang });
 
   const [step, setStep] = useState<Step>('form');
@@ -313,7 +314,7 @@ export function Send({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
         )}
         {linkFill?.amount && <p className="muted small">{t('send.uriFilled')}</p>}
         <p className="muted small">
-          {t('send.available', { amount: fmt(available) })} · {t('send.fee', { amount: fmt(TYPICAL_FEE_ZATS) })}
+          {t('send.available', { amount: balances.fmt(available) })} · {t('send.fee', { amount: fmt(TYPICAL_FEE_ZATS) })}
         </p>
 
         {takesMemo === true && (
@@ -356,7 +357,7 @@ export function Send({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
 
         {shieldable && (
           <Notice tone="info">
-            <p>{t('send.shieldFirst', { amount: fmt(transparent) })}</p>
+            <p>{t('send.shieldFirst', { amount: balances.fmt(transparent) })}</p>
             <button type="button" className="secondary" onClick={() => onNavigate('shield')}>
               {t('home.shieldButton')}
             </button>
