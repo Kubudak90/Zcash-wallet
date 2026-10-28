@@ -637,6 +637,19 @@ ul.plain {
   margin-right: auto;
 }
 
+/* On a phone the logo stands for the name, so the pill and Lock keep one line
+   with wide fonts too (DejaVu Sans on Linux); screen readers still get the name. */
+@media (max-width: 380px) {
+  .topbar-brand > span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+}
+
 .content {
   flex: 1;
   padding-bottom: 76px;
