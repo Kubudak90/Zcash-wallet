@@ -65,6 +65,29 @@ describe('parsePaymentInput', () => {
     expect(parsePaymentInput(`zcash:${UA}?amount=1.5&message=hi`)).toEqual({ address: UA, amountZats: 150_000_000n });
     expect(parsePaymentInput(`ZCASH:${T1}`)).toEqual({ address: T1 });
     expect(parsePaymentInput(`zcash:${T1}?amount=abc`)).toEqual({ address: T1 });
+    expect(parsePaymentInput(`zcash:?address=${UA}&amount=0.1`)).toEqual({ address: UA, amountZats: 10_000_000n });
+  });
+
+  it('keeps the memo a link asks for', () => {
+    expect(parsePaymentInput(`zcash:${UA}?amount=1&memo=SGk`)).toEqual({
+      address: UA,
+      amountZats: 100_000_000n,
+      memo: 'SGk',
+    });
+  });
+
+  it('flags links it must not pay in part', () => {
+    const multi = `zcash:?address=${UA}&amount=0.1&address.1=${T1}&amount.1=0.2`;
+    expect(parsePaymentInput(multi)).toEqual({ address: multi, unsupported: 'multi' });
+    const req = `zcash:${UA}?amount=0.3&req-futurefeature=1`;
+    expect(parsePaymentInput(req)).toEqual({ address: req, unsupported: 'req' });
+  });
+
+  it('leaves half-typed and malformed links alone', () => {
+    expect(parsePaymentInput('zcash:')).toEqual({ address: 'zcash:' });
+    expect(parsePaymentInput('zcash:?amount=1')).toEqual({ address: 'zcash:?amount=1' });
+    expect(() => parsePaymentInput('zcash:%')).not.toThrow();
+    expect(parsePaymentInput('zcash:%')).toEqual({ address: 'zcash:%' });
   });
 });
 

@@ -10,6 +10,7 @@ export const tr = {
   'common.password': 'Şifre',
   'common.details': 'Ayrıntılar',
   'common.genericError': 'Bir şeyler ters gitti.',
+  'common.viewHistory': 'Geçmişte gör',
 
   'boot.loading': 'Zcash motoru hazırlanıyor…',
   'boot.errorTitle': 'Celari başlatılamadı',
@@ -130,7 +131,7 @@ export const tr = {
   'send.stage.proving': 'Sıfır bilgi kanıtı üretiliyor (10–60 sn)…',
   'send.stage.broadcasting': 'Ağa gönderiliyor…',
   'send.doNotClose': 'İşlem bitene kadar bu sekmeyi kapatma.',
-  'send.success': 'Gönderildi. İşlem birkaç dakika içinde onaylanır.',
+  'send.success': 'İşlem birkaç dakika içinde onaylanır.',
   'send.another': 'Yeni gönderim',
   'send.err.address.empty': 'Alıcı adresini gir.',
   'send.err.address.invalid': 'Bu geçerli bir Zcash adresi değil. Bir harf hatası olabilir.',
@@ -147,11 +148,25 @@ export const tr = {
   'send.failed': 'Gönderim başarısız.',
   'send.failedHint': 'Bakiye ağ ücretini karşılamıyor olabilir. Tutarı biraz azaltıp tekrar dene.',
   'send.uriFilled': 'Tutar ödeme bağlantısından dolduruldu.',
+  'send.sentTitle': '{amount} ZEC gönderildi',
+  'send.stageDone': 'tamamlandı',
+  'send.failedRetry': 'Hiçbir şey gönderilmedi. Tekrar deneyebilirsin.',
+  'send.maybeSent': 'İşlem yine de ağa ulaşmış olabilir. Tekrar denemeden önce Geçmiş’e bak.',
+  'send.shieldFirst':
+    '{amount} ZEC şeffaf bakiyen de var. Yalnızca gizli bakiye gönderilebilir; göndermek için önce gizliye aktar.',
+  'send.err.amount.insufficientShieldFirst':
+    'Gizli bakiyen bu tutarı ve ücreti karşılamıyor. Önce şeffaf bakiyeni gizliye aktar, sonra gönder.',
+  'send.err.link.multi': 'Çok alıcılı ödeme bağlantıları desteklenmiyor.',
+  'send.err.link.req':
+    'Bu ödeme bağlantısı Celari’nin henüz desteklemediği bir özellik kullanıyor; bu yüzden ödenemez. Alıcıdan yalnızca adresini iste.',
+  'send.err.link.memo':
+    'Bu bağlantı bir not (memo) istiyor; Celari henüz not gönderemiyor. Not olmadan alıcı ödemeni eşleştiremeyebilir.',
 
   'shield.title': 'Gizliye aktar',
   'shield.intro': '{amount} ZEC şeffaf bakiyen gizli Orchard bakiyene aktarılacak. Ağ ücreti bu tutardan düşülür.',
   'shield.confirm': 'Aktar',
-  'shield.success': 'Aktarım gönderildi. Onaylanınca gizli bakiyende görünecek.',
+  'shield.success': 'Onaylanınca gizli bakiyende görünecek.',
+  'shield.sentTitle': '{amount} ZEC gizliye aktarılıyor',
 
   'history.title': 'İşlem geçmişi',
   'history.empty': 'Henüz işlem yok.',

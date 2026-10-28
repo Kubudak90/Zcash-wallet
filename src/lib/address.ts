@@ -69,11 +69,17 @@ export function checkAddress(raw: string): AddressCheck {
 export interface PaymentRequest {
   address: string;
   amountZats?: bigint;
+  /** Base64url memo the payee asked for; Celari cannot attach memos yet. */
+  memo?: string;
+  /** Set when the link asks for something Celari cannot honour, so it must not be paid. */
+  unsupported?: 'multi' | 'req';
 }
 
 /**
  * Reads a pasted address or a single-recipient ZIP-321 URI
- * ("zcash:<address>?amount=1.5"). Multi-recipient URIs are not supported.
+ * ("zcash:<address>?amount=1.5"). Links with several payments or with a
+ * `req-` parameter are flagged as unsupported: ZIP-321 requires a wallet to
+ * reject what it does not understand rather than pay part of the request.
  */
 export function parsePaymentInput(raw: string): PaymentRequest {
   const input = raw.trim();
@@ -82,10 +88,25 @@ export function parsePaymentInput(raw: string): PaymentRequest {
   const rest = input.slice('zcash:'.length);
   const [path = '', query = ''] = rest.split('?', 2);
   const params = new URLSearchParams(query);
-  const address = decodeURIComponent(path || params.get('address') || '');
+
+  const keys = [...params.keys()];
+  if (keys.some((k) => /\.\d+$/.test(k))) return { address: input, unsupported: 'multi' };
+  if (keys.some((k) => k.startsWith('req-'))) return { address: input, unsupported: 'req' };
+
+  // A bare "zcash:" is usually a link still being typed; keep it as it is.
+  if (!path && !params.get('address')) return { address: input };
+  let address: string;
+  try {
+    address = decodeURIComponent(path || params.get('address') || '');
+  } catch {
+    // Malformed %-escape: leave the text alone and let the address check reject it.
+    return { address: input };
+  }
   const amount = params.get('amount');
 
   const request: PaymentRequest = { address };
+  const memo = params.get('memo');
+  if (memo) request.memo = memo;
   if (amount) {
     try {
       request.amountZats = parseZec(amount);

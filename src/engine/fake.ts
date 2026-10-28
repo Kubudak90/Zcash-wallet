@@ -10,6 +10,7 @@ import type {
   Addresses,
   Balances,
   HistoryItem,
+  SendStage,
   SpendAuthority,
   Summary,
   ZcashEngine,
@@ -17,6 +18,11 @@ import type {
 import { TYPICAL_FEE_ZATS } from './types';
 
 const TIP = 3_100_000;
+// Send amounts that fail at a given stage, so UI tests can reach the error views.
+const FAIL_AT = new Map<bigint, SendStage>([
+  [3_330_000n, 'proving'], // 0.0333 ZEC
+  [6_660_000n, 'broadcasting'], // 0.0666 ZEC
+]);
 const encoder = new TextEncoder();
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -164,10 +170,11 @@ export class FakeEngine implements ZcashEngine {
     if (hex(hash(auth.phrase)) !== a.keyHash) throw new Error('seed does not match account');
   }
 
-  private async stages(auth: SpendAuthority) {
+  private async stages(auth: SpendAuthority, failAt?: SendStage) {
     for (const stage of ['building', 'signing', 'proving', 'broadcasting'] as const) {
       auth.onStage?.(stage);
       await sleep(stage === 'proving' ? 600 : 150);
+      if (stage === failAt) throw new Error(`fake ${stage} failure`);
     }
   }
 
@@ -176,7 +183,7 @@ export class FakeEngine implements ZcashEngine {
     this.authorize(a, auth);
     const spendable = BigInt(a.balances.orchard);
     if (zats + TYPICAL_FEE_ZATS > spendable) throw new Error('Insufficient balance');
-    await this.stages(auth);
+    await this.stages(auth, FAIL_AT.get(zats));
     a.balances.orchard = (spendable - zats - TYPICAL_FEE_ZATS).toString();
     a.history.unshift({
       txid: hex(hash(a.keyHash + to + zats + Date.now())),
