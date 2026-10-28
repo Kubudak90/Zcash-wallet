@@ -208,6 +208,9 @@ export const tr = {
   'settings.showViewingKey': 'Görüntüleme anahtarını göster',
   'settings.viewingKeyHelp':
     'Bu anahtara sahip olan herkes geçmiş ve gelecekteki tüm işlemlerini ve notlarını görebilir ama harcama yapamaz. Geri alınamaz; yalnızca tamamen güvendiğin biriyle paylaş.',
+  'settings.clipboardClear':
+    'Celari panoyu kopyalamadan 60 saniye sonra temizlemeye çalışır. Tarayıcılar buna yalnızca bu sekme öndeyken izin verir; bu yüzden temizlik sekmeye döndüğünde olabilir, sekmeyi önce kapatırsan hiç olmaz. Bu arada başka bir uygulamada kopyaladığın bir şey de temizlenebilir.',
+  'settings.clipboardCleared': 'Pano temizlendi.',
   'settings.showSeed': 'Kurtarma kelimelerini göster',
   'settings.reveal': 'Göster',
   'settings.danger': 'Tehlikeli bölge',

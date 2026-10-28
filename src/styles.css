@@ -275,9 +275,10 @@ button:focus-visible {
   margin: -4px 0 0;
 }
 
-/* A live error slot stays mounted so screen readers announce what appears in
-   it; while empty it is taken out of the flow so it adds no gap. */
-.field-error:empty {
+/* A live slot (an error or a note) stays mounted so screen readers announce
+   what appears in it; while empty it is taken out of the flow so it adds no gap. */
+.field-error:empty,
+.live-slot:empty {
   position: absolute;
 }
 
