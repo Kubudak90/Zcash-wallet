@@ -67,6 +67,10 @@ npm run test:e2e:real  # üretim derlemesiyle ana ağda duman testi
 
 Sahte motor (`src/engine/fake.ts`) sadece geliştirme sunucusunda `VITE_FAKE_ENGINE=1` ile açılır ve üretim paketine hiç girmez.
 
+### CI
+
+CI, WebZjs'i kaynaktan derler ve `vendor/` içindeki her dosyanın SHA-256 özetini `scripts/webzjs-vendor.sha256` listesiyle karşılaştırır. `main`'e gönderimler, haftalık çalışma ve `full_rebuild` ile elle başlatılan çalışmalar her zaman kaynaktan derler, liste tutmazsa başarısız olur ve ancak tutunca `vendor/`'u önbelleğe yazar. PR'lar önbellekteki `vendor/`'u aynı listeyle doğrular; tutmazsa kullanmaz, kaynaktan derler. `WEBZJS_COMMIT`'i, `patches/webzjs/` altındaki bir yamayı veya wasm-pack sürümünü değiştiren PR listeyi de güncellemeli: CI yeni listeyi `webzjs-vendor-sha256` artifact'ı olarak yükler (`gh run download <run-id> -n webzjs-vendor-sha256 -D scripts`). Listeyi yerelde üretme; derleme cargo yollarını wasm'a gömdüğü için yerel çıktı CI'dakinden farklıdır. Ayrıntılar `.github/workflows/ci.yml` içindeki açıklamada.
+
 ## Yayınlama
 
 WebZjs, `SharedArrayBuffer` kullandığı için sayfanın **cross-origin isolated** olması gerekir. Sunucunun şu başlıkları göndermesi şart:
@@ -103,4 +107,4 @@ MIT veya Apache-2.0, tercihine göre. WebZjs © ChainSafe Systems, MIT / Apache-
 - View-only mode with a UFVK, birthday estimation from a month, checksum-validated addresses, ZIP-321 `zcash:` links.
 - Turkish and English UI. Configurable lightwalletd gRPC-web proxy.
 
-**Not audited. Use small amounts only.** See the Turkish sections above for commands: `npm run dev:fake` for UI work, `npm run build:webzjs && npm run build` for a real build. Hosting requires COOP/COEP headers (see `public/_headers`).
+**Not audited. Use small amounts only.** See the Turkish sections above for commands: `npm run dev:fake` for UI work, `npm run build:webzjs && npm run build` for a real build. Hosting requires COOP/COEP headers (see `public/_headers`). CI pins the WebZjs build output by SHA-256 in `scripts/webzjs-vendor.sha256`; changing the WebZjs commit, its patches or wasm-pack needs a new list, which CI uploads as the `webzjs-vendor-sha256` artifact (see `.github/workflows/ci.yml`).
