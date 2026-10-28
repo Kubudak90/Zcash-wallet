@@ -6,6 +6,7 @@
 import { base58check, bech32m } from '@scure/base';
 import { sha256 } from '@noble/hashes/sha256';
 
+import { acceptsMemo } from '../lib/address';
 import type {
   Addresses,
   Balances,
@@ -16,7 +17,7 @@ import type {
   SyncProgress,
   ZcashEngine,
 } from './types';
-import { TYPICAL_FEE_ZATS } from './types';
+import { MEMO_MAX_BYTES, TYPICAL_FEE_ZATS } from './types';
 
 const TIP = 3_100_000;
 // Send amounts that fail at a given stage, so UI tests can reach the error views.
@@ -233,25 +234,41 @@ export class FakeEngine implements ZcashEngine {
   }
 
   /**
-   * Walks the spend stages. Like WebZjs's pczt_send, `store` records the
-   * transaction just before it is broadcast, so a failed broadcast leaves it
-   * in the wallet.
+   * Walks the spend stages. `check` runs while building, where WebZjs rejects
+   * a bad request. Like WebZjs's pczt_send, `store` records the transaction
+   * just before it is broadcast, so a failed broadcast leaves it in the wallet.
    */
-  private async stages(auth: SpendAuthority, store: () => void, failAt?: SendStage) {
+  private async stages(
+    auth: SpendAuthority,
+    { store, check, failAt }: { store: () => void; check?: () => void; failAt?: SendStage },
+  ) {
     for (const stage of ['building', 'signing', 'proving', 'broadcasting'] as const) {
       auth.onStage?.(stage);
       while (knobs().holdStage === stage) await sleep(50);
+      if (stage === 'building') check?.();
       if (stage === 'broadcasting') store();
       await sleep(stage === 'proving' ? 600 : 150);
       if (stage === failAt) throw new Error(`fake ${stage} failure`);
     }
   }
 
-  async send(id: number, to: string, zats: bigint, auth: SpendAuthority): Promise<void> {
+  async send(id: number, to: string, zats: bigint, auth: SpendAuthority, memo?: string): Promise<void> {
     const a = this.account(id);
     this.authorize(a, auth);
     const spendable = BigInt(a.balances.orchard);
     if (zats + TYPICAL_FEE_ZATS > spendable) throw new Error('Insufficient balance');
+    // The errors WebZjs (patches/webzjs/0002-memo.patch) and the adapter give.
+    const check = () => {
+      if (!memo) return;
+      if (memo.includes('\u0000')) throw new Error('a memo cannot contain NUL characters');
+      const length = encoder.encode(memo).length;
+      if (length > MEMO_MAX_BYTES) throw new Error(`Memo is ${length} bytes long; a memo holds at most 512 bytes of UTF-8 text`);
+      if (!acceptsMemo(to)) {
+        throw new Error(
+          'Attempted to create a transaction with a memo to an unsupported recipient. Only shielded addresses are supported.',
+        );
+      }
+    };
     const store = () => {
       a.balances.orchard = (spendable - zats - TYPICAL_FEE_ZATS).toString();
       a.history.unshift({
@@ -262,19 +279,20 @@ export class FakeEngine implements ZcashEngine {
         height: null,
         confirmations: 0,
         status: 'pending',
-        memo: null,
+        // WebZjs's history reads the memo back from the sent note.
+        memo: memo || null,
         timestamp: null,
         pool: 'orchard',
       });
     };
-    await this.stages(auth, store, FAIL_AT.get(zats));
+    await this.stages(auth, { store, check, failAt: FAIL_AT.get(zats) });
   }
 
   async shield(id: number, auth: SpendAuthority): Promise<void> {
     const a = this.account(id);
     this.authorize(a, auth);
     const transparent = BigInt(a.balances.transparent);
-    await this.stages(auth, () => {
+    const store = () => {
       a.balances.transparent = '0';
       a.balances.pending = (transparent - TYPICAL_FEE_ZATS).toString();
       a.history.unshift({
@@ -289,7 +307,8 @@ export class FakeEngine implements ZcashEngine {
         timestamp: null,
         pool: 'mixed',
       });
-    });
+    };
+    await this.stages(auth, { store });
   }
 }
 
