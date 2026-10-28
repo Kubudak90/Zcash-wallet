@@ -234,7 +234,7 @@ export class WalletController {
   private async syncLoop(): Promise<void> {
     if (this.state.phase !== 'ready' || this.syncing) return;
     this.syncing = true;
-    this.setSync({ status: 'syncing', progress: null, ...(await this.measureGap()) });
+    this.setSync({ status: 'syncing', progress: null, ...this.gapTo(await this.readTip()) });
 
     // Engines that can report progress mid-pass move the bar; WebZjs answers
     // only when the pass ends, so at most one summary call waits at a time.
@@ -242,12 +242,29 @@ export class WalletController {
     // WebZjs's pass counters answer at once, so its bar moves too. Only a
     // catch-up pass shows a bar, so steady-state passes are not watched.
     const pass = this.eng.syncProgress && this.state.sync.catchUp ? this.watchPass() : null;
+    const scannedBefore = this.state.summary?.scannedHeight;
     let delay = SYNC_INTERVAL_MS;
     try {
       await this.eng.sync();
+      // WebZjs reads the tip once per scan iteration, so a long pass ends
+      // behind blocks mined while it ran. On the tip read before the pass the
+      // wallet would count as up to date and spends would start (and run that
+      // catch-up inline), so the tip is read again before the new scanned
+      // height shows.
+      const tip = await this.readTip();
+      if (tip !== null) this.setSync({ networkTip: tip });
       await this.refresh();
       await this.persist();
-      this.setSync({ status: 'idle', error: null, catchUp: null, progress: null });
+      const gap = this.gapTo(tip);
+      // Still behind after moving forward: catch up again at once. A pass
+      // that made no progress (e.g. a lagging server) waits as usual.
+      const moved = scannedBefore === undefined || (this.state.summary?.scannedHeight ?? 0) > scannedBefore;
+      if (gap.catchUp && moved) {
+        this.setSync({ ...gap, progress: null });
+        delay = 0;
+      } else {
+        this.setSync({ status: 'idle', error: null, catchUp: null, progress: null });
+      }
     } catch (e) {
       console.warn('sync failed', e);
       this.setSync({ status: 'error', error: e instanceof Error ? e.message : String(e), catchUp: null, progress: null });
@@ -261,19 +278,22 @@ export class WalletController {
   }
 
   /**
-   * Reads the network tip before a pass, while the engine can still answer,
-   * and compares it with the wallet's scanned height.
+   * Reads the network tip before and after a pass, while the engine can
+   * answer; null if the server did not.
    */
-  private async measureGap(): Promise<Partial<SyncInfo>> {
-    let tip: number;
+  private async readTip(): Promise<number | null> {
     try {
-      tip = await this.eng.latestHeight();
+      // Servers behind one lightwalletd URL can be a block apart; never step back.
+      return Math.max(await this.eng.latestHeight(), this.state.sync.networkTip ?? 0);
     } catch {
-      // The pass itself reports connection problems; until then the last error stands.
-      return { catchUp: null };
+      return null;
     }
-    // Servers behind one lightwalletd URL can be a block apart; never step back.
-    const networkTip = Math.max(tip, this.state.sync.networkTip ?? 0);
+  }
+
+  /** Compares the network tip with the wallet's scanned height. */
+  private gapTo(networkTip: number | null): Partial<SyncInfo> {
+    // The pass itself reports connection problems; until then the last error stands.
+    if (networkTip === null) return { catchUp: null };
     const scanned = this.state.summary?.scannedHeight;
     return { error: null, networkTip, catchUp: scanned === undefined ? null : catchUpFor(scanned, networkTip) };
   }
