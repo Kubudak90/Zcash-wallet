@@ -23,9 +23,11 @@ import initKeysWasm, {
 } from '@chainsafe/webzjs-keys';
 
 import { seedBytes } from '../lib/seed';
+import { fetchLightdInfo, networkStatusFor } from './lightd';
 import type {
   Addresses,
   HistoryItem,
+  NetworkStatus,
   SpendAuthority,
   Summary,
   SyncProgress,
@@ -33,6 +35,7 @@ import type {
   TxType,
   ZcashEngine,
 } from './types';
+import { WEBZJS_UPGRADES } from './webzjs-upgrades';
 
 const NETWORK = 'main';
 const ACCOUNT_HD_INDEX = 0;
@@ -153,6 +156,12 @@ export class WebzjsEngine implements ZcashEngine {
 
   async latestHeight(): Promise<number> {
     return Number(await this.chain.get_latest_block());
+  }
+
+  /** WebZjs has no call for this, so it goes to the server directly (./lightd.ts). */
+  async networkStatus(): Promise<NetworkStatus> {
+    if (!this.serverUrl) throw new Error('engine not initialized');
+    return networkStatusFor(await fetchLightdInfo(this.serverUrl), WEBZJS_UPGRADES, NETWORK);
   }
 
   async detectBirthday(secret: { phrase: string } | { ufvk: string }): Promise<number | null> {
@@ -312,6 +321,12 @@ export class WebzjsEngine implements ZcashEngine {
     );
     signed.free();
 
+    try {
+      await auth.beforeBroadcast?.();
+    } catch (e) {
+      proved.free();
+      throw e;
+    }
     auth.onStage?.('broadcasting');
     await this.open_.pczt_send(proved);
   }
