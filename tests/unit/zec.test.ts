@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { AmountError, formatZec, parseZec, zatsToPlainZec } from '../../src/lib/zec';
+import { AmountError, formatZec, formatZecInput, parseZec, zatsToPlainZec } from '../../src/lib/zec';
 
 describe('parseZec', () => {
   it.each([
@@ -58,6 +58,21 @@ describe('formatZec', () => {
   it('round-trips through parseZec', () => {
     for (const zats of [1n, 99_999_999n, 100_000_000n, 2_100_000_000_000_000n]) {
       expect(parseZec(zatsToPlainZec(zats))).toBe(zats);
+    }
+  });
+});
+
+describe('formatZecInput', () => {
+  it('uses the decimal separator of the interface language, without grouping', () => {
+    expect(formatZecInput(124_990_000n, 'tr')).toBe('1,2499');
+    expect(formatZecInput(124_990_000n, 'en')).toBe('1.2499');
+    expect(formatZecInput(123_456_789_000n, 'tr')).toBe('1234,56789');
+    expect(formatZecInput(200_000_000n, 'tr')).toBe('2');
+  });
+
+  it('round-trips through parseZec', () => {
+    for (const zats of [1n, 100_100_000n, 2_100_000_000_000_000n]) {
+      expect(parseZec(formatZecInput(zats, 'tr'))).toBe(zats);
     }
   });
 });

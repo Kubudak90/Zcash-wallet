@@ -15,8 +15,10 @@ export class AmountError extends Error {
 
 /**
  * Parses a user-typed ZEC amount into zatoshis.
- * Accepts either "." or "," as the decimal separator (Turkish keyboards use ",")
- * but rejects thousands separators, since "1,000" would otherwise be ambiguous.
+ * Accepts either "." or "," as the decimal separator (Turkish keyboards use ",").
+ * A single separator is always read as the decimal one, so "1.000" and "1,000"
+ * both mean 1 ZEC; the Send form echoes the parsed value so this stays visible.
+ * Inputs with more than one separator, such as "1.000,5", are rejected.
  */
 export function parseZec(input: string): bigint {
   const trimmed = input.trim();
@@ -61,4 +63,13 @@ export function zatsToPlainZec(zats: bigint): string {
   const whole = zats / ZATS_PER_ZEC;
   const frac = (zats % ZATS_PER_ZEC).toString().padStart(DECIMALS, '0').replace(/0+$/, '');
   return frac ? `${whole}.${frac}` : whole.toString();
+}
+
+/**
+ * Formats zatoshis for an amount field: no grouping, and a decimal comma in
+ * Turkish, so a filled-in "1,001" is not read as one thousand and one.
+ */
+export function formatZecInput(zats: bigint, locale: 'tr' | 'en'): string {
+  const plain = zatsToPlainZec(zats);
+  return locale === 'tr' ? plain.replace('.', ',') : plain;
 }

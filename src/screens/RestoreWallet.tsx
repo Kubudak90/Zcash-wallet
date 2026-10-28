@@ -15,7 +15,7 @@ const SAPLING_MONTH = '2018-10';
 const thisMonth = () => new Date().toISOString().slice(0, 7);
 
 export function RestoreWallet({ onCancel }: { onCancel: () => void }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const controller = useController();
   const [step, setStep] = useState<Step>('secret');
   const [mode, setMode] = useState<Mode>('seed');
@@ -168,7 +168,11 @@ export function RestoreWallet({ onCancel }: { onCancel: () => void }) {
   return (
     <PasswordSetup
       note={
-        birthday !== null && <Notice tone="info">{t('restore.birthdayHeight', { height: birthday.toLocaleString() })}</Notice>
+        birthday !== null && (
+          <Notice tone="info">
+            {t('restore.birthdayHeight', { height: birthday.toLocaleString(lang === 'tr' ? 'tr-TR' : 'en-US') })}
+          </Notice>
+        )
       }
       onBack={() => setStep('birthday')}
       onSubmit={async (password) => {

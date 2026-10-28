@@ -62,6 +62,8 @@ function SyncPill() {
 export function Main() {
   const { t } = useI18n();
   const controller = useController();
+  // Leaving the screen mid-spend would hide its outcome, so navigation waits for it.
+  const { spending } = useWallet();
   const [tab, setTab] = useState<Tab>('home');
   const topbar = useRef<HTMLElement>(null);
   const tabbar = useRef<HTMLElement>(null);
@@ -103,17 +105,17 @@ export function Main() {
           <span>Celari</span>
         </div>
         <SyncPill />
-        <button type="button" className="link" onClick={() => controller.lock()}>
+        <button type="button" className="link" disabled={spending} onClick={() => controller.lock()}>
           {t('nav.lock')}
         </button>
       </header>
       <main className="content">
         {tab === 'home' && <Home onNavigate={setTab} />}
         {tab === 'receive' && <Receive />}
-        {tab === 'send' && <Send />}
+        {tab === 'send' && <Send onNavigate={setTab} />}
         {tab === 'history' && <History />}
         {tab === 'settings' && <Settings />}
-        {tab === 'shield' && <Shield onDone={() => setTab('home')} />}
+        {tab === 'shield' && <Shield onNavigate={setTab} />}
       </main>
       <nav className="tabbar" aria-label="Celari" ref={tabbar}>
         {NAV.map((n) => (
@@ -123,6 +125,7 @@ export function Main() {
             className={navTab === n.tab ? 'active' : ''}
             aria-current={navTab === n.tab ? 'page' : undefined}
             onClick={() => setTab(n.tab)}
+            disabled={spending}
           >
             <span className="tab-icon" aria-hidden="true">
               {n.icon}
