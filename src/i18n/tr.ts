@@ -81,6 +81,9 @@ export const tr = {
   'unlock.forgotHelpView':
     'Şifreyi kurtarmanın yolu yok. Cüzdanı bu tarayıcıdan silip görüntüleme anahtarınla (uview1…) yeniden ekleyebilirsin.',
   'unlock.autoLocked': '{n} dakika işlem yapılmadığı için otomatik olarak kilitlendi.',
+  'unlock.autoLockedHidden': 'Bu sekme 1 dakika arka planda kaldığı için otomatik olarak kilitlendi.',
+  'unlock.softLocked':
+    'Eşitleme, ilerlemesi kaydedilene kadar arka planda sürüyor; böylece uzun bir geri yükleme boşa gitmez.',
 
   'nav.home': 'Bakiye',
   'nav.receive': 'Al',
@@ -198,6 +201,7 @@ export const tr = {
   'settings.serverInvalid': 'https:// ile başlayan geçerli bir adres gir.',
   'settings.autoLock': 'Otomatik kilit',
   'settings.minutes': '{n} dakika işlem yapılmazsa',
+  'settings.autoLockHidden': 'Cüzdan, bu sekme 1 dakika arka planda kalınca da kilitlenir.',
   'settings.security': 'Güvenlik',
   'settings.showViewingKey': 'Görüntüleme anahtarını göster',
   'settings.viewingKeyHelp':

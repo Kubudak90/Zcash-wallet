@@ -154,6 +154,7 @@ export function Settings() {
   const serverHelpId = useId();
   const serverErrorId = useId();
   const lockId = useId();
+  const lockHelpId = useId();
 
   return (
     <Screen title={t('settings.title')}>
@@ -203,6 +204,7 @@ export function Settings() {
         <select
           name="auto-lock"
           aria-labelledby={lockId}
+          aria-describedby={lockHelpId}
           value={settings.autoLockMinutes}
           onChange={(e) => void controller.saveSettings({ ...settings, autoLockMinutes: Number(e.target.value) })}
         >
@@ -212,6 +214,9 @@ export function Settings() {
             </option>
           ))}
         </select>
+        <p id={lockHelpId} className="muted small">
+          {t('settings.autoLockHidden')}
+        </p>
       </section>
 
       <section className="settings-group">

@@ -81,6 +81,8 @@ export const en: Record<MessageKey, string> = {
   'unlock.forgotHelpView':
     'There is no way to recover the password. You can remove the wallet from this browser and add it again with your viewing key (uview1…).',
   'unlock.autoLocked': 'Locked automatically after {n} minutes of inactivity.',
+  'unlock.autoLockedHidden': 'Locked automatically because this tab was in the background for 1 minute.',
+  'unlock.softLocked': 'The sync keeps running in the background until its progress is saved, so a long restore is not lost.',
 
   'nav.home': 'Balance',
   'nav.receive': 'Receive',
@@ -198,6 +200,7 @@ export const en: Record<MessageKey, string> = {
   'settings.serverInvalid': 'Enter a valid address starting with https://.',
   'settings.autoLock': 'Auto-lock',
   'settings.minutes': 'after {n} minutes of inactivity',
+  'settings.autoLockHidden': 'The wallet also locks once this tab has been in the background for 1 minute.',
   'settings.security': 'Security',
   'settings.showViewingKey': 'Show viewing key',
   'settings.viewingKeyHelp':
