@@ -84,32 +84,41 @@ export function decodeLightdInfo(message: Uint8Array): LightdInfo {
   return info;
 }
 
+/** Reads the grpc-status of a trailer frame: every grpc-status line must say exactly 0. */
+function checkTrailers(frame: Uint8Array): void {
+  const trailers = new TextDecoder().decode(frame);
+  const statuses = [...trailers.matchAll(/^grpc-status:(.*)$/gim)].map((m) => m[1]!.trim());
+  if (statuses.length === 0) throw new Error('gRPC-web trailers carry no grpc-status');
+  const failed = statuses.find((status) => status !== '0');
+  if (failed !== undefined) throw new Error(`gRPC status ${failed}: ${trailers.trim()}`);
+}
+
 /**
- * Splits a gRPC-web response body into its messages. Each frame is a flag
- * byte and a 4-byte big-endian length; the trailer frame (flag 0x80) carries
- * grpc-status, and a non-zero status fails the call.
+ * Reads a unary gRPC-web response body: exactly one uncompressed message
+ * frame, then one trailer frame (flag 0x80) whose grpc-status is 0. Each
+ * frame is a flag byte and a 4-byte big-endian length. Anything else (no
+ * trailers, a second message, other flag bits) fails the call.
  */
-export function grpcWebMessages(body: Uint8Array): Uint8Array[] {
-  const messages: Uint8Array[] = [];
+export function grpcWebUnary(body: Uint8Array): Uint8Array {
+  const frames: { flag: number; data: Uint8Array }[] = [];
   let at = 0;
   while (at < body.length) {
     if (at + 5 > body.length) throw new Error('truncated gRPC-web frame');
     const flag = body[at]!;
     const length = ((body[at + 1]! << 24) | (body[at + 2]! << 16) | (body[at + 3]! << 8) | body[at + 4]!) >>> 0;
-    const frame = body.subarray(at + 5, at + 5 + length);
-    if (frame.length !== length) throw new Error('truncated gRPC-web frame');
+    const data = body.subarray(at + 5, at + 5 + length);
+    if (data.length !== length) throw new Error('truncated gRPC-web frame');
     at += 5 + length;
-    if (flag & 0x80) {
-      const trailers = new TextDecoder().decode(frame);
-      const status = /^grpc-status:\s*(\d+)/im.exec(trailers)?.[1];
-      if (status !== undefined && status !== '0') throw new Error(`gRPC status ${status}: ${trailers.trim()}`);
-    } else if (flag & 0x01) {
-      throw new Error('compressed gRPC-web messages are not supported');
-    } else {
-      messages.push(frame);
-    }
+    // A failed call's status is the more useful error, wherever its trailers sit.
+    if (flag === 0x80) checkTrailers(data);
+    frames.push({ flag, data });
   }
-  return messages;
+  if (frames.some((f) => f.flag === 0x01)) throw new Error('compressed gRPC-web messages are not supported');
+  const [message, trailers] = frames;
+  if (frames.length !== 2 || message!.flag !== 0x00 || trailers!.flag !== 0x80) {
+    throw new Error(`not a unary gRPC-web answer (frame flags: ${frames.map((f) => f.flag).join(', ') || 'none'})`);
+  }
+  return message!.data;
 }
 
 /** Reads a response body, refusing one larger than `max` bytes. */
@@ -160,12 +169,12 @@ export async function fetchLightdInfo(serverUrl: string, timeoutMs = TIMEOUT_MS)
   if (status !== null && status !== '0') {
     throw new Error(`GetLightdInfo: gRPC status ${status} ${res.headers.get('grpc-message') ?? ''}`.trim());
   }
-  const [message] = grpcWebMessages(await readCapped(res, MAX_RESPONSE_BYTES));
-  if (!message) throw new Error('GetLightdInfo: empty response');
+  const message = grpcWebUnary(await readCapped(res, MAX_RESPONSE_BYTES));
+  if (message.length === 0) throw new Error('GetLightdInfo: empty response');
   return decodeLightdInfo(message);
 }
 
-/** A network upgrade an engine can build transactions for. */
+/** A network upgrade, as an engine knows it. */
 export interface KnownUpgrade {
   /** As lightwalletd names it in upgradeName, e.g. "NU6.1". */
   name: string;
@@ -175,34 +184,69 @@ export interface KnownUpgrade {
   activation: number;
 }
 
+/** What an engine knows about network upgrades. */
+export interface EngineRules {
+  /** The upgrades it builds transactions for, oldest first. */
+  known: readonly KnownUpgrade[];
+  /**
+   * Upgrades scheduled or active on the network that it does not implement,
+   * oldest first. From the first one's activation on the engine is outdated
+   * whatever a server reports, so a server whose node missed them cannot
+   * vouch for it.
+   */
+  missing: readonly KnownUpgrade[];
+}
+
+/**
+ * A spend is built for the block after the tip, but may be mined a few blocks
+ * later, so an upgrade the engine lacks counts from this many blocks before
+ * its activation.
+ */
+export const MINING_MARGIN_BLOCKS = 5;
+
 const sameName = (a: string, b: string) => a.replace(/\s+/g, '').toLowerCase() === b.replace(/\s+/g, '').toLowerCase();
 
 /**
- * Whether an engine that knows `known` (oldest first) builds transactions the
- * network accepts. At the server's tip the engine applies the last upgrade it
- * knows to be active by then; the network must report that very branch. A
- * newer branch is an upgrade the engine has not heard of, an older one a
- * server whose node missed an upgrade: the network rejects both.
+ * Whether an engine that knows `rules` builds transactions the network
+ * accepts. `floorHeight` is a height the chain has surely reached, known
+ * without the server (from the clock), so a server stuck in the past cannot
+ * hide an upgrade the engine lacks.
+ *
+ * - The engine is outdated (behind: 'engine') once a spend built now could be
+ *   mined under rules it lacks: one of `rules.missing`, the server's announced
+ *   next upgrade if the engine does not expect it there, or a branch it has
+ *   never heard of.
+ * - Otherwise the server must report the branch the engine applies at the
+ *   server's tip. An older one means the server's node missed an upgrade
+ *   (behind: 'server'); the network rejects what it would relay.
  */
-export function networkStatusFor(info: LightdInfo, known: readonly KnownUpgrade[], chain: string): NetworkStatus {
+export function networkStatusFor(info: LightdInfo, rules: EngineRules, chain: string, floorHeight = 0): NetworkStatus {
   if (info.chainName !== chain) throw new Error(`the server is on chain "${info.chainName}", not "${chain}"`);
   if (!/^[0-9a-f]{8}$/.test(info.consensusBranchId)) throw new Error('the server sent no consensus branch id');
   if (!Number.isSafeInteger(info.blockHeight) || info.blockHeight <= 0) throw new Error('the server sent no block height');
 
-  const expected = known.filter((u) => u.activation <= info.blockHeight).at(-1);
-  const status: NetworkStatus = {
-    branchId: info.consensusBranchId,
-    height: info.blockHeight,
-    supported: expected?.branchId === info.consensusBranchId,
-  };
+  const status: NetworkStatus = { branchId: info.consensusBranchId, height: info.blockHeight, supported: false };
   if (info.upgradeName !== '' && info.upgradeHeight > info.blockHeight) {
     // Supported only if the engine expects that upgrade at that height.
-    const engine = known.find((u) => sameName(u.name, info.upgradeName));
+    const engine = rules.known.find((u) => sameName(u.name, info.upgradeName));
     status.upcoming = {
       name: info.upgradeName,
       height: info.upgradeHeight,
       supported: engine?.activation === info.upgradeHeight,
     };
   }
-  return status;
+
+  // The last height a spend built now might be mined at.
+  const target = Math.max(info.blockHeight, floorHeight) + 1 + MINING_MARGIN_BLOCKS;
+  const lacking = rules.missing.filter((u) => u.activation <= target).at(-1);
+  if (lacking) return { ...status, behind: 'engine', lacks: lacking.name };
+  if (status.upcoming && !status.upcoming.supported && status.upcoming.height <= target) {
+    return { ...status, behind: 'engine', lacks: status.upcoming.name };
+  }
+
+  const expected = rules.known.filter((u) => u.activation <= info.blockHeight).at(-1);
+  if (expected?.branchId === info.consensusBranchId) return { ...status, supported: true };
+  const reported = rules.known.find((u) => u.branchId === info.consensusBranchId);
+  if (reported && expected && reported.activation < expected.activation) return { ...status, behind: 'server' };
+  return { ...status, behind: 'engine' };
 }

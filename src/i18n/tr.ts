@@ -96,6 +96,7 @@ export const tr = {
   'sync.starting': 'Ağa bağlanılıyor…',
   'sync.syncing': 'Eşitleniyor · {blocks} blok kaldı',
   'sync.upToDate': 'Güncel · blok {height}',
+  'sync.behindNetwork': '{height}. bloğa kadar tarandı · ağın gerisinde',
   'sync.error': 'Bağlantı sorunu, yeniden denenecek',
   'sync.firstSyncNote': 'Eşitleme sürüyor. Bitene kadar bakiye eksik görünebilir.',
 
@@ -103,7 +104,10 @@ export const tr = {
   'network.outdatedText':
     'Zcash ağı artık {upgrade} kurallarıyla çalışıyor; Celari’nin bu sürümü bunu henüz desteklemiyor. Güncelleme gelene kadar gönderme ve gizliye aktarma kapalı, çünkü bu sürümün hazırladığı her işlemi ağ reddeder. Anahtarların ve paran güvende.',
   'network.unreachable': 'Celari ağ sürümünü doğrulayamadı. Doğrulayana kadar gönderme ve gizliye aktarma kapalı kalır.',
-  'network.upcoming': 'Sıradaki ağ yükseltmesi: {upgrade}, {height}. blokta.',
+  'network.serverBehind':
+    'Celari’nin kullandığı sunucu Zcash ağının gerisinde. Ayarlar’dan başka bir sunucu seç. O zamana kadar gönderme ve gizliye aktarma kapalı kalır.',
+  'network.upcoming':
+    '{height}. blokta ağ {upgrade} kurallarına geçiyor; Celari’nin bu sürümü bunu desteklemiyor. O andan itibaren Celari güncellenene kadar gönderme ve gizliye aktarma kapanır.',
 
   'home.total': 'Toplam bakiye',
   'home.hideBalances': 'Bakiyeleri gizle',
@@ -118,6 +122,9 @@ export const tr = {
     '{amount} ZEC herkesin görebildiği şeffaf adreste duruyor. Gizliye aktararak gelecekteki işlemlerini koruyabilirsin.',
   'home.shieldButton': 'Gizliye aktar',
   'home.shieldBelowThreshold': 'Gizliye aktarmak için en az {amount} ZEC gerekir.',
+  'home.outdatedBalance': '{upgrade} üzerinden sana gönderilen ödemeler henüz bu bakiyede yok.',
+  'home.orchardMigrateNoticeViewOnly':
+    'Bu cüzdan, Zcash’in kullanımdan kaldırdığı Orchard havuzundaki bir bakiyeyi izliyor. Onu yeni Ironwood havuzuna yalnızca kurtarma kelimelerini tutan bir cüzdan taşıyabilir.',
   'home.orchardMigrateNotice':
     'Gizli bakiyen, Zcash’in kullanımdan kaldırdığı Orchard havuzunda. Yeni Ironwood havuzuna taşımak için güncel bir Celari gerekiyor. Daha erken taşıman gerekiyorsa kurtarma kelimelerini Ironwood destekleyen bir cüzdana (örneğin Zodl 3.8 ve üzeri) yükle.',
 
@@ -220,10 +227,11 @@ export const tr = {
   'history.copyTxid': 'İşlem kimliğini kopyala',
   'history.privacyLabel': 'Gizlilik',
   'history.privacy.shielded': 'Gizli',
+  'history.privacy.shielding': 'Gizliye aktarıldı · tutar herkese açık',
   'history.privacy.partial': 'Kısmen gizli',
   'history.privacy.transparent': 'Şeffaf · herkese açık',
   'history.privacyNote':
-    'Etiketler yalnızca bu cüzdanın kendi çıktılarına bakar (aldığı, gönderdiği ya da para üstü olarak geri aldığı tutarlar), işlemin geri kalanına bakmaz.',
+    'Etiketler yalnızca bu cüzdanın kendi çıktılarına bakar (aldığı, gönderdiği ya da para üstü olarak geri aldığı tutarlar), işlemin geri kalanına bakmaz. Şeffaf girdiler, bu cüzdanınkiler de dahil, her zaman herkese açıktır.',
 
   'settings.title': 'Ayarlar',
   'settings.language': 'Dil',

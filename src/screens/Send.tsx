@@ -17,7 +17,7 @@ import { spendingDisabled } from '../lib/network';
 import { AmountError, formatZec, formatZecInput, parseZec } from '../lib/zec';
 import { useController, useWallet } from '../state/wallet';
 import type { Tab } from './Main';
-import { useNetworkView } from './NetworkBanner';
+import { disabledMessage, useNetworkView } from './NetworkBanner';
 import { SpendConfirm } from './SpendSteps';
 
 type Step = 'form' | 'confirm' | 'done';
@@ -247,9 +247,7 @@ export function Send({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
     return (
       <Screen title={t('send.title')}>
         <Notice tone="warn">
-          <p data-testid="spend-disabled">
-            {t(network.kind === 'outdated' ? 'send.disabledOutdated' : 'network.unreachable')}
-          </p>
+          <p data-testid="spend-disabled">{disabledMessage(network, t('send.disabledOutdated'), t)}</p>
         </Notice>
       </Screen>
     );

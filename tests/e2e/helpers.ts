@@ -27,7 +27,8 @@ export async function createWallet(page: Page): Promise<string[]> {
   await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
   await page.getByLabel('Password (again)').fill(PASSWORD);
   await page.getByRole('button', { name: 'Create wallet' }).click();
-  await expect(page.getByTestId('sync-status')).toContainText('Up to date', { timeout: 20_000 });
+  // "Scanned to block N · behind the network" when the engine is outdated.
+  await expect(page.getByTestId('sync-status')).toHaveText(/^Up to date|behind the network$/, { timeout: 20_000 });
   return words;
 }
 

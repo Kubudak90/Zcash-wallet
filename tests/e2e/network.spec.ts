@@ -9,6 +9,18 @@ import { PASSWORD, UA, createWallet, fakeEngine, setKnobs } from './helpers';
 const NU7 = { name: 'NU7', height: 3_543_405, supported: false };
 
 const banner = (page: Page) => page.getByTestId('network-banner');
+const pill = (page: Page) => page.getByTestId('sync-status');
+const NU7_NOTICE =
+  'At block 3,543,405 the network switches to NU7, which this version of Celari does not support. From then on, sending and shielding stop until Celari is updated.';
+const SERVER_BEHIND =
+  'The server Celari uses is behind the Zcash network. Choose another server in Settings. Sending and shielding stay disabled until then.';
+
+/** Waits until the fake engine has answered another network check (one comes with every sync pass). */
+async function nextNetworkCheck(page: Page) {
+  const checks = () => page.evaluate(() => (window as { __fakeEngine?: { networkChecks?: number } }).__fakeEngine?.networkChecks ?? 0);
+  const before = await checks();
+  await expect.poll(checks, { timeout: 45_000 }).toBeGreaterThan(before);
+}
 const disabled = (page: Page) => page.getByTestId('spend-disabled');
 const sendButton = (page: Page) => page.locator('form').getByRole('button', { name: 'Send', exact: true });
 
@@ -28,7 +40,14 @@ test('an engine behind the network disables sending and shielding on every scree
   // Balance: the banner, no way into Shield, and the Orchard notice.
   await expect(banner(page)).toContainText('Celari is behind the Zcash network');
   await expect(banner(page)).toContainText('The Zcash network now runs on NU6.3 (Ironwood), which this version');
-  await expect(banner(page)).toContainText('Next network upgrade: NU7 at block 3,543,405.');
+  // Spending is off already, so the next upgrade adds nothing.
+  await expect(banner(page)).not.toContainText('NU7');
+  // Scanned to the tip, but not "up to date", and the balance says what it misses.
+  await expect(pill(page)).toHaveText('Scanned to block 3,100,000 · behind the network');
+  await expect(pill(page)).toHaveClass(/pill-warn/);
+  await expect(page.getByTestId('balance-outdated')).toHaveText(
+    'Payments sent to you through NU6.3 (Ironwood) are not in this balance yet.',
+  );
   await expect(page.getByText('You have a transparent balance')).toBeVisible();
   await expect(page.getByRole('button', { name: 'Shield funds' })).toHaveCount(0);
   await expect(page.getByText('Shielding is disabled until Celari is updated for the current Zcash network.')).toBeVisible();
@@ -64,7 +83,7 @@ test('an engine behind the network disables sending and shielding on every scree
   await page.getByRole('button', { name: 'Lock' }).click();
   await expect(page.getByRole('heading', { name: 'Your wallet is locked' })).toBeVisible();
   await expect(banner(page)).toContainText('Celari is behind the Zcash network');
-  await expect(banner(page)).toContainText('Next network upgrade: NU7 at block 3,543,405.');
+  await expect(banner(page)).not.toContainText('NU7');
   await page.getByLabel('Password').fill(PASSWORD);
   await page.getByRole('button', { name: 'Unlock' }).click();
   await expect(page.getByTestId('balance-total')).toContainText('1.75');
@@ -78,7 +97,8 @@ test('the network notices in Turkish', async ({ page }) => {
   await page.getByRole('button', { name: 'Türkçe' }).click();
   await expect(banner(page)).toContainText('Celari Zcash ağının gerisinde kaldı');
   await expect(banner(page)).toContainText('Zcash ağı artık NU6.3 (Ironwood) kurallarıyla çalışıyor');
-  await expect(banner(page)).toContainText('Sıradaki ağ yükseltmesi: NU7, 3.543.405. blokta.');
+  await expect(banner(page)).not.toContainText('NU7');
+  await expect(pill(page)).toHaveText('3.100.000. bloğa kadar tarandı · ağın gerisinde');
   await page.getByRole('button', { name: 'Gönder', exact: true }).click();
   await expect(disabled(page)).toHaveText('Celari güncel Zcash ağı için güncellenene kadar gönderme kapalı.');
   await page.getByRole('button', { name: 'Al', exact: true }).click();
@@ -86,6 +106,9 @@ test('the network notices in Turkish', async ({ page }) => {
   await page.getByRole('button', { name: 'Bakiye', exact: true }).click();
   await expect(page.getByText('Celari güncel Zcash ağı için güncellenene kadar gizliye aktarma kapalı.')).toBeVisible();
   await expect(page.getByText('Gizli bakiyen, Zcash’in kullanımdan kaldırdığı Orchard havuzunda.')).toBeVisible();
+  await expect(page.getByTestId('balance-outdated')).toHaveText(
+    'NU6.3 (Ironwood) üzerinden sana gönderilen ödemeler henüz bu bakiyede yok.',
+  );
 });
 
 test('a server that does not answer the network check keeps spending off until it does', async ({ page }) => {
@@ -118,12 +141,72 @@ test('an announced upgrade the engine will not support is shown while spending s
   await fakeEngine(page, { upcomingUpgrade: NU7 });
   await createWallet(page);
   await expect(page.locator('.main')).toHaveAttribute('data-network', 'supported');
-  await expect(banner(page)).toHaveText('Next network upgrade: NU7 at block 3,543,405.');
+  await expect(banner(page)).toHaveText(NU7_NOTICE);
+  await expect(pill(page)).toHaveClass(/pill-ok/);
+  await expect(page.getByTestId('balance-outdated')).toHaveCount(0);
   await expect(banner(page).locator('.notice')).toHaveClass(/notice-info/);
   await expect(page.getByRole('button', { name: 'Shield funds' })).toBeVisible();
   await review(page, '0.1');
   await sendButton(page).click();
   await expect(page.getByRole('heading', { name: '0.10 ZEC sent' })).toBeVisible({ timeout: 10_000 });
+});
+
+test('the network notices for an announced upgrade, in Turkish', async ({ page }) => {
+  await fakeEngine(page, { upcomingUpgrade: NU7 });
+  await createWallet(page);
+  await page.getByRole('button', { name: 'Settings' }).click();
+  await page.getByRole('button', { name: 'Türkçe' }).click();
+  await expect(banner(page)).toHaveText(
+    '3.543.405. blokta ağ NU7 kurallarına geçiyor; Celari’nin bu sürümü bunu desteklemiyor. O andan itibaren Celari güncellenene kadar gönderme ve gizliye aktarma kapanır.',
+  );
+});
+
+test('a server behind the network keeps spending off and points to another server', async ({ page }) => {
+  await fakeEngine(page, { networkServerBehind: true });
+  await createWallet(page);
+  await expect(page.locator('.main')).toHaveAttribute('data-network', 'serverBehind');
+  await expect(banner(page)).toHaveText(SERVER_BEHIND);
+  // The engine itself is not known to be behind.
+  await expect(pill(page)).toContainText('Up to date');
+  await expect(page.getByTestId('balance-outdated')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Shield funds' })).toHaveCount(0);
+  await expect(page.locator('.notice').getByText(SERVER_BEHIND)).toHaveCount(2);
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect(disabled(page)).toHaveText(SERVER_BEHIND);
+  await page.getByRole('button', { name: 'Settings' }).click();
+  await page.getByRole('button', { name: 'Türkçe' }).click();
+  await expect(banner(page)).toHaveText(
+    'Celari’nin kullandığı sunucu Zcash ağının gerisinde. Ayarlar’dan başka bir sunucu seç. O zamana kadar gönderme ve gizliye aktarma kapalı kalır.',
+  );
+});
+
+test('a server lagging under the tip already seen cannot clear a spend', async ({ page }) => {
+  await fakeEngine(page, {});
+  await createWallet(page);
+  await review(page, '0.1');
+  // Another backend of the pool, 50 blocks behind, answers the spend's own check.
+  await setKnobs(page, { networkLag: 50 });
+  await sendButton(page).click();
+  await expect(disabled(page)).toHaveText(SERVER_BEHIND);
+  await expect(page.getByText('Nothing was sent.')).toBeVisible();
+  await expect(page.locator('.main')).toHaveAttribute('data-network', 'serverBehind');
+});
+
+test('once the engine is behind the network, a later "supported" answer does not turn spending back on', async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  await fakeEngine(page, { networkOutdated: true });
+  await createWallet(page);
+  await expect(page.locator('.main')).toHaveAttribute('data-network', 'outdated');
+  // A lagging backend of the same pool answers the next check with rules the engine accepts.
+  await setKnobs(page, { networkOutdated: false });
+  await nextNetworkCheck(page);
+  await expect(page.locator('.main')).toHaveAttribute('data-network', 'outdated');
+  await expect(banner(page)).toContainText('Celari is behind the Zcash network');
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await expect(disabled(page)).toBeVisible();
+  await expect(page.getByLabel('Recipient address')).toHaveCount(0);
 });
 
 test('until the first network check answers, a spend waits', async ({ page }) => {

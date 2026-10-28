@@ -6,7 +6,7 @@ import { formatZec } from '../lib/zec';
 import { useWallet } from '../state/wallet';
 import type { Tab } from './Main';
 import { syncLabel, useSyncView } from './Main';
-import { useNetworkView } from './NetworkBanner';
+import { disabledMessage, useNetworkView } from './NetworkBanner';
 
 /** An eye, struck through while balances are hidden. */
 function EyeIcon({ struck }: { struck: boolean }) {
@@ -63,6 +63,12 @@ export function Home({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
         <div className="balance-total" data-testid="balance-total">
           {b ? <Amount zats={grandTotal(b)} /> : '—'} <small>ZEC</small>
         </div>
+        {/* Payments under rules the engine lacks (Ironwood today) are invisible to it. */}
+        {network.kind === 'outdated' && (
+          <p className="muted small" data-testid="balance-outdated">
+            {t('home.outdatedBalance', { upgrade: network.upgrade })}
+          </p>
+        )}
         {sync.kind === 'syncing' && (
           <div
             className={sync.pct === null ? 'progress indeterminate' : 'progress'}
@@ -111,7 +117,7 @@ export function Home({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
           <strong>{t('home.shieldTitle')}</strong>
           <p>{t('home.shieldText', { amount: balances.fmt(b.transparent) })}</p>
           {spendingDisabled(network) ? (
-            <p className="small">{t(network.kind === 'outdated' ? 'shield.disabledOutdated' : 'network.unreachable')}</p>
+            <p className="small">{disabledMessage(network, t('shield.disabledOutdated'), t)}</p>
           ) : shieldable ? (
             <button type="button" className="primary" onClick={() => onNavigate('shield')}>
               {t('home.shieldButton')}
@@ -126,7 +132,9 @@ export function Home({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
       )}
 
       {/* NU6.3 (Ironwood) lets nothing new into Orchard; this engine cannot move funds out of it yet. */}
-      {b && b.orchard > 0n && <Notice tone="info">{t('home.orchardMigrateNotice')}</Notice>}
+      {b && b.orchard > 0n && (
+        <Notice tone="info">{t(viewOnly ? 'home.orchardMigrateNoticeViewOnly' : 'home.orchardMigrateNotice')}</Notice>
+      )}
     </section>
   );
 }

@@ -95,6 +95,7 @@ export const en: Record<MessageKey, string> = {
   'sync.starting': 'Connecting…',
   'sync.syncing': 'Syncing · {blocks} blocks left',
   'sync.upToDate': 'Up to date · block {height}',
+  'sync.behindNetwork': 'Scanned to block {height} · behind the network',
   'sync.error': 'Connection problem, will retry',
   'sync.firstSyncNote': 'Sync in progress. Your balance may be incomplete until it finishes.',
 
@@ -102,7 +103,10 @@ export const en: Record<MessageKey, string> = {
   'network.outdatedText':
     'The Zcash network now runs on {upgrade}, which this version of Celari does not support yet. Sending and shielding are disabled until the update, because the network would reject anything this version builds. Your keys and funds are safe.',
   'network.unreachable': 'Celari could not check the network version. Sending and shielding stay disabled until it can.',
-  'network.upcoming': 'Next network upgrade: {upgrade} at block {height}.',
+  'network.serverBehind':
+    'The server Celari uses is behind the Zcash network. Choose another server in Settings. Sending and shielding stay disabled until then.',
+  'network.upcoming':
+    'At block {height} the network switches to {upgrade}, which this version of Celari does not support. From then on, sending and shielding stop until Celari is updated.',
 
   'home.total': 'Total balance',
   'home.hideBalances': 'Hide balances',
@@ -117,6 +121,9 @@ export const en: Record<MessageKey, string> = {
     '{amount} ZEC sits on a public transparent address. Shield it to protect your future transactions.',
   'home.shieldButton': 'Shield funds',
   'home.shieldBelowThreshold': 'At least {amount} ZEC is needed to shield.',
+  'home.outdatedBalance': 'Payments sent to you through {upgrade} are not in this balance yet.',
+  'home.orchardMigrateNoticeViewOnly':
+    'This wallet watches a balance in the Orchard pool, which Zcash is retiring. Only a wallet that holds the recovery phrase can move it to the new Ironwood pool.',
   'home.orchardMigrateNotice':
     'Your shielded balance is in the Orchard pool, which Zcash is retiring. Moving it to the new Ironwood pool needs an updated Celari. If you need to move it sooner, restore your recovery phrase in a wallet that supports Ironwood, such as Zodl 3.8 or later.',
 
@@ -219,10 +226,11 @@ export const en: Record<MessageKey, string> = {
   'history.copyTxid': 'Copy transaction ID',
   'history.privacyLabel': 'Privacy',
   'history.privacy.shielded': 'Shielded',
+  'history.privacy.shielding': 'Shielded · amount public',
   'history.privacy.partial': 'Partly shielded',
   'history.privacy.transparent': 'Transparent · public',
   'history.privacyNote':
-    'Labels look only at this wallet’s own outputs (what it received, sent or got back as change), not at the rest of each transaction.',
+    'Labels look only at this wallet’s own outputs (what it received, sent or got back as change), not at the rest of each transaction. Transparent inputs, this wallet’s own included, are always public.',
 
   'settings.title': 'Settings',
   'settings.language': 'Language',

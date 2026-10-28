@@ -38,22 +38,23 @@ test('each History row says how private it was, in words and not only in colour'
   const labels = rows.locator('.privacy');
   // Newest first.
   // The mark before each label is decoration (aria-hidden); the words carry the meaning.
+  // A shielding's outputs are shielded, but its transparent inputs show the amount.
   await expect(labels).toHaveText([
     /Privacy: Transparent · public$/,
     /Privacy: Partly shielded$/,
     /Privacy: Shielded$/,
-    /Privacy: Shielded$/,
+    /Privacy: Shielded · amount public$/,
     /Privacy: Shielded$/,
   ]);
   await expect(rows.nth(3)).toHaveClass(/tx-shielded/);
   await expect(rows.nth(4)).toHaveClass(/tx-received/);
 
-  // Each label can explain itself, and what it does not cover.
+  // The list explains the labels, and what they do not cover, on entry.
   const note = page.getByText('Labels look only at this wallet’s own outputs');
   await expect(note).toBeVisible();
-  for (let i = 0; i < 5; i++) {
-    await expect(labels.nth(i)).toHaveAccessibleDescription(/^Labels look only at this wallet’s own outputs/);
-  }
+  await expect(page.getByTestId('history')).toHaveAccessibleDescription(
+    /^Labels look only at this wallet’s own outputs.*Transparent inputs, this wallet’s own included, are always public\.$/,
+  );
   // A mark that differs by shape, not only by colour.
   const marks = await labels.locator('[aria-hidden="true"]').allTextContents();
   expect(new Set(marks).size).toBe(3);
@@ -65,7 +66,7 @@ test('each History row says how private it was, in words and not only in colour'
     /Gizlilik: Şeffaf · herkese açık$/,
     /Gizlilik: Kısmen gizli$/,
     /Gizlilik: Gizli$/,
-    /Gizlilik: Gizli$/,
+    /Gizlilik: Gizliye aktarıldı · tutar herkese açık$/,
     /Gizlilik: Gizli$/,
   ]);
   await expect(page.getByText('Etiketler yalnızca bu cüzdanın kendi çıktılarına bakar')).toBeVisible();

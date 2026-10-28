@@ -75,6 +75,14 @@ export interface NetworkStatus {
   height: number;
   /** Whether this engine builds transactions the network accepts under these rules. */
   supported: boolean;
+  /**
+   * Why not, when not supported: the network runs rules the engine lacks
+   * ('engine'), or the server runs older rules than the network or lags behind
+   * it ('server'), so another server may do.
+   */
+  behind?: 'engine' | 'server';
+  /** For 'engine': the upgrade the engine lacks, by name (e.g. 'NU6.3'), when known. */
+  lacks?: string;
   upcoming?: UpcomingUpgrade;
 }
 

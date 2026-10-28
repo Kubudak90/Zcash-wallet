@@ -17,7 +17,7 @@ import {
   type Summary,
   type ZcashEngine,
 } from '../engine';
-import { canSpend, type NetworkCheck } from '../lib/network';
+import { canSpend, nextCheck, type NetworkCheck } from '../lib/network';
 import { storage, type Settings, type WalletMeta } from '../lib/storage';
 import { catchUpFor, type SyncInfo } from '../lib/syncView';
 import { createVault, decryptDb, encryptDb, unlockVault, type Secret, type VaultRecord } from '../lib/vault';
@@ -461,7 +461,8 @@ export class WalletController {
   private async readNetwork(): Promise<void> {
     try {
       const status = await this.eng.networkStatus();
-      this.set({ network: { status, error: null } });
+      const seenTip = Math.max(this.state.network.status?.height ?? 0, this.state.sync.networkTip ?? 0);
+      this.set({ network: nextCheck(this.state.network, status, seenTip) });
     } catch (e) {
       console.warn('network check failed', e);
       this.set({ network: { ...this.state.network, error: e instanceof Error ? e.message : String(e) } });

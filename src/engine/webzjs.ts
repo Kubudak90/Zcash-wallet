@@ -22,6 +22,7 @@ import initKeysWasm, {
   pczt_sign,
 } from '@chainsafe/webzjs-keys';
 
+import { estimateHeightAt } from '../lib/birthday';
 import { seedBytes } from '../lib/seed';
 import { fetchLightdInfo, networkStatusFor } from './lightd';
 import type {
@@ -35,13 +36,15 @@ import type {
   TxType,
   ZcashEngine,
 } from './types';
-import { WEBZJS_UPGRADES } from './webzjs-upgrades';
+import { WEBZJS_RULES } from './webzjs-upgrades';
 
 const NETWORK = 'main';
 const ACCOUNT_HD_INDEX = 0;
 // Notes are spendable after one confirmation, as in upstream's web wallet.
 const MIN_CONFIRMATIONS_TRUSTED = 1;
 const MIN_CONFIRMATIONS_UNTRUSTED = 1;
+// A clock this far ahead still does not switch the engine off early.
+const CLOCK_SLACK_MS = 2 * 86_400_000;
 
 interface RawBalance {
   sapling_balance: number;
@@ -158,10 +161,15 @@ export class WebzjsEngine implements ZcashEngine {
     return Number(await this.chain.get_latest_block());
   }
 
-  /** WebZjs has no call for this, so it goes to the server directly (./lightd.ts). */
+  /**
+   * WebZjs has no call for this, so it goes to the server directly
+   * (./lightd.ts). The clock also bounds the height from below: a server stuck
+   * before an upgrade the engine lacks does not make the engine current.
+   */
   async networkStatus(): Promise<NetworkStatus> {
     if (!this.serverUrl) throw new Error('engine not initialized');
-    return networkStatusFor(await fetchLightdInfo(this.serverUrl), WEBZJS_UPGRADES, NETWORK);
+    const floor = estimateHeightAt(new Date(Date.now() - CLOCK_SLACK_MS));
+    return networkStatusFor(await fetchLightdInfo(this.serverUrl), WEBZJS_RULES, NETWORK, floor);
   }
 
   async detectBirthday(secret: { phrase: string } | { ufvk: string }): Promise<number | null> {

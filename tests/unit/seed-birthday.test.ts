@@ -5,6 +5,8 @@ import {
   SAPLING_ACTIVATION_HEIGHT,
   currentMonth,
   estimateBirthday,
+  estimateHeightAt,
+  heightAfter,
   heightBefore,
   newWalletBirthday,
   parseBirthdayMonth,
@@ -151,12 +153,33 @@ describe('birthday estimation', () => {
       }
     });
 
+    it('counts forward the way heightBefore counts back', () => {
+      expect(heightAfter(A - 1 - 1152, 86_400)).toBe(A - 1);
+      expect(heightAfter(A - 1, 86_400)).toBe(A - 1 + 3456);
+      // Half a day of 75 s blocks up to the block before activation, then half a day of 25 s ones.
+      expect(heightAfter(A - 1 - 576, 86_400)).toBe(A - 1 + 1728);
+      for (const [height, seconds] of [[A - 5000, 1e6], [A - 1, 3_600], [A + 9, 7_777]] as const) {
+        expect(heightBefore(heightAfter(height, seconds), seconds)).toBeGreaterThanOrEqual(height - 1);
+      }
+    });
+
     it('starts new wallets about 12 minutes of blocks under the tip', () => {
       expect(newWalletBirthday(A - 1)).toBe(A - 11);
       expect(newWalletBirthday(A + 100)).toBe(A + 70);
       // Six 25 s blocks (A to A + 5), then eight 75 s ones.
       expect(newWalletBirthday(A + 5)).toBe(A - 9);
     });
+  });
+
+  it('estimates the mainnet height from the clock', () => {
+    // A server reported 3,533,575 at 2026-10-28 12:50:36 UTC.
+    const anchor = Date.UTC(2026, 9, 28, 12, 50, 36);
+    expect(estimateHeightAt(new Date(anchor))).toBe(3_533_575);
+    expect(estimateHeightAt(new Date(anchor + 86_400_000))).toBe(3_533_575 + 1152);
+    expect(estimateHeightAt(new Date(anchor - 86_400_000))).toBe(3_533_575 - 1152);
+    // NU6.2 activated about five months before; NU7 activates about 8.5 days after.
+    expect(estimateHeightAt(new Date(Date.UTC(2026, 4, 1)))).toBeLessThan(3_364_600);
+    expect(estimateHeightAt(new Date(Date.UTC(2026, 10, 7)))).toBeGreaterThan(NU7_ACTIVATION_HEIGHT);
   });
 
   it('computes sync progress', () => {
