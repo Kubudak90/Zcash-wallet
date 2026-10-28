@@ -3,8 +3,8 @@ import { wordlist } from '@scure/bip39/wordlists/english';
 import { expect, test, type Page } from '@playwright/test';
 
 import { currentMonth } from '../../src/lib/birthday';
+import { PASSWORD, UA, createWallet } from './helpers';
 
-const PASSWORD = 'Gizli-Parola-2026';
 // The fake engine's chain tip (src/engine/fake.ts).
 const TIP = 3_100_000;
 const en = (n: number) => n.toLocaleString('en-US');
@@ -35,11 +35,27 @@ async function restoreFromThisMonth(page: Page, lang: 'en' | 'tr' = 'en'): Promi
   return Number(start!.replace(/\D/g, ''));
 }
 
+interface Knobs {
+  midPassProgress?: boolean;
+  passCounters?: boolean;
+  tipAhead?: number;
+  holdPass?: boolean;
+  chainGrowth?: number;
+}
+
 /** Switches on behaviour of the fake engine that WebZjs does not show today. */
-async function fakeEngine(page: Page, knobs: { midPassProgress?: boolean; passCounters?: boolean; tipAhead?: number }) {
+async function fakeEngine(page: Page, knobs: Knobs) {
   await page.addInitScript((k) => {
     (window as unknown as { __fakeEngine: typeof k }).__fakeEngine = k;
   }, knobs);
+}
+
+/** Changes the fake engine's knobs in the running page. */
+async function setKnobs(page: Page, patch: Knobs) {
+  await page.evaluate((p) => {
+    const w = window as unknown as { __fakeEngine?: Knobs };
+    w.__fakeEngine = { ...w.__fakeEngine, ...p };
+  }, patch);
 }
 
 test('a restore shows how many blocks are left, then up to date', async ({ page }) => {
@@ -172,6 +188,52 @@ test('"Up to date" shows the network tip, not the scanned height', async ({ page
   const status = page.getByTestId('sync-status');
   await expect(status).toHaveAttribute('data-sync', 'idle', { timeout: 20_000 });
   await expect(status).toHaveText(`Up to date · block ${en(TIP + 3)}`);
+});
+
+test('blocks mined during a long pass are caught up at once, and spends wait for them', async ({ page }) => {
+  await page.clock.install();
+  await createWallet(page);
+  const status = page.getByTestId('sync-status');
+  await expect(status).toHaveAttribute('data-sync', 'idle');
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await page.getByLabel('Recipient address').fill(UA);
+  await page.getByLabel('Amount (ZEC)').fill('0.1');
+  await page.getByRole('button', { name: 'Review' }).click();
+  await page.getByLabel('Enter your password to confirm').fill(PASSWORD);
+  const send = page.locator('form').getByRole('button', { name: 'Send', exact: true });
+  await expect(send).toBeEnabled();
+
+  // The next pass catches up 50 blocks and runs long; 60 more are mined meanwhile.
+  await setKnobs(page, { chainGrowth: 50, holdPass: true });
+  await page.clock.fastForward(30_000);
+  await expect(status).toHaveText('Syncing · 50 blocks left');
+  await expect(send).toBeDisabled();
+  await setKnobs(page, { chainGrowth: 110 });
+  // Record every state the pill and the Send button take, however briefly.
+  await page.evaluate(() => {
+    const seen: string[] = [];
+    (window as unknown as { seen: string[] }).seen = seen;
+    const record = () => {
+      const pill = document.querySelector('[data-testid="sync-status"]')!.textContent!;
+      const button = [...document.querySelectorAll('form button')].find((b) => b.textContent === 'Send');
+      const entry = `${pill}|${(button as HTMLButtonElement | undefined)?.disabled ? 'waits' : 'can send'}`;
+      if (seen.at(-1) !== entry) seen.push(entry);
+    };
+    record();
+    new MutationObserver(record).observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true });
+  });
+  await setKnobs(page, { holdPass: false });
+
+  // The follow-up pass starts at once, not after the 30 s interval.
+  await expect(status).toHaveText(`Up to date · block ${en(TIP + 110)}`, { timeout: 5_000 });
+  await expect(send).toBeEnabled();
+  // On the way the wallet was never up to date at the tip the pass started
+  // with, and the send waited until it really was.
+  const seen = await page.evaluate(() => (window as unknown as { seen: string[] }).seen);
+  expect(seen[0]).toBe('Syncing · 50 blocks left|waits');
+  expect(seen).toContain('Syncing · 60 blocks left|waits');
+  expect(seen.at(-1)).toBe(`Up to date · block ${en(TIP + 110)}|can send`);
+  for (const s of seen.slice(0, -1)) expect(s).toMatch(/^Syncing · \d+ blocks left\|waits$/);
 });
 
 test('Turkish labels group digits the Turkish way', async ({ page }) => {
