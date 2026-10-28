@@ -178,6 +178,65 @@ test('the top bar keeps Lock on screen at 320px, in both languages', async ({ pa
   }
 });
 
+for (const colorScheme of ['light', 'dark'] as const) {
+  test.describe(`${colorScheme} theme`, () => {
+    test.use({ colorScheme });
+
+    test('on a wide screen the app is a framed card with both bars inside it', async ({ page }) => {
+      await page.addInitScript(installContrast);
+      await createWallet(page);
+      const app = page.locator('.app');
+      const frame = () =>
+        app.evaluate((el) => {
+          const s = getComputedStyle(el);
+          return {
+            radius: parseFloat(s.borderTopLeftRadius),
+            border: parseFloat(s.borderTopWidth),
+            shadow: s.boxShadow,
+            card: s.backgroundColor,
+            page: getComputedStyle(document.body).backgroundColor,
+          };
+        });
+      // Phones keep the edge-to-edge column, the tab bar fixed across the screen.
+      expect(await frame()).toMatchObject({ radius: 0, border: 0, shadow: 'none' });
+      expect((await page.locator('.tabbar').boundingBox())!.width).toBe(412);
+
+      await page.setViewportSize({ width: 1280, height: 800 });
+      const style = await frame();
+      expect(style.radius).toBeGreaterThan(0);
+      expect(style.border).toBeGreaterThan(0);
+      expect(style.shadow).not.toBe('none');
+      expect(style.card, 'the card stands out from the page').not.toBe(style.page);
+      const inside = async (where: string) => {
+        // The frame can reach past the viewport; the bars stay inside both.
+        const card = (await app.boundingBox())!;
+        for (const bar of ['.topbar', '.tabbar']) {
+          const box = (await page.locator(bar).boundingBox())!;
+          expect(box.x, `${bar} left, ${where}`).toBeGreaterThanOrEqual(card.x);
+          expect(box.x + box.width, `${bar} right, ${where}`).toBeLessThanOrEqual(card.x + card.width);
+          expect(box.y, `${bar} top, ${where}`).toBeGreaterThanOrEqual(Math.max(0, card.y));
+          expect(box.y + box.height, `${bar} bottom, ${where}`).toBeLessThanOrEqual(Math.min(800, card.y + card.height));
+        }
+      };
+      await inside('Balance');
+      // A short screen leaves no scrolling beyond the frame's margins.
+      expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThanOrEqual(800);
+
+      // A long screen scrolls the page; both bars stay in view and in the frame.
+      await page.getByRole('button', { name: 'Settings' }).click();
+      for (const y of [400, 100_000]) {
+        await page.evaluate((top) => window.scrollTo(0, top), y);
+        await inside(`Settings scrolled to ${y}`);
+      }
+      expect(await page.evaluate(() => document.documentElement.scrollWidth), 'no sideways scroll').toBeLessThanOrEqual(1280);
+      const lock = await page
+        .locator('.topbar button.link')
+        .evaluate((el) => (window as unknown as ContrastWindow).contrastOf(el));
+      expect(lock, 'Lock on the framed top bar').toBeGreaterThanOrEqual(4.5);
+    });
+  });
+}
+
 test('focus follows steps and errors instead of falling to the page', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'Create a new wallet' }).click();
