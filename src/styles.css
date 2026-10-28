@@ -394,8 +394,14 @@ textarea.memo {
   gap: 8px;
 }
 
-.content > .network-banner {
+.content > .network-live {
   padding: 16px 16px 0;
+}
+
+/* Empty, the live region takes no room, not even a flex gap; it stays in the page to be announced into. */
+.network-live:empty {
+  position: absolute;
+  padding: 0;
 }
 
 ul.plain {

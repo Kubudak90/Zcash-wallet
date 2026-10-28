@@ -17,7 +17,7 @@ const IRONWOOD: NetworkStatus = {
   height: 3_533_505,
   supported: false,
   behind: 'engine',
-  lacks: 'NU6.3',
+  lacks: ['NU6.2', 'NU6.3'],
 };
 const OLD_SERVER: NetworkStatus = { branchId: 'c2d6d0b4', height: 3_300_000, supported: false, behind: 'server' };
 
@@ -25,7 +25,7 @@ describe('network view', () => {
   it('allows spending only after a successful check that says supported', () => {
     expect(networkView({ status: null, error: null })).toEqual({ kind: 'checking' });
     expect(networkView({ status: SUPPORTED, error: null })).toEqual({ kind: 'supported' });
-    expect(networkView({ status: IRONWOOD, error: null })).toEqual({ kind: 'outdated', upgrade: 'NU6.3 (Ironwood)' });
+    expect(networkView({ status: IRONWOOD, error: null })).toEqual({ kind: 'outdated', upgrade: 'NU6.2, NU6.3 (Ironwood)' });
     expect(canSpend({ status: null, error: null })).toBe(false);
     expect(canSpend({ status: SUPPORTED, error: null })).toBe(true);
     expect(canSpend({ status: IRONWOOD, error: null })).toBe(false);
@@ -70,14 +70,19 @@ describe('network view', () => {
   });
 
   it('names what the engine lacks, or else the branch the server reports', () => {
-    // A server that missed upgrades reports NU6.1, but the engine lacks NU6.3.
+    // A server that missed upgrades reports NU6.1, but the engine lacks NU6.2 and NU6.3.
     expect(networkView({ status: { ...IRONWOOD, branchId: '4dec4df0' }, error: null })).toEqual({
       kind: 'outdated',
-      upgrade: 'NU6.3 (Ironwood)',
+      upgrade: 'NU6.2, NU6.3 (Ironwood)',
     });
-    expect(networkView({ status: { ...IRONWOOD, lacks: 'NU7' }, error: null })).toMatchObject({ upgrade: 'NU7' });
-    // A name no upgrade has falls back to the reported branch.
-    expect(networkView({ status: { ...IRONWOOD, lacks: 'Update at evil.example!' }, error: null })).toMatchObject({
+    expect(networkView({ status: { ...IRONWOOD, lacks: ['NU6.2', 'NU6.3', 'NU7'] }, error: null })).toMatchObject({
+      upgrade: 'NU6.2, NU6.3 (Ironwood), NU7',
+    });
+    // A name no upgrade has is left out; with none left, the reported branch names it.
+    expect(networkView({ status: { ...IRONWOOD, lacks: ['NU7', 'Update at evil.example!'] }, error: null })).toMatchObject({
+      upgrade: 'NU7',
+    });
+    expect(networkView({ status: { ...IRONWOOD, lacks: ['Update at evil.example!'] }, error: null })).toMatchObject({
       upgrade: 'NU6.3 (Ironwood)',
     });
     // An engine that only says "not supported" is outdated too.

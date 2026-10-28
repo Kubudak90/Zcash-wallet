@@ -31,34 +31,40 @@ export function NetworkBanner() {
   const view = networkView(network);
   // Once spending is off, an upgrade that would switch it off says nothing new.
   const upcoming = view.kind === 'supported' ? unsupportedUpcoming(network) : null;
-  if (!spendingDisabled(view) && !upcoming) return null;
+  const shown = spendingDisabled(view) || upcoming !== null;
   return (
-    <div className="network-banner" data-testid="network-banner">
-      {view.kind === 'outdated' && (
-        <Notice tone="warn">
-          <strong>{t('network.outdatedTitle')}</strong>
-          <p>{t('network.outdatedText', { upgrade: view.upgrade })}</p>
-        </Notice>
-      )}
-      {view.kind === 'serverBehind' && (
-        <Notice tone="warn">
-          <p>{t('network.serverBehind')}</p>
-        </Notice>
-      )}
-      {view.kind === 'unverified' && (
-        <Notice tone="warn">
-          <p>{t('network.unreachable')}</p>
-        </Notice>
-      )}
-      {upcoming && (
-        <Notice tone="info">
-          <p>
-            {t('network.upcoming', {
-              upgrade: upcoming.name,
-              height: upcoming.height.toLocaleString(lang === 'tr' ? 'tr-TR' : 'en-US'),
-            })}
-          </p>
-        </Notice>
+    // Mounted even when empty: a live region announces what appears in it, not
+    // one that appears already filled (after the boot check, on the lock screen).
+    <div className="network-live" role="status">
+      {shown && (
+        <div className="network-banner" data-testid="network-banner">
+          {view.kind === 'outdated' && (
+            <Notice tone="warn" live={false}>
+              <strong>{t('network.outdatedTitle')}</strong>
+              <p>{t('network.outdatedText', { upgrade: view.upgrade })}</p>
+            </Notice>
+          )}
+          {view.kind === 'serverBehind' && (
+            <Notice tone="warn" live={false}>
+              <p>{t('network.serverBehind')}</p>
+            </Notice>
+          )}
+          {view.kind === 'unverified' && (
+            <Notice tone="warn" live={false}>
+              <p>{t('network.unreachable')}</p>
+            </Notice>
+          )}
+          {upcoming && (
+            <Notice tone="info" live={false}>
+              <p>
+                {t('network.upcoming', {
+                  upgrade: upcoming.name,
+                  height: upcoming.height.toLocaleString(lang === 'tr' ? 'tr-TR' : 'en-US'),
+                })}
+              </p>
+            </Notice>
+          )}
+        </div>
       )}
     </div>
   );

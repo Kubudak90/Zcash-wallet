@@ -153,7 +153,9 @@ export async function fetchLightdInfo(serverUrl: string, timeoutMs = TIMEOUT_MS)
     headers: { 'content-type': 'application/grpc-web+proto', 'x-grpc-web': '1' },
     // One frame holding the empty request message (Empty).
     body: new Uint8Array(5),
-    // Nothing of the page goes with it: no cookies, no referrer, no cached answer.
+    // Nothing of the page goes with it: no cookies, no referrer, no browser-cached
+    // answer. A CDN in front of the server may still cache it (the default one
+    // answers x-cache: hit), which is why a height is never taken on trust alone.
     credentials: 'omit',
     referrerPolicy: 'no-referrer',
     cache: 'no-store',
@@ -204,21 +206,45 @@ export interface EngineRules {
  */
 export const MINING_MARGIN_BLOCKS = 5;
 
-const sameName = (a: string, b: string) => a.replace(/\s+/g, '').toLowerCase() === b.replace(/\s+/g, '').toLowerCase();
+/** A server this many blocks under a height already known lags behind the network. */
+export const LAG_BLOCKS = 20;
+
+/**
+ * What an engine can say about the network without asking a server, given
+ * `floorHeight`, a height the chain has surely reached: outdated once an
+ * upgrade it lacks is active (or could take the next spend) there.
+ */
+export function localStatus(rules: EngineRules, floorHeight: number): NetworkStatus | null {
+  const lacking = rules.missing.filter((u) => u.activation <= floorHeight + 1 + MINING_MARGIN_BLOCKS);
+  const last = lacking.at(-1);
+  if (!last) return null;
+  return {
+    branchId: last.branchId,
+    height: floorHeight,
+    supported: false,
+    behind: 'engine',
+    lacks: lacking.map((u) => u.name),
+  };
+}
 
 /**
  * Whether an engine that knows `rules` builds transactions the network
  * accepts. `floorHeight` is a height the chain has surely reached, known
- * without the server (from the clock), so a server stuck in the past cannot
- * hide an upgrade the engine lacks.
+ * without the server, so a server stuck in the past can neither hide an
+ * upgrade the engine lacks nor pass for current.
  *
  * - The engine is outdated (behind: 'engine') once a spend built now could be
- *   mined under rules it lacks: one of `rules.missing`, the server's announced
- *   next upgrade if the engine does not expect it there, or a branch it has
- *   never heard of.
+ *   mined under rules it lacks: one of `rules.missing`, an upgrade the server
+ *   announces that the engine does not expect at that height, or a branch the
+ *   engine has never heard of. Likewise when the engine expects an upgrade
+ *   the server announces at another height: the network moved it.
  * - Otherwise the server must report the branch the engine applies at the
- *   server's tip. An older one means the server's node missed an upgrade
- *   (behind: 'server'); the network rejects what it would relay.
+ *   server's tip, from a tip no lower than the floor. An older branch, a tip
+ *   under the floor or no word of the upgrade the engine expects next means
+ *   the server is behind (behind: 'server'); another server may do.
+ *
+ * Upgrades are matched by activation height, not by name: servers name them
+ * differently ('NU6.3', 'Ironwood').
  */
 export function networkStatusFor(info: LightdInfo, rules: EngineRules, chain: string, floorHeight = 0): NetworkStatus {
   if (info.chainName !== chain) throw new Error(`the server is on chain "${info.chainName}", not "${chain}"`);
@@ -226,27 +252,34 @@ export function networkStatusFor(info: LightdInfo, rules: EngineRules, chain: st
   if (!Number.isSafeInteger(info.blockHeight) || info.blockHeight <= 0) throw new Error('the server sent no block height');
 
   const status: NetworkStatus = { branchId: info.consensusBranchId, height: info.blockHeight, supported: false };
-  if (info.upgradeName !== '' && info.upgradeHeight > info.blockHeight) {
-    // Supported only if the engine expects that upgrade at that height.
-    const engine = rules.known.find((u) => sameName(u.name, info.upgradeName));
+  const announced = info.upgradeName !== '' && info.upgradeHeight > info.blockHeight;
+  if (announced) {
     status.upcoming = {
       name: info.upgradeName,
       height: info.upgradeHeight,
-      supported: engine?.activation === info.upgradeHeight,
+      supported: rules.known.some((u) => u.activation === info.upgradeHeight),
     };
   }
 
+  const engine = { ...status, behind: 'engine' as const };
+  const server = { ...status, behind: 'server' as const };
   // The last height a spend built now might be mined at.
   const target = Math.max(info.blockHeight, floorHeight) + 1 + MINING_MARGIN_BLOCKS;
-  const lacking = rules.missing.filter((u) => u.activation <= target).at(-1);
-  if (lacking) return { ...status, behind: 'engine', lacks: lacking.name };
+  const lacking = rules.missing.filter((u) => u.activation <= target);
+  if (lacking.length > 0) return { ...engine, lacks: lacking.map((u) => u.name) };
   if (status.upcoming && !status.upcoming.supported && status.upcoming.height <= target) {
-    return { ...status, behind: 'engine', lacks: status.upcoming.name };
+    return { ...engine, lacks: [status.upcoming.name] };
   }
+  // The engine switches rules before the target: the network must be switching there too.
+  const next = rules.known.find((u) => u.activation > info.blockHeight && u.activation <= target);
+  if (next && !announced) return server;
+  if (next && info.upgradeHeight !== next.activation) return engine;
 
   const expected = rules.known.filter((u) => u.activation <= info.blockHeight).at(-1);
-  if (expected?.branchId === info.consensusBranchId) return { ...status, supported: true };
+  if (expected?.branchId === info.consensusBranchId) {
+    return info.blockHeight + LAG_BLOCKS < floorHeight ? server : { ...status, supported: true };
+  }
   const reported = rules.known.find((u) => u.branchId === info.consensusBranchId);
-  if (reported && expected && reported.activation < expected.activation) return { ...status, behind: 'server' };
-  return { ...status, behind: 'engine' };
+  if (reported && expected && reported.activation < expected.activation) return server;
+  return engine;
 }

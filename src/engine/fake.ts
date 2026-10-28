@@ -58,6 +58,10 @@ export interface FakeKnobs {
   networkLag?: number;
   /** networkStatus() fails, like a server that does not answer GetLightdInfo. */
   networkUnreachable?: boolean;
+  /** localNetworkStatus() says the engine lacks NU6.3 without asking, as WebZjs does today. */
+  localOutdated?: boolean;
+  /** The engine sees the NU6.3 Ironwood pool, as a ported engine will; WebZjs today does not. */
+  ironwood?: boolean;
   /** Set by the fake: how many times networkStatus() has answered, so tests can wait for the next check. */
   networkChecks?: number;
   /** Keep networkStatus() from answering until this is cleared. */
@@ -122,6 +126,15 @@ export class FakeEngine implements ZcashEngine {
     return chainTip() + (knobs().tipAhead ?? 0);
   }
 
+  get ironwood(): boolean {
+    return knobs().ironwood ?? false;
+  }
+
+  localNetworkStatus(): NetworkStatus | null {
+    if (!knobs().localOutdated) return null;
+    return { branchId: '37a5165b', height: chainTip(), supported: false, behind: 'engine', lacks: ['NU6.2', 'NU6.3'] };
+  }
+
   async networkStatus(): Promise<NetworkStatus> {
     await sleep(20);
     while (knobs().holdNetworkCheck) await sleep(50);
@@ -131,7 +144,7 @@ export class FakeEngine implements ZcashEngine {
     // NU6 rules at the fake tip by default; NU6.3 (Ironwood) when outdated.
     const height = chainTip() + (k.tipAhead ?? 0) - (k.networkLag ?? 0);
     const status: NetworkStatus = k.networkOutdated
-      ? { branchId: '37a5165b', height, supported: false, behind: 'engine', lacks: 'NU6.3' }
+      ? { branchId: '37a5165b', height, supported: false, behind: 'engine', lacks: ['NU6.2', 'NU6.3'] }
       : k.networkServerBehind
         ? { branchId: 'c2d6d0b4', height, supported: false, behind: 'server' }
         : { branchId: 'c8e71055', height, supported: true };
@@ -290,7 +303,7 @@ export class FakeEngine implements ZcashEngine {
     { store, check, failAt }: { store: () => void; check?: () => void; failAt?: SendStage },
   ) {
     for (const stage of ['building', 'signing', 'proving', 'broadcasting'] as const) {
-      if (stage === 'broadcasting') await auth.beforeBroadcast?.();
+      if (stage === 'broadcasting') await auth.beforeBroadcast();
       auth.onStage?.(stage);
       while (knobs().holdStage === stage) await sleep(50);
       if (stage === 'building') check?.();

@@ -36,6 +36,8 @@ export interface WalletState {
   sync: SyncInfo;
   /** Whether the network still accepts what the engine builds; read at boot and on every pass. */
   network: NetworkCheck;
+  /** Whether the engine sees the NU6.3 Ironwood pool (ZcashEngine.ironwood); false until it has loaded. */
+  ironwood: boolean;
   /** True while a send or shield runs; the UI keeps the user on its progress meanwhile. */
   spending: boolean;
   /** The lock screen shows while a catch-up pass finishes and is saved (see lock()). */
@@ -98,6 +100,7 @@ export class WalletController {
       history: [],
       sync: { status: 'starting', error: null, catchUp: null, networkTip: null, progress: null },
       network: { status: null, error: null },
+      ironwood: false,
       spending: false,
       softLocked: false,
     };
@@ -131,6 +134,9 @@ export class WalletController {
       const engine = await loadEngine();
       await engine.init(this.state.settings.serverUrl);
       this.engine = engine;
+      // What the engine knows without a server stands until a server says more.
+      const local = engine.localNetworkStatus?.() ?? null;
+      this.set({ ironwood: engine.ironwood, ...(local && { network: nextCheck(this.state.network, local, 0) }) });
       // Not awaited: the lock screen shows its result when it comes.
       void this.checkNetwork();
       const meta = (await storage.getMeta()) ?? null;

@@ -53,8 +53,9 @@ export interface SpendAuthority {
   /**
    * Awaited once the transaction is proved, before the 'broadcasting' stage
    * starts. Throwing stops the spend there: nothing has left the wallet.
+   * Required, so no engine can leave out the last network check.
    */
-  beforeBroadcast?: () => Promise<void>;
+  beforeBroadcast: () => Promise<void>;
 }
 
 /** A network upgrade the lightwalletd server announces but the chain has not reached. */
@@ -81,8 +82,8 @@ export interface NetworkStatus {
    * it ('server'), so another server may do.
    */
   behind?: 'engine' | 'server';
-  /** For 'engine': the upgrade the engine lacks, by name (e.g. 'NU6.3'), when known. */
-  lacks?: string;
+  /** For 'engine': the upgrades the engine lacks, by name, oldest first (e.g. ['NU6.2', 'NU6.3']), when known. */
+  lacks?: string[];
   upcoming?: UpcomingUpgrade;
 }
 
@@ -113,6 +114,13 @@ export interface ZcashEngine {
    * Throws if the server does not answer.
    */
   networkStatus(): Promise<NetworkStatus>;
+  /**
+   * What the engine knows about the network without a server, e.g. that an
+   * upgrade it lacks is surely active by now. Optional; null if it cannot tell.
+   */
+  localNetworkStatus?(): NetworkStatus | null;
+  /** Whether the engine sees and spends the NU6.3 Ironwood pool. */
+  readonly ironwood: boolean;
   /** Earliest height a key ever received transparent funds, if it can be found. */
   detectBirthday(secret: { phrase: string } | { ufvk: string }): Promise<number | null>;
   isValidViewingKey(ufvk: string): Promise<boolean>;

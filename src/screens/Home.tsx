@@ -32,7 +32,7 @@ function EyeIcon({ struck }: { struck: boolean }) {
 
 export function Home({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
   const { t, lang } = useI18n();
-  const { summary, meta } = useWallet();
+  const { summary, meta, ironwood } = useWallet();
   const sync = useSyncView();
   const network = useNetworkView();
   const balances = useHideBalances();
@@ -63,10 +63,10 @@ export function Home({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
         <div className="balance-total" data-testid="balance-total">
           {b ? <Amount zats={grandTotal(b)} /> : '—'} <small>ZEC</small>
         </div>
-        {/* Payments under rules the engine lacks (Ironwood today) are invisible to it. */}
-        {network.kind === 'outdated' && (
+        {/* Shielded payments since NU6.3 land in Ironwood, which an engine without it does not see. */}
+        {!ironwood && (
           <p className="muted small" data-testid="balance-outdated">
-            {t('home.outdatedBalance', { upgrade: network.upgrade })}
+            {t('home.outdatedBalance')}
           </p>
         )}
         {sync.kind === 'syncing' && (
@@ -132,7 +132,7 @@ export function Home({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
       )}
 
       {/* NU6.3 (Ironwood) lets nothing new into Orchard; this engine cannot move funds out of it yet. */}
-      {b && b.orchard > 0n && (
+      {b && b.orchard > 0n && !ironwood && (
         <Notice tone="info">{t(viewOnly ? 'home.orchardMigrateNoticeViewOnly' : 'home.orchardMigrateNotice')}</Notice>
       )}
     </section>
