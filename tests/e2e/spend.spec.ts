@@ -204,8 +204,23 @@ test('Send explains that transparent funds must be shielded first', async ({ pag
   await page.getByRole('button', { name: 'Review' }).click();
   await expect(page.getByText('Shield your transparent funds first, then send.')).toBeVisible();
 
+  // Opened from Send, Shield keeps Send marked and returns there.
+  const sendTab = page.getByRole('button', { name: 'Send', exact: true });
   await page.getByRole('button', { name: 'Shield funds' }).click();
   await expect(page.getByRole('heading', { name: 'Shield funds' })).toBeVisible();
+  await expect(sendTab).toHaveAttribute('aria-current', 'page');
+  await page.getByRole('button', { name: /Back/ }).click();
+  await expect(page.getByRole('heading', { name: 'Send ZEC' })).toBeFocused();
+  await expect(sendTab).toHaveAttribute('aria-current', 'page');
+
+  await page.getByRole('button', { name: 'Shield funds' }).click();
+  await page.getByLabel('Enter your password to confirm').fill(PASSWORD);
+  await page.getByRole('button', { name: 'Shield', exact: true }).click();
+  await expect(page.getByRole('heading', { name: '0.50 ZEC is being shielded' })).toBeVisible({ timeout: 10_000 });
+  await expect(sendTab).toHaveAttribute('aria-current', 'page');
+  await page.getByRole('button', { name: 'Close' }).click();
+  await expect(page.getByRole('heading', { name: 'Send ZEC' })).toBeVisible();
+  await expect(sendTab).toHaveAttribute('aria-current', 'page');
 });
 
 test('Turkish amount entry uses a decimal comma', async ({ page }) => {

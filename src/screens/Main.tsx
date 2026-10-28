@@ -70,10 +70,16 @@ export function Main() {
   // Leaving the screen mid-spend would hide its outcome, so navigation waits for it.
   const { spending } = useWallet();
   const [tab, setTab] = useState<Tab>('home');
+  // Shield opens from Balance or from Send: that tab stays marked, and Back and Close return to it.
+  const [shieldFrom, setShieldFrom] = useState<'home' | 'send'>('home');
   const topbar = useRef<HTMLElement>(null);
   const tabbar = useRef<HTMLElement>(null);
-  // Shield is reached from Balance, so Balance stays marked there.
-  const navTab = tab === 'shield' ? 'home' : tab;
+  const navTab = tab === 'shield' ? shieldFrom : tab;
+
+  const navigate = (next: Tab) => {
+    if (next === 'shield') setShieldFrom(tab === 'send' ? 'send' : 'home');
+    setTab(next);
+  };
 
   // Tab switches keep focus on the tab button, so the title is what tells
   // assistive tech that the screen changed.
@@ -115,12 +121,12 @@ export function Main() {
         </button>
       </header>
       <main className="content">
-        {tab === 'home' && <Home onNavigate={setTab} />}
+        {tab === 'home' && <Home onNavigate={navigate} />}
         {tab === 'receive' && <Receive />}
-        {tab === 'send' && <Send onNavigate={setTab} />}
+        {tab === 'send' && <Send onNavigate={navigate} />}
         {tab === 'history' && <History />}
         {tab === 'settings' && <Settings />}
-        {tab === 'shield' && <Shield onNavigate={setTab} />}
+        {tab === 'shield' && <Shield onNavigate={navigate} onClose={() => setTab(shieldFrom)} />}
       </main>
       <nav className="tabbar" aria-label="Celari" ref={tabbar}>
         {NAV.map((n) => (
