@@ -1,12 +1,11 @@
-import { CopyButton, Screen } from '../components/ui';
+import { Amount, CopyButton, Screen, useHideBalances } from '../components/ui';
 import { useI18n } from '../i18n';
-import { formatZec } from '../lib/zec';
 import { useWallet } from '../state/wallet';
 
 export function History() {
   const { t, lang } = useI18n();
   const { history } = useWallet();
-  const fmt = (z: bigint) => formatZec(z, { locale: lang });
+  const balances = useHideBalances();
   const dateFmt = new Intl.DateTimeFormat(lang === 'tr' ? 'tr-TR' : 'en-GB', {
     dateStyle: 'medium',
     timeStyle: 'short',
@@ -23,14 +22,13 @@ export function History() {
               <div className="tx-main">
                 <span className="tx-type">{t(`history.type.${tx.type}`)}</span>
                 <span className={tx.valueZats < 0n ? 'tx-amount out' : 'tx-amount in'}>
-                  {tx.valueZats > 0n ? '+' : ''}
-                  {fmt(tx.valueZats)} ZEC
+                  <Amount zats={tx.valueZats} signed /> ZEC
                 </span>
               </div>
               <div className="tx-meta muted small">
                 <span className={`status status-${tx.status}`}>{t(`history.status.${tx.status}`)}</span>
                 {tx.timestamp && <span>{dateFmt.format(new Date(tx.timestamp * 1000))}</span>}
-                {tx.feeZats !== null && tx.feeZats > 0n && <span>{t('history.fee', { amount: fmt(tx.feeZats) })}</span>}
+                {tx.feeZats !== null && tx.feeZats > 0n && <span>{t('history.fee', { amount: balances.fmt(tx.feeZats) })}</span>}
               </div>
               {tx.memo && <p className="tx-memo">“{tx.memo}”</p>}
               <CopyButton value={tx.txid} label={t('history.copyTxid')} />
