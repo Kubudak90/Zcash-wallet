@@ -144,11 +144,12 @@ export class WalletController {
       accountId = await this.eng.open(blob ? await decryptDb(key, blob) : null);
     } catch (e) {
       // e.g. a database written by an older WebZjs version that no longer decodes.
-      console.warn('wallet database unreadable, rebuilding from the secret', e);
+      console.warn('wallet database unreadable', e);
       accountId = await this.eng.open(null);
     }
     if (accountId === null) {
       // The database was missing, empty or unreadable: rebuild it from the secret.
+      console.warn('rebuilding the wallet database from the secret');
       accountId = await this.addAccount(secret, meta.birthday);
       await storage.setDb(await encryptDb(key, await this.eng.exportDb()));
     }

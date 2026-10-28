@@ -5,13 +5,32 @@ const PASSWORD = 'Gizli-Parola-2026';
 test('real engine: create a wallet, sync from the tip, lock and unlock', async ({ page }) => {
   // A wasm panic can leave a call hanging instead of rejecting, and a fresh
   // wallet already reads as 100% synced, so the UI alone would not show it.
+  // Panics, uncaught errors and a database rebuilt instead of reopened are
+  // collected, and the sync waits below stop as soon as one shows up.
   const failures: string[] = [];
+  const fail = (text: string) => {
+    console.log(`[browser] ${text}`);
+    failures.push(text);
+  };
   page.on('console', (msg) => {
-    if (msg.type() === 'error') console.log(`[browser] ${msg.text()}`);
-    if (msg.text().includes('panicked')) failures.push(msg.text());
+    if (/panicked|rebuilding the wallet database/.test(msg.text())) fail(msg.text());
+    else if (msg.type() === 'error') console.log(`[browser] ${msg.text()}`);
   });
-  page.on('pageerror', (err) => failures.push(String(err)));
+  page.on('pageerror', (err) => fail(String(err)));
+
   const status = page.getByTestId('sync-status');
+  // `idle` is only set once a sync pass has resolved and the database is saved.
+  async function synced(timeoutMs: number) {
+    const deadline = Date.now() + timeoutMs;
+    let state: string | null = null;
+    while (failures.length === 0 && Date.now() < deadline) {
+      state = await status.getAttribute('data-sync', { timeout: 1_000 }).catch(() => null);
+      if (state === 'idle') return;
+      await page.waitForTimeout(1_000);
+    }
+    expect(failures).toEqual([]);
+    expect(state, `sync state after ${timeoutMs / 1000}s`).toBe('idle');
+  }
 
   await page.goto('/');
   // Reaching the welcome screen means wasm, the thread pool and the
@@ -29,8 +48,7 @@ test('real engine: create a wallet, sync from the tip, lock and unlock', async (
   await page.getByLabel('Password (again)').fill(PASSWORD);
   await page.getByRole('button', { name: 'Create wallet' }).click();
 
-  // `idle` is only set once a sync pass has resolved and the database is saved.
-  await expect(status).toHaveAttribute('data-sync', 'idle', { timeout: 8 * 60_000 });
+  await synced(8 * 60_000);
   await expect(status).toContainText('Up to date');
   await expect(page.getByTestId('balance-total')).toContainText('0.00');
 
@@ -49,6 +67,6 @@ test('real engine: create a wallet, sync from the tip, lock and unlock', async (
   await page.getByRole('button', { name: 'Lock' }).click();
   await page.getByLabel('Password').fill(PASSWORD);
   await page.getByRole('button', { name: 'Unlock' }).click();
-  await expect(status).toHaveAttribute('data-sync', 'idle', { timeout: 5 * 60_000 });
+  await synced(5 * 60_000);
   expect(failures).toEqual([]);
 });
