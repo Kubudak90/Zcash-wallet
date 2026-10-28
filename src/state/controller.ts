@@ -5,7 +5,9 @@
 // needed (adding the account, signing, revealing it) and is never kept in
 // state. While unlocked, only the derived AES key stays in memory so the
 // wallet database can be re-encrypted after each sync. Locking reloads the
-// page, which drops the key and the wasm memory together.
+// page, which drops the key and the wasm memory together; during a catch-up
+// pass the lock screen shows first and the reload waits until the pass is
+// saved (see lock()).
 
 import {
   loadEngine,
@@ -17,7 +19,7 @@ import {
 } from '../engine';
 import { storage, type Settings, type WalletMeta } from '../lib/storage';
 import { catchUpFor, type SyncInfo } from '../lib/syncView';
-import { createVault, decryptDb, encryptDb, unlockVault, type Secret } from '../lib/vault';
+import { createVault, decryptDb, encryptDb, unlockVault, type Secret, type VaultRecord } from '../lib/vault';
 
 export type Phase = 'booting' | 'bootError' | 'welcome' | 'locked' | 'ready';
 
@@ -33,6 +35,8 @@ export interface WalletState {
   sync: SyncInfo;
   /** True while a send or shield runs; the UI keeps the user on its progress meanwhile. */
   spending: boolean;
+  /** The lock screen shows while a catch-up pass finishes and is saved (see lock()). */
+  softLocked: boolean;
 }
 
 const SYNC_INTERVAL_MS = 30_000;
@@ -62,6 +66,10 @@ export class WalletController {
   private listeners = new Set<() => void>();
   private syncTimer: ReturnType<typeof setTimeout> | null = null;
   private lockAfterSpend = false;
+  /** Soft-locked: the page reloads once the running pass is saved (see lock()). */
+  private lockAfterPass = false;
+  /** A password is being checked during a soft lock; the reload waits for it. */
+  private unlocking = false;
   private syncing = false;
   private summaryInFlight = false;
   private state: WalletState;
@@ -78,6 +86,7 @@ export class WalletController {
       history: [],
       sync: { status: 'starting', error: null, catchUp: null, networkTip: null, progress: null },
       spending: false,
+      softLocked: false,
     };
   }
 
@@ -149,6 +158,7 @@ export class WalletController {
     const record = await storage.getVault();
     const meta = await storage.getMeta();
     if (!record || !meta) throw new Error('no wallet');
+    if (this.lockAfterPass) return this.unlockSoft(record, password);
 
     // Throws WrongPasswordError before anything else happens.
     const { secret, key } = await unlockVault(record, password);
@@ -174,6 +184,25 @@ export class WalletController {
     await this.enterReady();
   }
 
+  /** Ends a soft lock (see lock()): checks the password and returns to the pass that kept running. */
+  private async unlockSoft(record: VaultRecord, password: string): Promise<void> {
+    this.unlocking = true;
+    try {
+      // Throws WrongPasswordError; the decrypted secret is dropped at once.
+      await unlockVault(record, password);
+    } catch (e) {
+      // The pass ended during the attempt, and its reload waited for it.
+      if (!this.syncing) this.reloadLocked();
+      throw e;
+    } finally {
+      this.unlocking = false;
+    }
+    this.lockAfterPass = false;
+    this.set({ phase: 'ready', softLocked: false });
+    // A pass that ended during the attempt did not schedule the next one.
+    if (!this.syncing) this.kickSync();
+  }
+
   private addAccount(secret: Secret, birthday: number): Promise<number> {
     return secret.kind === 'seed'
       ? this.eng.addSeedAccount(secret.phrase, birthday)
@@ -191,6 +220,8 @@ export class WalletController {
 
   /** Decrypts the secret again; used to confirm sensitive actions. */
   async revealSecret(password: string): Promise<Secret> {
+    // Nothing secret comes out of a locked wallet, soft-locked included, so no spend can start either.
+    if (this.state.phase !== 'ready') throw new Error('the wallet is locked');
     const record = await storage.getVault();
     if (!record) throw new Error('no wallet');
     return (await unlockVault(record, password)).secret;
@@ -206,13 +237,31 @@ export class WalletController {
       this.lockAfterSpend = true;
       return;
     }
+    this.lockAfterSpend = false;
+    // A catch-up pass keeps its progress in memory until it ends and is
+    // saved, so reloading now would throw away a restore that may have run
+    // for hours. Soft lock instead: the lock screen shows at once (nothing
+    // else is rendered, revealSecret refuses, so no spend can start), the
+    // pass goes on, and the page reloads as soon as the pass is saved.
+    // Unlocking meanwhile cancels the reload.
+    if (this.syncing && this.state.sync.catchUp) {
+      this.lockAfterPass = true;
+      this.set({ phase: 'locked', softLocked: true });
+      return;
+    }
+    this.reloadLocked();
+  }
+
+  /** Drops the key and, with the page, the wasm memory. */
+  private reloadLocked(): void {
     this.key = null;
     window.location.reload();
   }
 
   async wipe(): Promise<void> {
-    await storage.wipeWallet();
+    // First, so a pass that ends meanwhile cannot write the database back (see persist).
     this.key = null;
+    await storage.wipeWallet();
     window.location.reload();
   }
 
@@ -234,7 +283,7 @@ export class WalletController {
   private async syncLoop(): Promise<void> {
     if (this.state.phase !== 'ready' || this.syncing) return;
     this.syncing = true;
-    this.setSync({ status: 'syncing', progress: null, ...(await this.measureGap()) });
+    this.setSync({ status: 'syncing', progress: null, ...this.gapTo(await this.readTip()) });
 
     // Engines that can report progress mid-pass move the bar; WebZjs answers
     // only when the pass ends, so at most one summary call waits at a time.
@@ -242,12 +291,29 @@ export class WalletController {
     // WebZjs's pass counters answer at once, so its bar moves too. Only a
     // catch-up pass shows a bar, so steady-state passes are not watched.
     const pass = this.eng.syncProgress && this.state.sync.catchUp ? this.watchPass() : null;
+    const scannedBefore = this.state.summary?.scannedHeight;
     let delay = SYNC_INTERVAL_MS;
     try {
       await this.eng.sync();
+      // WebZjs reads the tip once per scan iteration, so a long pass ends
+      // behind blocks mined while it ran. On the tip read before the pass the
+      // wallet would count as up to date and spends would start (and run that
+      // catch-up inline), so the tip is read again before the new scanned
+      // height shows.
+      const tip = await this.readTip();
+      if (tip !== null) this.setSync({ networkTip: tip });
       await this.refresh();
       await this.persist();
-      this.setSync({ status: 'idle', error: null, catchUp: null, progress: null });
+      const gap = this.gapTo(tip);
+      // Still behind after moving forward: catch up again at once. A pass
+      // that made no progress (e.g. a lagging server) waits as usual.
+      const moved = scannedBefore === undefined || (this.state.summary?.scannedHeight ?? 0) > scannedBefore;
+      if (gap.catchUp && moved) {
+        this.setSync({ ...gap, progress: null });
+        delay = 0;
+      } else {
+        this.setSync({ status: 'idle', error: null, catchUp: null, progress: null });
+      }
     } catch (e) {
       console.warn('sync failed', e);
       this.setSync({ status: 'error', error: e instanceof Error ? e.message : String(e), catchUp: null, progress: null });
@@ -257,23 +323,34 @@ export class WalletController {
       pass?.stop();
       this.syncing = false;
     }
+    // Soft-locked during the pass: it is saved now, so the lock goes through.
+    // After a failed pass there is nothing new to save (only a pass that
+    // succeeds is persisted), so it goes through too. A password check under
+    // way decides instead (unlockSoft).
+    if (this.lockAfterPass) {
+      if (!this.unlocking) this.reloadLocked();
+      return;
+    }
     this.syncTimer = setTimeout(() => void this.syncLoop(), delay);
   }
 
   /**
-   * Reads the network tip before a pass, while the engine can still answer,
-   * and compares it with the wallet's scanned height.
+   * Reads the network tip before and after a pass, while the engine can
+   * answer; null if the server did not.
    */
-  private async measureGap(): Promise<Partial<SyncInfo>> {
-    let tip: number;
+  private async readTip(): Promise<number | null> {
     try {
-      tip = await this.eng.latestHeight();
+      // Servers behind one lightwalletd URL can be a block apart; never step back.
+      return Math.max(await this.eng.latestHeight(), this.state.sync.networkTip ?? 0);
     } catch {
-      // The pass itself reports connection problems; until then the last error stands.
-      return { catchUp: null };
+      return null;
     }
-    // Servers behind one lightwalletd URL can be a block apart; never step back.
-    const networkTip = Math.max(tip, this.state.sync.networkTip ?? 0);
+  }
+
+  /** Compares the network tip with the wallet's scanned height. */
+  private gapTo(networkTip: number | null): Partial<SyncInfo> {
+    // The pass itself reports connection problems; until then the last error stands.
+    if (networkTip === null) return { catchUp: null };
     const scanned = this.state.summary?.scannedHeight;
     return { error: null, networkTip, catchUp: scanned === undefined ? null : catchUpFor(scanned, networkTip) };
   }
@@ -341,8 +418,13 @@ export class WalletController {
   }
 
   private async persist() {
-    if (!this.key) return;
-    await storage.setDb(await encryptDb(this.key, await this.eng.exportDb()));
+    const key = this.key;
+    if (!key) return;
+    const blob = await encryptDb(key, await this.eng.exportDb());
+    // Wiped meanwhile (a soft lock leaves the wipe button on screen while a
+    // pass runs): writing now would bring the removed database back.
+    if (this.key !== key) return;
+    await storage.setDb(blob);
   }
 
   // --- spending ---------------------------------------------------------------

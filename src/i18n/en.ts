@@ -11,6 +11,7 @@ export const en: Record<MessageKey, string> = {
   'common.details': 'Details',
   'common.genericError': 'Something went wrong.',
   'common.viewHistory': 'View in history',
+  'common.amountHidden': 'amount hidden',
 
   'boot.loading': 'Preparing the Zcash engine…',
   'boot.errorTitle': 'Celari could not start',
@@ -81,6 +82,8 @@ export const en: Record<MessageKey, string> = {
   'unlock.forgotHelpView':
     'There is no way to recover the password. You can remove the wallet from this browser and add it again with your viewing key (uview1…).',
   'unlock.autoLocked': 'Locked automatically after {n} minutes of inactivity.',
+  'unlock.autoLockedHidden': 'Locked automatically because this tab was in the background for 1 minute.',
+  'unlock.softLocked': 'The sync keeps running in the background until its progress is saved, so a long restore is not lost.',
 
   'nav.home': 'Balance',
   'nav.receive': 'Receive',
@@ -96,6 +99,7 @@ export const en: Record<MessageKey, string> = {
   'sync.firstSyncNote': 'Sync in progress. Your balance may be incomplete until it finishes.',
 
   'home.total': 'Total balance',
+  'home.hideBalances': 'Hide balances',
   'home.shielded': 'Shielded',
   'home.shieldedHelp': 'Orchard + Sapling. Amounts and parties are hidden on chain.',
   'home.transparent': 'Transparent',
@@ -211,10 +215,14 @@ export const en: Record<MessageKey, string> = {
   'settings.serverInvalid': 'Enter a valid address starting with https://.',
   'settings.autoLock': 'Auto-lock',
   'settings.minutes': 'after {n} minutes of inactivity',
+  'settings.autoLockHidden': 'The wallet also locks once this tab has been in the background for 1 minute.',
   'settings.security': 'Security',
   'settings.showViewingKey': 'Show viewing key',
   'settings.viewingKeyHelp':
     'Anyone with this key can see all your past and future transactions and memos, but cannot spend. It cannot be revoked; share it only with someone you fully trust.',
+  'settings.clipboardClear':
+    'Celari tries to clear the clipboard 60 seconds after copying. Browsers allow that only while this tab is in front, so it may happen later, when you come back, or not at all if you close the tab first. Anything you copy in another app meanwhile may be cleared instead.',
+  'settings.clipboardCleared': 'Clipboard cleared.',
   'settings.showSeed': 'Show recovery phrase',
   'settings.reveal': 'Reveal',
   'settings.danger': 'Danger zone',
