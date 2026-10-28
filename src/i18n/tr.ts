@@ -140,6 +140,8 @@ export const tr = {
   'send.doNotClose': 'İşlem bitene kadar bu sekmeyi kapatma.',
   'send.waitForSync': 'Cüzdan hâlâ eşitleniyor ({blocks} blok kaldı). Güncel olunca devam edebilirsin.',
   'send.waitForConnect': 'Cüzdan hâlâ ağa bağlanıyor. Güncel olunca devam edebilirsin.',
+  'send.waitForRetry':
+    'Cüzdan {blocks} blok geride ve eşitleme bağlantı sorunu yüzünden durdu; yeniden denenecek. Güncel olunca devam edebilirsin.',
   'send.success': 'İşlem birkaç dakika içinde onaylanır.',
   'send.another': 'Yeni gönderim',
   'send.err.address.empty': 'Alıcı adresini gir.',

@@ -16,7 +16,21 @@ async function review(page: Page, to: string, amount: string) {
 
 const sendButton = (page: Page) => page.locator('form').getByRole('button', { name: 'Send', exact: true });
 
+type Knobs = { holdStage?: string; holdPass?: boolean; chainGrowth?: number; failPass?: boolean };
+
+/** Changes the fake engine's knobs (src/engine/fake.ts) on the running page. */
+async function setKnobs(page: Page, knobs: Knobs) {
+  await page.evaluate((k) => {
+    const g = globalThis as { __fakeEngine?: Knobs };
+    g.__fakeEngine = { ...g.__fakeEngine, ...k };
+  }, knobs);
+}
+
 test('a running send cannot be left or repeated', async ({ page }) => {
+  // The spend stops at proving until released, so nothing below races it.
+  await page.addInitScript(() => {
+    (globalThis as { __fakeEngine?: Knobs }).__fakeEngine = { holdStage: 'proving' };
+  });
   await createWallet(page);
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   await review(page, UA, '0.4');
@@ -29,17 +43,19 @@ test('a running send cannot be left or repeated', async ({ page }) => {
   await expect(page.getByRole('button', { name: /Back/ })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Lock' })).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Balance' })).toBeDisabled();
-  await expect(page.getByRole('button', { name: 'History' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'History', exact: true })).toBeDisabled();
 
-  // While proving, one row is done, one current and two pending: the labels still line up,
+  // While proving, two rows are done, one current and one pending: the labels still line up,
   // and the status region carries the current stage for screen readers.
   await expect(page.locator('.stages li.current')).toContainText('Generating zero-knowledge proofs');
   await expect(page.getByRole('status').filter({ hasText: 'Generating zero-knowledge proofs' })).toHaveCount(1);
+  await expect(page.locator('.stages li.done')).toHaveCount(2);
   const xs = await page
     .locator('.stages li > span:last-child')
     .evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().x)));
   expect(xs).toHaveLength(4);
   expect(new Set(xs).size).toBe(1);
+  await setKnobs(page, { holdStage: undefined });
 
   const result = page.getByRole('heading', { name: '0.40 ZEC sent' });
   await expect(result).toBeVisible({ timeout: 10_000 });
@@ -72,8 +88,39 @@ test('a failed spend says whether it is safe to try again', async ({ page }) => 
   await expect(sendButton(page)).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Balance' })).toBeEnabled();
 
+  // Like WebZjs, the fake engine stored the transaction before broadcasting it:
+  // History shows it at once, and it is saved, so it survives a lock.
   await page.getByRole('button', { name: 'View in history' }).click();
   await expect(page.getByRole('heading', { name: 'Transaction history' })).toBeVisible();
+  const sent = page.getByTestId('history').locator('.tx-sent');
+  await expect(sent).toHaveCount(1);
+  await expect(sent).toContainText('-0.0667');
+  await page.getByRole('button', { name: 'Lock' }).click();
+  await page.getByLabel('Password').fill(PASSWORD);
+  await page.getByRole('button', { name: 'Unlock' }).click();
+  await page.getByRole('button', { name: 'History', exact: true }).click();
+  await expect(sent).toHaveCount(1);
+});
+
+test('a failed pass keeps spending closed while the wallet is known to be behind', async ({ page }) => {
+  await createWallet(page);
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await review(page, UA, '0.1');
+  // The send kicks off a pass that measures 50 new blocks and then fails before scanning them.
+  await setKnobs(page, { chainGrowth: 50, failPass: true });
+  await sendButton(page).click();
+  await expect(page.getByRole('heading', { name: '0.10 ZEC sent' })).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId('sync-status')).toHaveText('Connection problem, will retry');
+
+  await page.getByRole('button', { name: 'New payment' }).click();
+  await review(page, UA, '0.2');
+  await expect(page.getByTestId('spend-wait')).toHaveText(/50 blocks behind/);
+  await expect(sendButton(page)).toBeDisabled();
+
+  // The retry 10 s later goes through.
+  await setKnobs(page, { failPass: false });
+  await expect(page.getByTestId('spend-wait')).toHaveCount(0, { timeout: 20_000 });
+  await expect(sendButton(page)).toBeEnabled();
 });
 
 test('spending waits while the wallet is catching up', async ({ page }) => {
@@ -81,9 +128,7 @@ test('spending waits while the wallet is catching up', async ({ page }) => {
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   await review(page, UA, '0.1');
   // The send kicks off a pass; 50 new blocks make it a catch-up, held open here.
-  await page.evaluate(() => {
-    (globalThis as { __fakeEngine?: object }).__fakeEngine = { chainGrowth: 50, holdPass: true };
-  });
+  await setKnobs(page, { chainGrowth: 50, holdPass: true });
   await sendButton(page).click();
   await expect(page.getByRole('heading', { name: '0.10 ZEC sent' })).toBeVisible({ timeout: 10_000 });
   await expect(page.getByTestId('sync-status')).toHaveText('Syncing · 50 blocks left');
@@ -93,9 +138,7 @@ test('spending waits while the wallet is catching up', async ({ page }) => {
   await expect(page.getByTestId('spend-wait')).toHaveText(/still syncing \(50 blocks left\)/);
   await expect(sendButton(page)).toBeDisabled();
 
-  await page.evaluate(() => {
-    (globalThis as { __fakeEngine?: { holdPass?: boolean } }).__fakeEngine!.holdPass = false;
-  });
+  await setKnobs(page, { holdPass: false });
   await expect(page.getByTestId('spend-wait')).toHaveCount(0);
   await expect(sendButton(page)).toBeEnabled();
 });
