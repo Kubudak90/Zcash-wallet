@@ -5,6 +5,7 @@ import { syncView, type SyncView } from '../lib/syncView';
 import { useController, useWallet } from '../state/wallet';
 import { History } from './History';
 import { Home } from './Home';
+import { NetworkBanner, useNetworkView } from './NetworkBanner';
 import { Receive } from './Receive';
 import { Send } from './Send';
 import { Settings } from './Settings';
@@ -69,6 +70,7 @@ export function Main() {
   const controller = useController();
   // Leaving the screen mid-spend would hide its outcome, so navigation waits for it.
   const { spending } = useWallet();
+  const network = useNetworkView();
   const [tab, setTab] = useState<Tab>('home');
   // Shield opens from Balance or from Send: that tab stays marked, and Back and Close return to it.
   const [shieldFrom, setShieldFrom] = useState<'home' | 'send'>('home');
@@ -109,7 +111,8 @@ export function Main() {
   }, []);
 
   return (
-    <div className="main">
+    // data-network: what the engine says about the network, for the smoke test (tests/e2e-real).
+    <div className="main" data-network={network.kind}>
       <header className="topbar" ref={topbar}>
         <div className="topbar-brand">
           <img src="/celari.svg" alt="" width={28} height={28} />
@@ -121,6 +124,7 @@ export function Main() {
         </button>
       </header>
       <main className="content">
+        <NetworkBanner />
         {tab === 'home' && <Home onNavigate={navigate} />}
         {tab === 'receive' && <Receive />}
         {tab === 'send' && <Send onNavigate={navigate} />}

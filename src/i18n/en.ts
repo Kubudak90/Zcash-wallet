@@ -98,6 +98,12 @@ export const en: Record<MessageKey, string> = {
   'sync.error': 'Connection problem, will retry',
   'sync.firstSyncNote': 'Sync in progress. Your balance may be incomplete until it finishes.',
 
+  'network.outdatedTitle': 'Celari is behind the Zcash network',
+  'network.outdatedText':
+    'The Zcash network now runs on {upgrade}, which this version of Celari does not support yet. Sending and shielding are disabled until the update, because the network would reject anything this version builds. Your keys and funds are safe.',
+  'network.unreachable': 'Celari could not check the network version. Sending and shielding stay disabled until it can.',
+  'network.upcoming': 'Next network upgrade: {upgrade} at block {height}.',
+
   'home.total': 'Total balance',
   'home.hideBalances': 'Hide balances',
   'home.shielded': 'Shielded',
@@ -111,6 +117,8 @@ export const en: Record<MessageKey, string> = {
     '{amount} ZEC sits on a public transparent address. Shield it to protect your future transactions.',
   'home.shieldButton': 'Shield funds',
   'home.shieldBelowThreshold': 'At least {amount} ZEC is needed to shield.',
+  'home.orchardMigrateNotice':
+    'Your shielded balance is in the Orchard pool, which Zcash is retiring. Moving it to the new Ironwood pool needs an updated Celari. If you need to move it sooner, restore your recovery phrase in a wallet that supports Ironwood, such as Zodl 3.8 or later.',
 
   'receive.title': 'Receive ZEC',
   'receive.unified': 'Shielded address (recommended)',
@@ -122,6 +130,8 @@ export const en: Record<MessageKey, string> = {
   'receive.showTransparent': 'Show transparent address',
   'receive.showUnified': 'Back to shielded address',
   'receive.noTransparent': 'This key has no transparent address.',
+  'receive.outdatedWarn':
+    'Payments sent to this address from up-to-date wallets go to the new Ironwood pool, which this version of Celari cannot see yet. They are not lost: they will show up after the update. Do not ask the sender to pay again.',
 
   'send.title': 'Send ZEC',
   'send.to': 'Recipient address',
@@ -160,6 +170,8 @@ export const en: Record<MessageKey, string> = {
   'send.texWarn':
     'This is a TEX address (used by some exchanges). Funds reach it through a transparent intermediate step, which is public.',
   'send.viewOnly': 'You are in view-only mode; this wallet cannot send.',
+  'send.disabledOutdated': 'Sending is disabled until Celari is updated for the current Zcash network.',
+  'send.nothingSent': 'Nothing was sent.',
   'send.failed': 'Sending failed.',
   'send.failedHint': 'The balance may not cover the network fee. Lower the amount slightly and try again.',
   'send.uriFilled': 'Amount filled in from the payment link.',
@@ -193,6 +205,7 @@ export const en: Record<MessageKey, string> = {
   'shield.confirm': 'Shield',
   'shield.success': 'It will appear in your shielded balance once confirmed.',
   'shield.sentTitle': '{amount} ZEC is being shielded',
+  'shield.disabledOutdated': 'Shielding is disabled until Celari is updated for the current Zcash network.',
 
   'history.title': 'Transaction history',
   'history.empty': 'No transactions yet.',

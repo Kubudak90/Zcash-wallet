@@ -387,6 +387,17 @@ textarea.memo {
   border-color: color-mix(in srgb, var(--ok) 60%, transparent);
 }
 
+/* Network notices (NetworkBanner): above every tab in Main, inline on the lock screen. */
+.network-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.content > .network-banner {
+  padding: 16px 16px 0;
+}
+
 ul.plain {
   margin: 0;
   padding-left: 18px;

@@ -99,6 +99,12 @@ export const tr = {
   'sync.error': 'Bağlantı sorunu, yeniden denenecek',
   'sync.firstSyncNote': 'Eşitleme sürüyor. Bitene kadar bakiye eksik görünebilir.',
 
+  'network.outdatedTitle': 'Celari Zcash ağının gerisinde kaldı',
+  'network.outdatedText':
+    'Zcash ağı artık {upgrade} kurallarıyla çalışıyor; Celari’nin bu sürümü bunu henüz desteklemiyor. Güncelleme gelene kadar gönderme ve gizliye aktarma kapalı, çünkü bu sürümün hazırladığı her işlemi ağ reddeder. Anahtarların ve paran güvende.',
+  'network.unreachable': 'Celari ağ sürümünü doğrulayamadı. Doğrulayana kadar gönderme ve gizliye aktarma kapalı kalır.',
+  'network.upcoming': 'Sıradaki ağ yükseltmesi: {upgrade}, {height}. blokta.',
+
   'home.total': 'Toplam bakiye',
   'home.hideBalances': 'Bakiyeleri gizle',
   'home.shielded': 'Gizli',
@@ -112,6 +118,8 @@ export const tr = {
     '{amount} ZEC herkesin görebildiği şeffaf adreste duruyor. Gizliye aktararak gelecekteki işlemlerini koruyabilirsin.',
   'home.shieldButton': 'Gizliye aktar',
   'home.shieldBelowThreshold': 'Gizliye aktarmak için en az {amount} ZEC gerekir.',
+  'home.orchardMigrateNotice':
+    'Gizli bakiyen, Zcash’in kullanımdan kaldırdığı Orchard havuzunda. Yeni Ironwood havuzuna taşımak için güncel bir Celari gerekiyor. Daha erken taşıman gerekiyorsa kurtarma kelimelerini Ironwood destekleyen bir cüzdana (örneğin Zodl 3.8 ve üzeri) yükle.',
 
   'receive.title': 'ZEC al',
   'receive.unified': 'Gizli adres (önerilen)',
@@ -123,6 +131,8 @@ export const tr = {
   'receive.showTransparent': 'Şeffaf adresi göster',
   'receive.showUnified': 'Gizli adrese dön',
   'receive.noTransparent': 'Bu anahtarın şeffaf adresi yok.',
+  'receive.outdatedWarn':
+    'Güncel cüzdanlardan bu adrese gönderilen ödemeler yeni Ironwood havuzuna düşer; Celari’nin bu sürümü onları henüz göremez. Para kaybolmaz, güncellemeden sonra görünür. Gönderenden tekrar ödeme isteme.',
 
   'send.title': 'ZEC gönder',
   'send.to': 'Alıcı adresi',
@@ -161,6 +171,8 @@ export const tr = {
   'send.texWarn':
     'Bu bir TEX adresi (bazı borsalar kullanır). Para buraya şeffaf bir ara adım üzerinden gider ve bu adım herkese açıktır.',
   'send.viewOnly': 'Sadece izleme modundasın; bu cüzdandan para gönderilemez.',
+  'send.disabledOutdated': 'Celari güncel Zcash ağı için güncellenene kadar gönderme kapalı.',
+  'send.nothingSent': 'Hiçbir şey gönderilmedi.',
   'send.failed': 'Gönderim başarısız.',
   'send.failedHint': 'Bakiye ağ ücretini karşılamıyor olabilir. Tutarı biraz azaltıp tekrar dene.',
   'send.uriFilled': 'Tutar ödeme bağlantısından dolduruldu.',
@@ -194,6 +206,7 @@ export const tr = {
   'shield.confirm': 'Aktar',
   'shield.success': 'Onaylanınca gizli bakiyende görünecek.',
   'shield.sentTitle': '{amount} ZEC gizliye aktarılıyor',
+  'shield.disabledOutdated': 'Celari güncel Zcash ağı için güncellenene kadar gizliye aktarma kapalı.',
 
   'history.title': 'İşlem geçmişi',
   'history.empty': 'Henüz işlem yok.',

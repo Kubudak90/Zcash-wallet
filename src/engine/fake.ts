@@ -54,6 +54,8 @@ export interface FakeKnobs {
   networkOutdated?: boolean;
   /** networkStatus() fails, like a server that does not answer GetLightdInfo. */
   networkUnreachable?: boolean;
+  /** Keep networkStatus() from answering until this is cleared. */
+  holdNetworkCheck?: boolean;
   /** An upgrade the server announces, as networkStatus() reports it. */
   upcomingUpgrade?: NetworkStatus['upcoming'];
 }
@@ -102,8 +104,9 @@ export class FakeEngine implements ZcashEngine {
   }
 
   async networkStatus(): Promise<NetworkStatus> {
-    const k = knobs();
     await sleep(20);
+    while (knobs().holdNetworkCheck) await sleep(50);
+    const k = knobs();
     if (k.networkUnreachable) throw new Error('fake GetLightdInfo failure');
     // NU6 rules at the fake tip by default; NU6.3 (Ironwood) when outdated.
     const status: NetworkStatus = k.networkOutdated

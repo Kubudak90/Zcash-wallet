@@ -67,6 +67,14 @@ export function canSpend(check: NetworkCheck): boolean {
   return networkView(check).kind === 'supported';
 }
 
+/**
+ * The network said no, or could not be asked: Send and Shield say so instead
+ * of showing their forms. Before the first answer ('checking') a spend only waits.
+ */
+export function spendingDisabled(view: NetworkView): view is Extract<NetworkView, { kind: 'outdated' | 'unverified' }> {
+  return view.kind === 'outdated' || view.kind === 'unverified';
+}
+
 /** An announced upgrade the engine will not support, to warn about ahead of time. */
 export function unsupportedUpcoming(check: NetworkCheck): { name: string; height: number } | null {
   const upcoming = check.status?.upcoming;
