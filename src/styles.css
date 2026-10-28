@@ -16,6 +16,9 @@
   --error: #ff6b6b;
   --shielded: #3ccf8e;
   --transparent: #f08c4a;
+  /* The page around the framed app on wide screens; nothing is written on it. */
+  --page: #05080c;
+  --frame-shadow: 0 16px 48px rgb(0 0 0 / 55%);
   --radius: 14px;
   --font: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
@@ -40,6 +43,8 @@
     --error: #c62828;
     --shielded: #0f7a4c;
     --transparent: #c4621d;
+    --page: #dde2e8;
+    --frame-shadow: 0 16px 48px rgb(18 24 32 / 14%);
     color-scheme: light;
   }
 }
@@ -275,9 +280,10 @@ button:focus-visible {
   margin: -4px 0 0;
 }
 
-/* A live error slot stays mounted so screen readers announce what appears in
-   it; while empty it is taken out of the flow so it adds no gap. */
-.field-error:empty {
+/* A live slot (an error or a note) stays mounted so screen readers announce
+   what appears in it; while empty it is taken out of the flow so it adds no gap. */
+.field-error:empty,
+.live-slot:empty {
   position: absolute;
 }
 
@@ -590,8 +596,10 @@ ul.plain {
   top: 0;
   z-index: 2;
   display: flex;
-  /* At 320px (400% zoom) the items wrap instead of pushing Lock off screen. */
+  /* At 320px (400% zoom) the items wrap instead of pushing Lock off screen;
+     a wrapped line stays on the right, next to where Lock was. */
   flex-wrap: wrap;
+  justify-content: flex-end;
   align-items: center;
   gap: 6px 10px;
   padding: 12px 16px;
@@ -602,7 +610,6 @@ ul.plain {
 
 .topbar > button.link {
   flex-shrink: 0;
-  margin-left: auto;
 }
 
 .topbar-brand {
@@ -644,6 +651,11 @@ ul.plain {
   border-radius: 0;
   color: var(--muted);
   font-size: 0.75rem;
+}
+
+/* Inside the button: the tab bar spans the column, so an outer ring would be cut off at its edges. */
+.tabbar button:focus-visible {
+  outline-offset: -3px;
 }
 
 /* The active tab differs from the others by more than colour: a bar on top and a bolder label. */
@@ -703,6 +715,28 @@ ul.plain {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+/* A 44px target that does not make the row it sits in any taller. */
+button.icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  margin: -0.75rem -0.75rem -0.75rem auto;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: 50%;
+  color: var(--muted);
+}
+
+button.icon-button:hover {
+  color: var(--text);
+}
+
+button.icon-button[aria-pressed='true'] {
+  color: var(--accent-fg);
 }
 
 .badge {
@@ -1045,6 +1079,64 @@ ul.plain {
   margin: 0;
 }
 
+/* The group's padding ends it; a help line at the bottom adds no gap of its own. */
+.settings-group > p:last-child {
+  margin-bottom: 0;
+}
+
 .danger p {
   color: var(--error);
+}
+
+/* --- framed layout ------------------------------------------------------- */
+
+/* On a wide screen the app column is a card on the page, with the top bar
+   and the tab bar inside it. The page still scrolls as a whole (the bars are
+   sticky instead of fixed), so focus scrolling and scroll-padding work as on
+   a phone. Short screens such as landscape phones keep the phone layout. */
+@media (min-width: 720px) and (min-height: 600px) {
+  :root {
+    --frame-gap: 32px;
+  }
+
+  html,
+  body {
+    background: var(--page);
+  }
+
+  /* Padding, not a margin on .app: that would collapse through #root and
+     leave every page scrolling by the gap. */
+  #root {
+    padding: var(--frame-gap) 0;
+  }
+
+  .app {
+    min-height: calc(100vh - 2 * var(--frame-gap));
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 28px;
+    box-shadow: var(--frame-shadow);
+    /* Rounds the bars' corners too; unlike hidden, clip keeps them sticky. */
+    overflow: clip;
+  }
+
+  /* Screens that fill the viewport on a phone fill the frame instead. */
+  .app .main,
+  .app .welcome,
+  .app .screen.center {
+    min-height: calc(100vh - 2 * var(--frame-gap) - 2px);
+  }
+
+  .tabbar {
+    position: sticky;
+    left: auto;
+    transform: none;
+    width: auto;
+    max-width: none;
+  }
+
+  /* The tab bar takes its own space here. */
+  .content {
+    padding-bottom: 0;
+  }
 }

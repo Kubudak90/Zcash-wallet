@@ -1,6 +1,6 @@
-import { useId, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 
-import { CopyButton, ErrorDetails, Notice, PasswordField, Screen } from '../components/ui';
+import { CopyButton, ErrorDetails, Notice, PasswordField, Screen, useClipboardClear } from '../components/ui';
 import { useI18n } from '../i18n';
 import { DEFAULT_SERVER } from '../lib/storage';
 import { WrongPasswordError, type Secret } from '../lib/vault';
@@ -45,6 +45,20 @@ function PasswordGate({
   const [busy, setBusy] = useState(false);
   const [value, setValue] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
+  const shown = useRef<HTMLDivElement>(null);
+  const opener = useRef<HTMLButtonElement>(null);
+  const wasOpen = useRef(false);
+
+  // Reveal and Close each replace the button that had focus; without this it
+  // would fall to <body>. The revealed value takes it, so screen readers read
+  // it out, and closing returns it to the button that opened the gate.
+  useEffect(() => {
+    if (value !== null) shown.current?.focus();
+  }, [value]);
+  useEffect(() => {
+    if (wasOpen.current && !open) opener.current?.focus();
+    wasOpen.current = open;
+  }, [open]);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -63,7 +77,7 @@ function PasswordGate({
 
   if (value !== null) {
     return (
-      <div className="stack">
+      <div className="stack" ref={shown} tabIndex={-1}>
         {children(value)}
         <button
           type="button"
@@ -80,7 +94,7 @@ function PasswordGate({
   }
   if (!open) {
     return (
-      <button type="button" className="secondary" onClick={() => setOpen(true)}>
+      <button type="button" className="secondary" ref={opener} onClick={() => setOpen(true)}>
         {label}
       </button>
     );
@@ -99,6 +113,37 @@ function PasswordGate({
         </button>
       </div>
     </form>
+  );
+}
+
+/**
+ * The viewing key and its Copy button. Unlike an address it is worth keeping
+ * out of the clipboard, so a copy, by the button or by hand, is cleared again
+ * a minute later as far as the browser allows; the note says how far that is.
+ */
+function ViewingKey({ value }: { value: string }) {
+  const { t } = useI18n();
+  const status = useClipboardClear();
+  // Only a copy made while the key is on screen gets a note, not one from before.
+  const [copiedHere, setCopiedHere] = useState(false);
+  useEffect(() => {
+    if (status === 'pending') setCopiedHere(true);
+  }, [status]);
+  let note = '';
+  if (copiedHere && status === 'pending') note = t('settings.clipboardClear');
+  else if (copiedHere && status === 'cleared') note = t('settings.clipboardCleared');
+  return (
+    <>
+      {/* data-clipboard-clear: a copy of this text by hand is cleared too (lib/clipboard.ts). */}
+      <code className="address" data-testid="viewing-key" data-clipboard-clear="">
+        {value}
+      </code>
+      <CopyButton value={value} clearAfter />
+      {/* Mounted while empty, so the note is announced when it appears. */}
+      <p className="muted small live-slot" role="status">
+        {note}
+      </p>
+    </>
   );
 }
 
@@ -140,6 +185,7 @@ export function Settings() {
   const serverHelpId = useId();
   const serverErrorId = useId();
   const lockId = useId();
+  const lockHelpId = useId();
 
   return (
     <Screen title={t('settings.title')}>
@@ -189,6 +235,7 @@ export function Settings() {
         <select
           name="auto-lock"
           aria-labelledby={lockId}
+          aria-describedby={lockHelpId}
           value={settings.autoLockMinutes}
           onChange={(e) => void controller.saveSettings({ ...settings, autoLockMinutes: Number(e.target.value) })}
         >
@@ -198,19 +245,15 @@ export function Settings() {
             </option>
           ))}
         </select>
+        <p id={lockHelpId} className="muted small">
+          {t('settings.autoLockHidden')}
+        </p>
       </section>
 
       <section className="settings-group">
         <h2>{t('settings.security')}</h2>
         <PasswordGate label={t('settings.showViewingKey')} derive={(secret) => controller.viewingKeyFor(secret)}>
-          {(key) => (
-            <>
-              <code className="address" data-testid="viewing-key">
-                {key}
-              </code>
-              <CopyButton value={key} />
-            </>
-          )}
+          {(key) => <ViewingKey value={key} />}
         </PasswordGate>
         {/* Right under its own button, so it is not read as being about the recovery phrase. */}
         <p className="muted small">{t('settings.viewingKeyHelp')}</p>

@@ -11,6 +11,7 @@ export const tr = {
   'common.details': 'Ayrıntılar',
   'common.genericError': 'Bir şeyler ters gitti.',
   'common.viewHistory': 'Geçmişte gör',
+  'common.amountHidden': 'tutar gizlendi',
 
   'boot.loading': 'Zcash motoru hazırlanıyor…',
   'boot.errorTitle': 'Celari başlatılamadı',
@@ -81,6 +82,9 @@ export const tr = {
   'unlock.forgotHelpView':
     'Şifreyi kurtarmanın yolu yok. Cüzdanı bu tarayıcıdan silip görüntüleme anahtarınla (uview1…) yeniden ekleyebilirsin.',
   'unlock.autoLocked': '{n} dakika işlem yapılmadığı için otomatik olarak kilitlendi.',
+  'unlock.autoLockedHidden': 'Bu sekme 1 dakika arka planda kaldığı için otomatik olarak kilitlendi.',
+  'unlock.softLocked':
+    'Eşitleme, ilerlemesi kaydedilene kadar arka planda sürüyor; böylece uzun bir geri yükleme boşa gitmez.',
 
   'nav.home': 'Bakiye',
   'nav.receive': 'Al',
@@ -96,6 +100,7 @@ export const tr = {
   'sync.firstSyncNote': 'Eşitleme sürüyor. Bitene kadar bakiye eksik görünebilir.',
 
   'home.total': 'Toplam bakiye',
+  'home.hideBalances': 'Bakiyeleri gizle',
   'home.shielded': 'Gizli',
   'home.shieldedHelp': 'Orchard + Sapling. Tutar ve taraflar zincirde görünmez.',
   'home.transparent': 'Şeffaf',
@@ -211,10 +216,14 @@ export const tr = {
   'settings.serverInvalid': 'https:// ile başlayan geçerli bir adres gir.',
   'settings.autoLock': 'Otomatik kilit',
   'settings.minutes': '{n} dakika işlem yapılmazsa',
+  'settings.autoLockHidden': 'Cüzdan, bu sekme 1 dakika arka planda kalınca da kilitlenir.',
   'settings.security': 'Güvenlik',
   'settings.showViewingKey': 'Görüntüleme anahtarını göster',
   'settings.viewingKeyHelp':
     'Bu anahtara sahip olan herkes geçmiş ve gelecekteki tüm işlemlerini ve notlarını görebilir ama harcama yapamaz. Geri alınamaz; yalnızca tamamen güvendiğin biriyle paylaş.',
+  'settings.clipboardClear':
+    'Celari panoyu kopyalamadan 60 saniye sonra temizlemeye çalışır. Tarayıcılar buna yalnızca bu sekme öndeyken izin verir; bu yüzden temizlik sekmeye döndüğünde olabilir, sekmeyi önce kapatırsan hiç olmaz. Bu arada başka bir uygulamada kopyaladığın bir şey de temizlenebilir.',
+  'settings.clipboardCleared': 'Pano temizlendi.',
   'settings.showSeed': 'Kurtarma kelimelerini göster',
   'settings.reveal': 'Göster',
   'settings.danger': 'Tehlikeli bölge',

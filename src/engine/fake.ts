@@ -29,7 +29,7 @@ const encoder = new TextEncoder();
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** Set by UI tests (page.addInitScript) to reach behaviour WebZjs does not show today. */
-interface FakeKnobs {
+export interface FakeKnobs {
   /** Report scan progress mid-pass. */
   midPassProgress?: boolean;
   /**
@@ -47,6 +47,8 @@ interface FakeKnobs {
   failPass?: boolean;
   /** Keep a spend at this stage until this is cleared, to look at the UI mid-spend. */
   holdStage?: SendStage;
+  /** Keep a send or shield at its proving stage until this is cleared. */
+  holdSpend?: boolean;
 }
 const knobs = (): FakeKnobs => (globalThis as { __fakeEngine?: FakeKnobs }).__fakeEngine ?? {};
 const chainTip = () => TIP + (knobs().chainGrowth ?? 0);
@@ -248,6 +250,7 @@ export class FakeEngine implements ZcashEngine {
       if (stage === 'building') check?.();
       if (stage === 'broadcasting') store();
       await sleep(stage === 'proving' ? 600 : 150);
+      while (stage === 'proving' && knobs().holdSpend) await sleep(50);
       if (stage === failAt) throw new Error(`fake ${stage} failure`);
     }
   }

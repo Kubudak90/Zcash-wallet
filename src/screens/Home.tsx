@@ -1,4 +1,4 @@
-import { Notice } from '../components/ui';
+import { Amount, Notice, useHideBalances } from '../components/ui';
 import { SHIELDING_THRESHOLD_ZATS, TYPICAL_FEE_ZATS, grandTotal, shieldedTotal } from '../engine';
 import { useI18n } from '../i18n';
 import { formatZec } from '../lib/zec';
@@ -6,10 +6,33 @@ import { useWallet } from '../state/wallet';
 import type { Tab } from './Main';
 import { syncLabel, useSyncView } from './Main';
 
+/** An eye, struck through while balances are hidden. */
+function EyeIcon({ struck }: { struck: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="22"
+      height="22"
+      aria-hidden="true"
+      focusable="false"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" />
+      <circle cx="12" cy="12" r="3" />
+      {struck && <path d="M4 4l16 16" />}
+    </svg>
+  );
+}
+
 export function Home({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
   const { t, lang } = useI18n();
   const { summary, meta } = useWallet();
   const sync = useSyncView();
+  const balances = useHideBalances();
   const fmt = (z: bigint) => formatZec(z, { locale: lang });
 
   const b = summary?.balances;
@@ -22,9 +45,20 @@ export function Home({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
         <div className="balance-label">
           {t('home.total')}
           {viewOnly && <span className="badge">{t('home.viewOnly')}</span>}
+          {/* The name stays the same and aria-pressed says whether it is on. */}
+          <button
+            type="button"
+            className="icon-button"
+            aria-pressed={balances.hidden}
+            aria-label={t('home.hideBalances')}
+            title={t('home.hideBalances')}
+            onClick={balances.toggle}
+          >
+            <EyeIcon struck={balances.hidden} />
+          </button>
         </div>
         <div className="balance-total" data-testid="balance-total">
-          {b ? fmt(grandTotal(b)) : '—'} <small>ZEC</small>
+          {b ? <Amount zats={grandTotal(b)} /> : '—'} <small>ZEC</small>
         </div>
         {sync.kind === 'syncing' && (
           <div
@@ -47,14 +81,14 @@ export function Home({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
           <dt>
             <span className="dot dot-shielded" /> {t('home.shielded')}
           </dt>
-          <dd data-testid="balance-shielded">{b ? fmt(shieldedTotal(b)) : '—'} ZEC</dd>
+          <dd data-testid="balance-shielded">{b ? <Amount zats={shieldedTotal(b)} /> : '—'} ZEC</dd>
           <p className="muted small">{t('home.shieldedHelp')}</p>
         </div>
         <div>
           <dt>
             <span className="dot dot-transparent" /> {t('home.transparent')}
           </dt>
-          <dd data-testid="balance-transparent">{b ? fmt(b.transparent) : '—'} ZEC</dd>
+          <dd data-testid="balance-transparent">{b ? <Amount zats={b.transparent} /> : '—'} ZEC</dd>
           <p className="muted small">{t('home.transparentHelp')}</p>
         </div>
         {b && b.pending > 0n && (
@@ -62,7 +96,9 @@ export function Home({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
             <dt>
               <span className="dot dot-pending" /> {t('home.pending')}
             </dt>
-            <dd>{fmt(b.pending)} ZEC</dd>
+            <dd>
+              <Amount zats={b.pending} /> ZEC
+            </dd>
           </div>
         )}
       </dl>
@@ -70,12 +106,13 @@ export function Home({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
       {b && b.transparent > 0n && !viewOnly && (
         <Notice tone="warn">
           <strong>{t('home.shieldTitle')}</strong>
-          <p>{t('home.shieldText', { amount: fmt(b.transparent) })}</p>
+          <p>{t('home.shieldText', { amount: balances.fmt(b.transparent) })}</p>
           {shieldable ? (
             <button type="button" className="primary" onClick={() => onNavigate('shield')}>
               {t('home.shieldButton')}
             </button>
           ) : (
+            // A fixed network minimum, not one of the wallet's amounts.
             <p className="small">
               {t('home.shieldBelowThreshold', { amount: fmt(SHIELDING_THRESHOLD_ZATS + TYPICAL_FEE_ZATS) })}
             </p>
