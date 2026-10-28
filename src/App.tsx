@@ -7,25 +7,57 @@ import { Main } from './screens/Main';
 import { RestoreWallet } from './screens/RestoreWallet';
 import { Unlock } from './screens/Unlock';
 import { Welcome } from './screens/Welcome';
+import { markAutoLocked } from './state/autoLockNotice';
 import { useController, useWallet } from './state/wallet';
 
 const ACTIVITY_EVENTS = ['pointerdown', 'keydown', 'wheel', 'touchstart'] as const;
+const WAKE_EVENTS = ['focus', 'pageshow'] as const;
+const WAKE_CHECK_MS = 15_000;
 
-/** Locks the wallet after `minutes` without user interaction. */
+/**
+ * Locks the wallet after `minutes` without user interaction. Timers stand
+ * still while the device sleeps or the tab is frozen, so the elapsed wall-clock
+ * time is also checked when the page wakes up, on input and every 15 s.
+ */
 function useAutoLock(active: boolean, minutes: number) {
   const controller = useController();
   useEffect(() => {
     if (!active) return;
+    const limit = minutes * 60_000;
+    let last = Date.now();
     let timer: ReturnType<typeof setTimeout>;
+    let locked = false;
+    const lockNow = () => {
+      if (locked) return;
+      locked = true;
+      markAutoLocked(minutes);
+      controller.lock();
+    };
+    const expired = () => Date.now() - last >= limit;
+    const check = () => {
+      if (expired()) lockNow();
+    };
     const reset = () => {
+      last = Date.now();
       clearTimeout(timer);
-      timer = setTimeout(() => controller.lock(), minutes * 60_000);
+      timer = setTimeout(lockNow, limit);
+    };
+    // The first tap after a long sleep must lock, not restart the countdown.
+    const onActivity = () => (expired() ? lockNow() : reset());
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') check();
     };
     reset();
-    ACTIVITY_EVENTS.forEach((e) => window.addEventListener(e, reset, { passive: true }));
+    const interval = setInterval(check, WAKE_CHECK_MS);
+    ACTIVITY_EVENTS.forEach((e) => window.addEventListener(e, onActivity, { passive: true }));
+    WAKE_EVENTS.forEach((e) => window.addEventListener(e, check));
+    document.addEventListener('visibilitychange', onVisibility);
     return () => {
       clearTimeout(timer);
-      ACTIVITY_EVENTS.forEach((e) => window.removeEventListener(e, reset));
+      clearInterval(interval);
+      ACTIVITY_EVENTS.forEach((e) => window.removeEventListener(e, onActivity));
+      WAKE_EVENTS.forEach((e) => window.removeEventListener(e, check));
+      document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [active, minutes, controller]);
 }
