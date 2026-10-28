@@ -287,6 +287,30 @@ button:focus-visible {
   margin: -4px 0 0;
 }
 
+/* A memo is prose, not an address: the body font, wrapped at words. */
+textarea.memo {
+  font-family: inherit;
+  font-size: inherit;
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+
+.memo-info {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: -4px 0 0;
+}
+
+.memo-count {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.memo-count.over {
+  color: var(--error);
+}
+
 .input-row {
   display: flex;
   gap: 8px;
@@ -854,6 +878,19 @@ ul.plain {
   word-break: break-all;
 }
 
+/* A memo can run to several lines; it reads better under its label. */
+.summary > div.summary-memo {
+  flex-direction: column;
+  gap: 4px;
+}
+
+.summary-memo dd {
+  text-align: left;
+  white-space: pre-wrap;
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+
 .stages {
   list-style: none;
   padding: 0;
@@ -988,6 +1025,8 @@ ul.plain {
   margin: 0;
   font-style: italic;
   overflow-wrap: anywhere;
+  /* Line breaks are the sender's, and WebZjs puts each of a transaction's memos on its own line. */
+  white-space: pre-line;
 }
 
 /* --- settings ----------------------------------------------------------- */

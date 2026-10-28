@@ -3,9 +3,11 @@
 // authoritative parse when the transaction is built.
 
 import { base58check, bech32, bech32m } from '@scure/base';
+import { blake2b } from '@noble/hashes/blake2';
 import { sha256 } from '@noble/hashes/sha256';
 
-import { parseZec } from './zec';
+import { decodeLinkMemo } from './memo';
+import { ZATS_PER_ZEC, parseZec } from './zec';
 
 export type AddressKind = 'unified' | 'sapling' | 'transparent' | 'tex';
 
@@ -66,35 +68,141 @@ export function checkAddress(raw: string): AddressCheck {
   return { ok: false, reason: 'invalid' };
 }
 
-export interface PaymentRequest {
-  address: string;
-  amountZats?: bigint;
-  /** Base64url memo the payee asked for; Celari cannot attach memos yet. */
-  memo?: string;
-  /** Set when the link asks for something Celari cannot honour, so it must not be paid. */
-  unsupported?: 'multi' | 'req';
+// Unified address typecodes (ZIP 316) of the receivers that can take a memo.
+const SAPLING_RECEIVER = 0x02;
+const ORCHARD_RECEIVER = 0x03;
+
+const personal = (tag: string, i: number, j = 0) => {
+  const p = new Uint8Array(16);
+  p.set(new TextEncoder().encode(tag));
+  p[13] = i;
+  p[14] = j & 0xff;
+  p[15] = j >> 8;
+  return p;
+};
+
+const xor = (a: Uint8Array, b: Uint8Array) => a.map((x, k) => x ^ b[k]!);
+
+function f4H(i: number, u: Uint8Array, length: number): Uint8Array {
+  return blake2b(u, { dkLen: length, personalization: personal('UA_F4Jumble_H', i) });
+}
+
+function f4G(i: number, u: Uint8Array, length: number): Uint8Array {
+  const out = new Uint8Array(length);
+  for (let j = 0; j * 64 < length; j++) {
+    const block = blake2b(u, { dkLen: 64, personalization: personal('UA_F4Jumble_G', i, j) });
+    out.set(block.subarray(0, Math.min(64, length - j * 64)), j * 64);
+  }
+  return out;
+}
+
+/** Undoes the F4Jumble that hides a unified address's receivers (ZIP 316). */
+function f4Unjumble(m: Uint8Array): Uint8Array {
+  const left = Math.min(64, Math.floor(m.length / 2));
+  const right = m.length - left;
+  const c = m.subarray(0, left);
+  const d = m.subarray(left);
+  const y = xor(c, f4H(1, d, left));
+  const x = xor(d, f4G(1, y, right));
+  const a = xor(y, f4H(0, x, left));
+  const b = xor(x, f4G(0, a, right));
+  const out = new Uint8Array(m.length);
+  out.set(a);
+  out.set(b, left);
+  return out;
+}
+
+/** The receiver typecodes of a mainnet unified address, or null if it does not decode. */
+function unifiedReceivers(address: string): number[] | null {
+  const decoded = bech32m.decodeUnsafe(address, false);
+  const bytes = decoded && bech32m.fromWordsUnsafe(decoded.words);
+  if (!decoded || !bytes || bytes.length < 48) return null;
+  const raw = f4Unjumble(Uint8Array.from(bytes));
+  // The last 16 bytes are the prefix padded with zeros.
+  const padding = raw.subarray(-16);
+  if (!padding.every((b, i) => b === (decoded.prefix.charCodeAt(i) || 0))) return null;
+
+  const body = raw.subarray(0, -16);
+  let at = 0;
+  // CompactSize; receivers never need the 8-byte form.
+  const size = (): number | null => {
+    const first = body[at++];
+    if (first === undefined || first === 0xff) return null;
+    if (first < 0xfd) return first;
+    const n = first === 0xfd ? 2 : 4;
+    if (at + n > body.length) return null;
+    let value = 0;
+    for (let k = n - 1; k >= 0; k--) value = value * 256 + body[at + k]!;
+    at += n;
+    return value;
+  };
+  const typecodes: number[] = [];
+  while (at < body.length) {
+    const typecode = size();
+    const length = size();
+    if (typecode === null || length === null || at + length > body.length) return null;
+    typecodes.push(typecode);
+    at += length;
+  }
+  return typecodes;
 }
 
 /**
+ * Whether a payment to this address can carry a memo. Only shielded
+ * receivers take one: a Sapling address, or a unified address with a Sapling
+ * or Orchard receiver. Transparent and TEX addresses cannot.
+ */
+export function acceptsMemo(raw: string): boolean {
+  const address = raw.trim();
+  const check = checkAddress(address);
+  if (!check.ok) return false;
+  if (check.kind === 'sapling') return true;
+  if (check.kind !== 'unified') return false;
+  const receivers = unifiedReceivers(address);
+  // An address that does not decode is left to the engine, which refuses it whole.
+  return receivers === null || receivers.some((t) => t === SAPLING_RECEIVER || t === ORCHARD_RECEIVER);
+}
+
+export interface PaymentRequest {
+  address: string;
+  amountZats?: bigint;
+  /** Text memo the payee asked for, decoded from the link. */
+  memo?: string;
+  /**
+   * Set when the link must not be paid as it stands: several payments, a
+   * `req-` parameter, a malformed link, or a memo its address cannot take.
+   */
+  refused?: 'multi' | 'req' | 'invalid' | 'memo';
+}
+
+/** ZIP-321 amounts: decimal ZEC with a dot and at most 8 decimals. */
+const LINK_AMOUNT = /^\d+(\.\d{1,8})?$/;
+const MAX_MONEY_ZATS = 21_000_000n * ZATS_PER_ZEC;
+
+/**
  * Reads a pasted address or a single-recipient ZIP-321 URI
- * ("zcash:<address>?amount=1.5"). Links with several payments or with a
- * `req-` parameter are flagged as unsupported: ZIP-321 requires a wallet to
- * reject what it does not understand rather than pay part of the request.
+ * ("zcash:<address>?amount=1.5&memo=…"). ZIP-321 requires a wallet to reject
+ * a link it does not understand or that is malformed rather than pay part of
+ * it or guess, so such links come back `refused`.
  */
 export function parsePaymentInput(raw: string): PaymentRequest {
   const input = raw.trim();
   if (!/^zcash:/i.test(input)) return { address: input };
 
   const rest = input.slice('zcash:'.length);
-  const [path = '', query = ''] = rest.split('?', 2);
-  const params = new URLSearchParams(query);
+  const q = rest.indexOf('?');
+  const path = q < 0 ? rest : rest.slice(0, q);
+  const params = new URLSearchParams(q < 0 ? '' : rest.slice(q + 1));
+  const refuse = (refused: NonNullable<PaymentRequest['refused']>): PaymentRequest => ({ address: input, refused });
 
   const keys = [...params.keys()];
-  if (keys.some((k) => /\.\d+$/.test(k))) return { address: input, unsupported: 'multi' };
-  if (keys.some((k) => k.startsWith('req-'))) return { address: input, unsupported: 'req' };
+  if (keys.some((k) => /\.\d+$/.test(k))) return refuse('multi');
+  if (keys.some((k) => k.startsWith('req-'))) return refuse('req');
 
   // A bare "zcash:" is usually a link still being typed; keep it as it is.
   if (!path && !params.get('address')) return { address: input };
+  // Two values for one key, or an address both in the path and as a parameter.
+  if (new Set(keys).size !== keys.length || (path && params.has('address'))) return refuse('invalid');
   let address: string;
   try {
     address = decodeURIComponent(path || params.get('address') || '');
@@ -102,16 +210,25 @@ export function parsePaymentInput(raw: string): PaymentRequest {
     // Malformed %-escape: leave the text alone and let the address check reject it.
     return { address: input };
   }
-  const amount = params.get('amount');
 
   const request: PaymentRequest = { address };
+  const amount = params.get('amount');
+  if (amount !== null) {
+    if (!LINK_AMOUNT.test(amount)) return refuse('invalid');
+    // Zero asks for no amount in particular; the user types one.
+    if (/[1-9]/.test(amount)) {
+      const zats = parseZec(amount);
+      if (zats > MAX_MONEY_ZATS) return refuse('invalid');
+      request.amountZats = zats;
+    }
+  }
   const memo = params.get('memo');
-  if (memo) request.memo = memo;
-  if (amount) {
-    try {
-      request.amountZats = parseZec(amount);
-    } catch {
-      // An unreadable amount is dropped; the user types it instead.
+  if (memo !== null) {
+    const text = decodeLinkMemo(memo);
+    if (text === null) return refuse('invalid');
+    if (text !== '') {
+      if (checkAddress(address).ok && !acceptsMemo(address)) return refuse('memo');
+      request.memo = text;
     }
   }
   return request;

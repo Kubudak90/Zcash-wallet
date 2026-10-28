@@ -18,7 +18,8 @@ Token yok, puan yok, "airdrop gelecek" vaadi yok. Sadece iyi çalışan, gizli b
 - **Her harcamada şifre:** Kurtarma kelimeleri sadece imzalama anında çözülür, bellekte tutulmaz.
 - **Sadece izleme modu:** Görüntüleme anahtarıyla (UFVK) bakiye ve geçmiş takibi. Harcama yetkisi yoktur, ama anahtarı alan herkes tüm geçmişi ve gelecekteki işlemleri görür; yalnızca tamamen güvendiğin biriyle paylaş.
 - **Akıllı başlangıç bloğu:** Geri yüklerken "cüzdanı ne zaman açtın?" sorusundan eşitleme bloğunu hesaplar; bilinmiyorsa şeffaf adresteki ilk işlemi arar.
-- **Yazım hatası yakalama:** Adresler gönderimden önce bech32/bech32m/base58check sağlama toplamıyla doğrulanır. Test ağı adresleri reddedilir. `zcash:` ödeme bağlantıları (ZIP-321) okunur.
+- **Yazım hatası yakalama:** Adresler gönderimden önce bech32/bech32m/base58check sağlama toplamıyla doğrulanır. Test ağı adresleri reddedilir. `zcash:` ödeme bağlantıları (ZIP-321) okunur; istedikleri not da doldurulur, ZIP-321'e uymayan bağlantılar tahmin edilmeden reddedilir.
+- **Şifreli not (memo):** Gizli adreslere giden ödemeye 512 bayta kadar not eklenebilir; yalnızca sen ve alıcı okuyabilir. Şeffaf ve TEX adresleri not alamaz, form bunu söyler.
 - **Türkçe ve İngilizce** arayüz, Türkçe ondalık virgül desteği (`0,25`).
 - **Kendi sunucunu kullan:** lightwalletd vekil adresi ayarlardan değiştirilebilir.
 - Otomatik kilit, kurtarma kelimelerini doğrulama adımı, koyu ve açık tema.
@@ -89,7 +90,7 @@ Cross-Origin-Embedder-Policy: require-corp
 - [ ] Bağımsız güvenlik denetimi
 - [ ] Ledger / Keystone donanım cüzdanı ile imzalama (PCZT akışı buna hazır)
 - [ ] Tarayıcı eklentisi (anahtarları sayfadan ayrı süreçte tutmak için)
-- [ ] Gönderimde not (memo) desteği
+- [x] Gönderimde not (memo) desteği
 - [ ] Birden çok hesap, çoklu alıcılı ZIP-321
 - [ ] Test ağı modu, kendi lightwalletd vekilini kurma rehberi
 - [ ] Çevrimdışı kullanım (PWA)
@@ -106,7 +107,7 @@ MIT veya Apache-2.0, tercihine göre. WebZjs © ChainSafe Systems, MIT / Apache-
 
 - Shielded (unified/Orchard) address by default; one-click shielding of transparent funds.
 - Keys and the wallet database are stored only encrypted (PBKDF2-SHA256 600k + AES-256-GCM); the seed is decrypted only to sign and the password is asked on every spend.
-- View-only mode with a UFVK, birthday estimation from a month, checksum-validated addresses, ZIP-321 `zcash:` links.
+- View-only mode with a UFVK, birthday estimation from a month, checksum-validated addresses, ZIP-321 `zcash:` links, encrypted memos to shielded addresses.
 - Turkish and English UI. Configurable lightwalletd gRPC-web proxy.
 
 **Not audited. Use small amounts only.** See the Turkish sections above for commands: `npm run dev:fake` for UI work, `npm run build:webzjs && npm run build` for a real build. Hosting requires COOP/COEP headers (see `public/_headers`). CI pins the WebZjs build output by SHA-256 in `scripts/webzjs-vendor.sha256`; changing the WebZjs commit, its patches or wasm-pack needs a new list, which CI uploads as the `webzjs-vendor-sha256` artifact (see `.github/workflows/ci.yml`).

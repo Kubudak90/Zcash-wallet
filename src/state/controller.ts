@@ -361,30 +361,48 @@ export class WalletController {
     onStage: (s: SendStage) => void,
     memo?: string,
   ): Promise<void> {
-    await this.spend(async () => {
+    await this.spend(onStage, async (stage) => {
       const id = this.requireAccount();
       const phrase = await this.spendingPhrase(password);
-      await this.eng.send(id, to, zats, { phrase, onStage }, memo);
+      await this.eng.send(id, to, zats, { phrase, onStage: stage }, memo);
     });
   }
 
   async shield(password: string, onStage: (s: SendStage) => void): Promise<void> {
-    await this.spend(async () => {
+    await this.spend(onStage, async (stage) => {
       const id = this.requireAccount();
       const phrase = await this.spendingPhrase(password);
-      await this.eng.shield(id, { phrase, onStage });
+      await this.eng.shield(id, { phrase, onStage: stage });
     });
   }
 
   /** Runs one spend at a time, so a second click can never pay twice. */
-  private async spend(run: () => Promise<void>): Promise<void> {
+  private async spend(
+    onStage: (s: SendStage) => void,
+    run: (onStage: (s: SendStage) => void) => Promise<void>,
+  ): Promise<void> {
     if (this.state.spending) throw new Error('another payment is still in progress');
     this.set({ spending: true });
     window.addEventListener('beforeunload', confirmLeave);
+    let broadcasting = false;
     try {
-      await run();
-      // The transaction is out at this point: a failed refresh must not read as a failed send.
-      await this.afterSpend().catch((e) => console.warn('refresh after spend failed', e));
+      let failure: { cause: unknown } | null = null;
+      try {
+        await run((s) => {
+          if (s === 'broadcasting') broadcasting = true;
+          onStage(s);
+        });
+      } catch (cause) {
+        failure = { cause };
+      }
+      // After a success the transaction is out. After a failed broadcast it may
+      // be too: WebZjs stores it before broadcasting. Either way History must
+      // show it and the saved wallet keep it, before a deferred lock reloads;
+      // a failed refresh must not read as a failed send.
+      if (!failure || broadcasting) {
+        await this.afterSpend().catch((e) => console.warn('refresh after spend failed', e));
+      }
+      if (failure) throw failure.cause;
     } finally {
       window.removeEventListener('beforeunload', confirmLeave);
       this.set({ spending: false });

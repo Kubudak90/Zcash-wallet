@@ -7,7 +7,8 @@ import { useController, useWallet } from '../state/wallet';
 import type { Tab } from './Main';
 import { SpendConfirm } from './SpendSteps';
 
-export function Shield({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
+/** `onClose` returns to the screen Shield was opened from. */
+export function Shield({ onNavigate, onClose }: { onNavigate: (tab: Tab) => void; onClose: () => void }) {
   const { t, lang } = useI18n();
   const controller = useController();
   const { summary, spending } = useWallet();
@@ -21,10 +22,9 @@ export function Shield({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
 
   const transparent = summary?.balances.transparent ?? 0n;
   const fmt = (z: bigint) => formatZec(z, { locale: lang });
-  const close = () => onNavigate('home');
 
   return (
-    <Screen title={t('shield.title')} onBack={spending ? undefined : close}>
+    <Screen title={t('shield.title')} onBack={spending ? undefined : onClose}>
       {shielded !== null ? (
         <>
           <div className="result">
@@ -40,7 +40,7 @@ export function Shield({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
             <button type="button" className="secondary" onClick={() => onNavigate('history')}>
               {t('common.viewHistory')}
             </button>
-            <button type="button" className="primary" onClick={close}>
+            <button type="button" className="primary" onClick={onClose}>
               {t('common.close')}
             </button>
           </div>

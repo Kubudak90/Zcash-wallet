@@ -140,6 +140,8 @@ export const tr = {
   'send.doNotClose': 'İşlem bitene kadar bu sekmeyi kapatma.',
   'send.waitForSync': 'Cüzdan hâlâ eşitleniyor ({blocks} blok kaldı). Güncel olunca devam edebilirsin.',
   'send.waitForConnect': 'Cüzdan hâlâ ağa bağlanıyor. Güncel olunca devam edebilirsin.',
+  'send.waitForRetry':
+    'Cüzdan {blocks} blok geride ve eşitleme bağlantı sorunu yüzünden durdu; yeniden denenecek. Güncel olunca devam edebilirsin.',
   'send.success': 'İşlem birkaç dakika içinde onaylanır.',
   'send.another': 'Yeni gönderim',
   'send.err.address.empty': 'Alıcı adresini gir.',
@@ -169,7 +171,18 @@ export const tr = {
   'send.err.link.req':
     'Bu ödeme bağlantısı Celari’nin henüz desteklemediği bir özellik kullanıyor; bu yüzden ödenemez. Alıcıdan yalnızca adresini iste.',
   'send.err.link.memo':
-    'Bu bağlantı bir not (memo) istiyor; Celari henüz not gönderemiyor. Not olmadan alıcı ödemeni eşleştiremeyebilir.',
+    'Bu bağlantı bir not (memo) istiyor ama adresi not alamaz; not yalnızca gizli adreslere gider. Alıcıdan gizli bir adres iste.',
+  'send.err.link.invalid':
+    'Bu ödeme bağlantısı geçersiz. Celari ne istendiğini tahmin edip ödeme yapmaz; alıcıdan yeni bir bağlantı iste.',
+  'send.memo': 'Not (isteğe bağlı)',
+  'send.memoHelp': 'Şifreli; yalnızca sen ve alıcı okuyabilir.',
+  'send.memoCount': '{used} / {max} bayt',
+  'send.memoFromLink': 'Not ödeme bağlantısından dolduruldu.',
+  'send.memoUnavailable': 'Bu adres not alamaz: not (memo) yalnızca gizli adreslere giden ödemelerle gider.',
+  'send.confirmMemo': 'Not',
+  'send.err.memo.tooLong':
+    'Not çok uzun: en fazla 512 bayt olabilir. ç, ğ, ş gibi harfler 2, emojiler 4 bayt yer kaplar.',
+  'send.err.memo.nul': 'Notta görünmeyen bir NUL karakteri var (genelde yapıştırınca gelir). Notu yeniden yaz.',
 
   'shield.title': 'Gizliye aktar',
   'shield.intro': '{amount} ZEC şeffaf bakiyen gizli Orchard bakiyene aktarılacak. Ağ ücreti bu tutardan düşülür.',
