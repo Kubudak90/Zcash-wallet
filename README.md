@@ -16,7 +16,7 @@ Token yok, puan yok, "airdrop gelecek" vaadi yok. Sadece iyi çalışan, gizli b
 - **Tek tıkla gizliye aktarma:** Şeffaf (t-adres) bakiye varsa uyarır ve Orchard'a taşır.
 - **Anahtarlar tarayıcıdan çıkmaz:** Kurtarma kelimeleri ve cüzdan veritabanı tarayıcıda yalnızca şifreli durur (PBKDF2-SHA256 600.000 tur + AES-256-GCM).
 - **Her harcamada şifre:** Kurtarma kelimeleri sadece imzalama anında çözülür, bellekte tutulmaz.
-- **Sadece izleme modu:** Görüntüleme anahtarıyla (UFVK) bakiye ve geçmiş takibi. Harcama yetkisi yoktur, muhasebeciyle paylaşılabilir.
+- **Sadece izleme modu:** Görüntüleme anahtarıyla (UFVK) bakiye ve geçmiş takibi. Harcama yetkisi yoktur, ama anahtarı alan herkes tüm geçmişi ve gelecekteki işlemleri görür; yalnızca tamamen güvendiğin biriyle paylaş.
 - **Akıllı başlangıç bloğu:** Geri yüklerken "cüzdanı ne zaman açtın?" sorusundan eşitleme bloğunu hesaplar; bilinmiyorsa şeffaf adresteki ilk işlemi arar.
 - **Yazım hatası yakalama:** Adresler gönderimden önce bech32/bech32m/base58check sağlama toplamıyla doğrulanır. Test ağı adresleri reddedilir. `zcash:` ödeme bağlantıları (ZIP-321) okunur.
 - **Türkçe ve İngilizce** arayüz, Türkçe ondalık virgül desteği (`0,25`).

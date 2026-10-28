@@ -31,9 +31,10 @@ describe('seed phrases', () => {
   it('validates checksums and normalizes input', () => {
     const phrase = newSeedPhrase();
     expect(isValidSeedPhrase(`  ${phrase.toUpperCase().replace(/ /g, '   ')} `)).toBe(true);
-    const words = phrase.split(' ');
-    words[23] = words[23] === 'abandon' ? 'zoo' : 'abandon';
-    expect(isValidSeedPhrase(words.join(' '))).toBe(false);
+    // Fixed vectors: swapping the last word of a random phrase still passes the
+    // checksum one time in 256.
+    expect(isValidSeedPhrase(`${'abandon '.repeat(23)}art`)).toBe(true);
+    expect(isValidSeedPhrase(`${'abandon '.repeat(23)}abandon`)).toBe(false);
     expect(isValidSeedPhrase('hello world')).toBe(false);
     expect(normalizeSeedPhrase(' A  b\nc ')).toBe('a b c');
   });

@@ -657,7 +657,7 @@ ul.plain {
 }
 
 .pill-busy {
-  color: var(--accent);
+  color: var(--accent-fg);
 }
 
 .pill-error {

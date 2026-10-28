@@ -4,6 +4,7 @@ import { ErrorDetails, Notice, PasswordField, Spinner } from '../components/ui';
 import type { SendStage } from '../engine';
 import { useI18n } from '../i18n';
 import { WrongPasswordError } from '../lib/vault';
+import { useSyncView } from './Main';
 
 const STAGES: SendStage[] = ['building', 'signing', 'proving', 'broadcasting'];
 
@@ -20,7 +21,8 @@ export function SpendConfirm({
   failureHint?: string;
   onViewHistory: () => void;
 }) {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
+  const view = useSyncView();
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [stage, setStage] = useState<SendStage | null>(null);
@@ -29,9 +31,19 @@ export function SpendConfirm({
   const running = useRef(false);
   const lastStage = useRef<SendStage | null>(null);
 
+  // WebZjs holds its database for a whole sync pass, so a spend started now
+  // would sit on "building" until the pass ends; before the first pass it
+  // would even run that sync on the main thread.
+  let waitFor: string | null = null;
+  if (view.kind === 'syncing') {
+    waitFor = t('send.waitForSync', { blocks: view.blocksLeft.toLocaleString(lang === 'tr' ? 'tr-TR' : 'en-US') });
+  } else if (view.kind === 'connecting') {
+    waitFor = t('send.waitForConnect');
+  }
+
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (running.current) return;
+    if (running.current || waitFor) return;
     running.current = true;
     lastStage.current = null;
     setBusy(true);
@@ -98,6 +110,11 @@ export function SpendConfirm({
   } else {
     body = (
       <form className="stack" onSubmit={submit}>
+        {waitFor && (
+          <Notice tone="info">
+            <span data-testid="spend-wait">{waitFor}</span>
+          </Notice>
+        )}
         <PasswordField label={t('send.confirmPassword')} name="password" value={password} onChange={setPassword} autoFocus />
         {error?.cause instanceof WrongPasswordError && <Notice tone="error">{t('unlock.wrongPassword')}</Notice>}
         {error && !(error.cause instanceof WrongPasswordError) && (
@@ -107,7 +124,7 @@ export function SpendConfirm({
             <ErrorDetails error={error.cause} />
           </Notice>
         )}
-        <button type="submit" className="primary" disabled={password === ''}>
+        <button type="submit" className="primary" disabled={password === '' || waitFor !== null}>
           {busy ? (
             <>
               <Spinner /> {submitLabel}

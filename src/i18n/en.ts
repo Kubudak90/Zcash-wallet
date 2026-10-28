@@ -138,6 +138,8 @@ export const en: Record<MessageKey, string> = {
   'send.stage.proving': 'Generating zero-knowledge proofs (10–60 s)…',
   'send.stage.broadcasting': 'Broadcasting…',
   'send.doNotClose': 'Do not close this tab until it finishes.',
+  'send.waitForSync': 'The wallet is still syncing ({blocks} blocks left). You can continue once it is up to date.',
+  'send.waitForConnect': 'The wallet is still connecting to the network. You can continue once it is up to date.',
   'send.success': 'The transaction will confirm in a few minutes.',
   'send.another': 'New payment',
   'send.err.address.empty': 'Enter the recipient address.',
