@@ -38,6 +38,8 @@ export interface WalletState {
 const SYNC_INTERVAL_MS = 30_000;
 const SYNC_RETRY_MS = 10_000;
 const PROGRESS_POLL_MS = 2_000;
+/** How often the engine's pass counters are read while a catch-up pass runs. */
+const PASS_PROGRESS_POLL_MS = 1_000;
 const HISTORY_LIMIT = 100;
 
 export class NotASeedWalletError extends Error {
@@ -74,7 +76,7 @@ export class WalletController {
       summary: null,
       addresses: null,
       history: [],
-      sync: { status: 'starting', error: null, catchUp: null, networkTip: null },
+      sync: { status: 'starting', error: null, catchUp: null, networkTip: null, progress: null },
       spending: false,
     };
   }
@@ -179,7 +181,10 @@ export class WalletController {
   }
 
   private async enterReady() {
-    this.set({ phase: 'ready', sync: { ...this.state.sync, status: 'starting', error: null, catchUp: null } });
+    this.set({
+      phase: 'ready',
+      sync: { ...this.state.sync, status: 'starting', error: null, catchUp: null, progress: null },
+    });
     await this.refresh();
     void this.syncLoop();
   }
@@ -229,23 +234,27 @@ export class WalletController {
   private async syncLoop(): Promise<void> {
     if (this.state.phase !== 'ready' || this.syncing) return;
     this.syncing = true;
-    this.setSync({ status: 'syncing', ...(await this.measureGap()) });
+    this.setSync({ status: 'syncing', progress: null, ...(await this.measureGap()) });
 
     // Engines that can report progress mid-pass move the bar; WebZjs answers
     // only when the pass ends, so at most one summary call waits at a time.
     const poll = setInterval(() => void this.refreshSummary(), PROGRESS_POLL_MS);
+    // WebZjs's pass counters answer at once, so its bar moves too. Only a
+    // catch-up pass shows a bar, so steady-state passes are not watched.
+    const pass = this.eng.syncProgress && this.state.sync.catchUp ? this.watchPass() : null;
     let delay = SYNC_INTERVAL_MS;
     try {
       await this.eng.sync();
       await this.refresh();
       await this.persist();
-      this.setSync({ status: 'idle', error: null, catchUp: null });
+      this.setSync({ status: 'idle', error: null, catchUp: null, progress: null });
     } catch (e) {
       console.warn('sync failed', e);
-      this.setSync({ status: 'error', error: e instanceof Error ? e.message : String(e), catchUp: null });
+      this.setSync({ status: 'error', error: e instanceof Error ? e.message : String(e), catchUp: null, progress: null });
       delay = SYNC_RETRY_MS;
     } finally {
       clearInterval(poll);
+      pass?.stop();
       this.syncing = false;
     }
     this.syncTimer = setTimeout(() => void this.syncLoop(), delay);
@@ -267,6 +276,35 @@ export class WalletController {
     const networkTip = Math.max(tip, this.state.sync.networkTip ?? 0);
     const scanned = this.state.summary?.scannedHeight;
     return { error: null, networkTip, catchUp: scanned === undefined ? null : catchUpFor(scanned, networkTip) };
+  }
+
+  /**
+   * Polls the engine's counters for the pass that is starting, until stop().
+   * A reading from after the pass ended (running: false) is ignored, so the
+   * bar only moves on counts of the running pass.
+   */
+  private watchPass(): { stop(): void } {
+    let stopped = false;
+    let inFlight = false;
+    const read = async () => {
+      if (stopped || inFlight) return;
+      inFlight = true;
+      try {
+        const p = await this.eng.syncProgress?.();
+        if (!stopped && p?.running) this.setSync({ progress: { visited: p.visited, scanned: p.scanned } });
+      } catch (e) {
+        console.warn('sync progress failed', e);
+      } finally {
+        inFlight = false;
+      }
+    };
+    const timer = setInterval(() => void read(), PASS_PROGRESS_POLL_MS);
+    return {
+      stop() {
+        stopped = true;
+        clearInterval(timer);
+      },
+    };
   }
 
   /** Runs a sync now instead of waiting for the next tick (e.g. after sending). */

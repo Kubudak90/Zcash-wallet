@@ -33,12 +33,24 @@ export interface SyncInfo {
   catchUp: CatchUp | null;
   /** The highest network tip read so far, kept across passes. */
   networkTip: number | null;
+  /**
+   * The engine's counters for the running catch-up pass (ZcashEngine.syncProgress),
+   * in blocks of that pass; null when the engine has none or no pass is watched.
+   */
+  progress: PassProgress | null;
+}
+
+export interface PassProgress {
+  /** Blocks the scanner has reached. */
+  visited: number;
+  /** Blocks whose batch is committed to the wallet database. */
+  scanned: number;
 }
 
 export type SyncView =
   | { kind: 'connecting' }
   | { kind: 'error' }
-  // `pct` is null while the engine reports no progress mid-pass, as with WebZjs.
+  // `pct` is null while the engine reports no progress mid-pass.
   | { kind: 'syncing'; blocksLeft: number; pct: number | null }
   | { kind: 'upToDate'; height: number };
 
@@ -47,6 +59,20 @@ export function catchUpFor(scannedHeight: number, networkTip: number): CatchUp |
 }
 
 const percent = (from: number, scanned: number, to: number) => Math.floor(syncProgress(from, scanned, to) * 100);
+
+/**
+ * Blocks of a `total`-block pass that the engine's counters say are done.
+ * WebZjs scans in batches of up to 10,000 blocks: it walks a batch (trial
+ * decryption), then commits it, which takes at least as long, and only the
+ * next batch's download shows that the commit is over. A block therefore
+ * counts half once the scanner has reached it and fully once its batch is
+ * committed. The count stays below `total` (a pass can also scan blocks mined
+ * after the gap was measured): only the end of the pass says it is over.
+ */
+export function passBlocksDone(progress: PassProgress, total: number): number {
+  const done = Math.floor((progress.scanned + Math.max(progress.visited, progress.scanned)) / 2);
+  return Math.max(0, Math.min(total - 1, done));
+}
 
 export function syncView(
   sync: SyncInfo,
@@ -58,11 +84,16 @@ export function syncView(
   if (sync.catchUp) {
     const { from, to } = sync.catchUp;
     const scanned = summary?.scannedHeight ?? from;
-    // WebZjs answers no summary until the pass ends, so the gap stays as measured.
-    if (scanned <= from) return { kind: 'syncing', blocksLeft: to - from, pct: null };
     // Within reach of the target the pass is done scanning, even while the
     // wallet is still being saved; lightwalletd servers can be a block apart.
-    if (to - scanned > CATCH_UP_BLOCKS) {
+    if (scanned <= from || to - scanned > CATCH_UP_BLOCKS) {
+      // WebZjs answers no summary until the pass ends, so its summary stays
+      // at `from`; its pass counters move instead.
+      const counted = sync.progress ? passBlocksDone(sync.progress, to - from) : null;
+      if (counted !== null && from + counted >= scanned) {
+        return { kind: 'syncing', blocksLeft: to - from - counted, pct: Math.min(99, percent(from, from + counted, to)) };
+      }
+      if (scanned <= from) return { kind: 'syncing', blocksLeft: to - from, pct: null };
       return { kind: 'syncing', blocksLeft: to - scanned, pct: percent(from, scanned, to) };
     }
   }

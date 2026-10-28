@@ -13,6 +13,7 @@ import type {
   SendStage,
   SpendAuthority,
   Summary,
+  SyncProgress,
   ZcashEngine,
 } from './types';
 import { TYPICAL_FEE_ZATS } from './types';
@@ -30,6 +31,11 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 interface FakeKnobs {
   /** Report scan progress mid-pass. */
   midPassProgress?: boolean;
+  /**
+   * Report pass counters through syncProgress() while summary() still waits
+   * for the pass, like WebZjs with patches/webzjs/0001-sync-progress.patch.
+   */
+  passCounters?: boolean;
   /** Answer latestHeight() this many blocks above where sync() stops, like one lightwalletd server ahead of another. */
   tipAhead?: number;
   /** Keep a pass running until this is cleared, to look at the UI mid-pass. */
@@ -70,6 +76,8 @@ export class FakeEngine implements ZcashEngine {
   private opened = false;
   /** The running pass; summary() waits for it, as WebZjs waits for its database lock. */
   private pass: Promise<void> | null = null;
+  /** Counters of the running (or last) pass, for syncProgress(). */
+  private counters: SyncProgress = { running: false, visited: 0, scanned: 0 };
 
   async init(): Promise<void> {
     await sleep(50);
@@ -139,16 +147,23 @@ export class FakeEngine implements ZcashEngine {
     }
   }
 
+  async syncProgress(): Promise<SyncProgress | null> {
+    return knobs().passCounters ? { ...this.counters } : null;
+  }
+
   private async runPass(): Promise<void> {
     const start = new Map(this.accounts.map((a) => [a, a.scanned]));
     const tip = chainTip();
     const behind = Math.max(0, ...this.accounts.map((a) => tip - a.scanned));
+    this.counters = { running: true, visited: 0, scanned: 0 };
     for (const a of this.accounts) a.tip = tip;
     while (knobs().holdPass) await sleep(50);
-    for (const step of knobs().midPassProgress ? [0.25, 0.5, 0.75, 1] : [1]) {
+    for (const step of knobs().midPassProgress || knobs().passCounters ? [0.25, 0.5, 0.75, 1] : [1]) {
       // Long enough for UI tests to see a restore scan; quick near the tip.
       await sleep(behind > 1000 ? 2500 : 250);
       for (const [a, from] of start) a.scanned = Math.round(from + (tip - from) * step);
+      // Like WebZjs, the scanner reaches a batch before that batch is committed.
+      this.counters = { running: true, visited: Math.round(behind * step), scanned: Math.round(behind * (step - 0.25)) };
     }
     for (const a of this.accounts) {
       if (a.funded) continue;
@@ -168,6 +183,7 @@ export class FakeEngine implements ZcashEngine {
         pool: 'orchard',
       });
     }
+    this.counters = { ...this.counters, running: false };
   }
 
   private account(id: number): FakeAccount {

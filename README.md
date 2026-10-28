@@ -67,6 +67,8 @@ npm run test:e2e:real  # üretim derlemesiyle ana ağda duman testi
 
 Sahte motor (`src/engine/fake.ts`) sadece geliştirme sunucusunda `VITE_FAKE_ENGINE=1` ile açılır ve üretim paketine hiç girmez.
 
+`build:webzjs`, sabitlenmiş commit'in üstüne `patches/webzjs/` altındaki yamaları sırayla uygular (tarama ilerlemesi sayaçları, kilit düzeltmesi); uygulanamayan bir yama derlemeyi durdurur. Ayrıntılar: [`patches/webzjs/README.md`](patches/webzjs/README.md).
+
 ## Yayınlama
 
 WebZjs, `SharedArrayBuffer` kullandığı için sayfanın **cross-origin isolated** olması gerekir. Sunucunun şu başlıkları göndermesi şart:

@@ -28,6 +28,7 @@ import type {
   HistoryItem,
   SpendAuthority,
   Summary,
+  SyncProgress,
   TxStatus,
   TxType,
   ZcashEngine,
@@ -212,6 +213,22 @@ export class WebzjsEngine implements ZcashEngine {
 
   sync(): Promise<void> {
     return this.open_.sync();
+  }
+
+  /**
+   * WebZjs holds its database write lock for a whole pass, so
+   * get_wallet_summary() only answers once the pass ends. sync_progress()
+   * (patches/webzjs/0001-sync-progress.patch) reads counters the pass updates
+   * and answers at once. Feature-detected, so a vendor/ built without the
+   * patch still works, just without a percentage.
+   */
+  async syncProgress(): Promise<SyncProgress | null> {
+    const wallet: { sync_progress?: WebWallet['sync_progress'] } = this.open_;
+    if (typeof wallet.sync_progress !== 'function') return null;
+    const p = wallet.sync_progress();
+    const progress = { running: p.running, visited: p.visited, scanned: p.scanned };
+    p.free();
+    return progress;
   }
 
   async summary(account: number): Promise<Summary | null> {
