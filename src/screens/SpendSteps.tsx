@@ -3,7 +3,9 @@ import { useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { ErrorDetails, Notice, PasswordField, Spinner } from '../components/ui';
 import type { SendStage } from '../engine';
 import { useI18n } from '../i18n';
+import { spendWait } from '../lib/spendWait';
 import { WrongPasswordError } from '../lib/vault';
+import { useWallet } from '../state/wallet';
 import { useSyncView } from './Main';
 
 const STAGES: SendStage[] = ['building', 'signing', 'proving', 'broadcasting'];
@@ -23,6 +25,7 @@ export function SpendConfirm({
 }) {
   const { t, lang } = useI18n();
   const view = useSyncView();
+  const { sync, summary } = useWallet();
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [stage, setStage] = useState<SendStage | null>(null);
@@ -31,15 +34,14 @@ export function SpendConfirm({
   const running = useRef(false);
   const lastStage = useRef<SendStage | null>(null);
 
-  // WebZjs holds its database for a whole sync pass, so a spend started now
-  // would sit on "building" until the pass ends; before the first pass it
-  // would even run that sync on the main thread.
+  // A spend started during a pass, or far behind the tip, would sit on
+  // "building" for that long (see spendWait).
+  const wait = spendWait(view, sync, summary);
+  const blocks = (n: number) => n.toLocaleString(lang === 'tr' ? 'tr-TR' : 'en-US');
   let waitFor: string | null = null;
-  if (view.kind === 'syncing') {
-    waitFor = t('send.waitForSync', { blocks: view.blocksLeft.toLocaleString(lang === 'tr' ? 'tr-TR' : 'en-US') });
-  } else if (view.kind === 'connecting') {
-    waitFor = t('send.waitForConnect');
-  }
+  if (wait?.kind === 'syncing') waitFor = t('send.waitForSync', { blocks: blocks(wait.blocksLeft) });
+  else if (wait?.kind === 'behind') waitFor = t('send.waitForRetry', { blocks: blocks(wait.blocksLeft) });
+  else if (wait?.kind === 'connecting') waitFor = t('send.waitForConnect');
 
   async function submit(e: FormEvent) {
     e.preventDefault();
