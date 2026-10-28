@@ -109,8 +109,14 @@ test('nothing secret is stored in plaintext', async ({ page }) => {
     return JSON.stringify(all);
   });
   expect(dump).toContain('"kdf"');
-  for (const word of words) expect(dump).not.toContain(`"${word}"`);
-  expect(dump).not.toContain(words.slice(0, 4).join(' '));
+  // Single words prove nothing: BIP39 words such as "seed", "salt" or "secret"
+  // are also field names and values here. A stored phrase, as text or as a
+  // JSON array, always contains two of its words side by side.
+  for (let i = 0; i + 1 < words.length; i++) {
+    const [a, b] = [words[i], words[i + 1]];
+    expect(dump).not.toContain(`${a} ${b}`);
+    expect(dump).not.toContain(`"${a}","${b}"`);
+  }
 });
 
 test('settings: reveal recovery phrase and viewing key, then wipe', async ({ page }) => {
