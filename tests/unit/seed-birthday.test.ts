@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import {
   SAPLING_ACTIVATION_HEIGHT,
+  currentMonth,
   estimateBirthday,
   newWalletBirthday,
+  parseBirthdayMonth,
   syncProgress,
 } from '../../src/lib/birthday';
 import {
@@ -68,6 +70,35 @@ describe('birthday estimation', () => {
   it('clamps to Sapling activation and the tip', () => {
     expect(estimateBirthday(new Date('2015-01-01'), tip, now)).toBe(SAPLING_ACTIVATION_HEIGHT);
     expect(estimateBirthday(new Date('2030-01-01'), tip, now, 0)).toBe(tip);
+  });
+
+  it('refuses an invalid date instead of returning NaN', () => {
+    // new Date('2023-13-01T00:00:00Z') is an Invalid Date; it used to become a NaN birthday.
+    expect(() => estimateBirthday(new Date('2023-13-01T00:00:00Z'), tip, now)).toThrow(RangeError);
+    expect(() => estimateBirthday(new Date('x'), tip, now)).toThrow(RangeError);
+  });
+
+  it('reads typed birthday months', () => {
+    expect(parseBirthdayMonth('2023-05', now)).toBe('2023-05');
+    expect(parseBirthdayMonth(' 05.2023 ', now)).toBe('2023-05');
+    expect(parseBirthdayMonth('5/2023', now)).toBe('2023-05');
+    expect(parseBirthdayMonth('05-2023', now)).toBe('2023-05');
+    expect(parseBirthdayMonth('2023/5', now)).toBe('2023-05');
+    expect(parseBirthdayMonth('2018-10', now)).toBe('2018-10');
+    expect(parseBirthdayMonth('2026-10', now)).toBe('2026-10');
+  });
+
+  it('rejects unreadable months and months outside Sapling activation to now', () => {
+    for (const value of ['', '2023', '2023-13', '00.2023', '13/2023', 'Mayıs 2023', '2023-5-1', '23-05']) {
+      expect(parseBirthdayMonth(value, now), value).toBeNull();
+    }
+    expect(parseBirthdayMonth('2018-09', now)).toBeNull();
+    expect(parseBirthdayMonth('2026-11', now)).toBeNull();
+  });
+
+  it('formats the current month in local time', () => {
+    expect(currentMonth(new Date(2026, 0, 31, 23, 59))).toBe('2026-01');
+    expect(currentMonth(new Date(2026, 9, 1, 0, 1))).toBe('2026-10');
   });
 
   it('starts new wallets just under the tip', () => {

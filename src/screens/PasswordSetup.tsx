@@ -8,10 +8,13 @@ export function PasswordSetup({
   onSubmit,
   onBack,
   note,
+  viewOnly = false,
 }: {
   onSubmit: (password: string) => Promise<void>;
   onBack: () => void;
   note?: ReactNode;
+  /** A view-only wallet is restored from its viewing key, not a recovery phrase. */
+  viewOnly?: boolean;
 }) {
   const { t } = useI18n();
   const [password, setPassword] = useState('');
@@ -42,7 +45,7 @@ export function PasswordSetup({
 
   return (
     <Screen title={t('password.title')} onBack={busy ? undefined : onBack}>
-      <p className="muted">{t('password.intro')}</p>
+      <p className="muted">{t(viewOnly ? 'password.introView' : 'password.intro')}</p>
       {note}
       <form onSubmit={submit} className="stack">
         <PasswordField

@@ -40,6 +40,8 @@ export const en: Record<MessageKey, string> = {
   'password.title': 'Set a password',
   'password.intro':
     'This password locks your wallet in this browser. If you forget it, you can restore the wallet from your recovery phrase.',
+  'password.introView':
+    'This password locks your wallet in this browser. If you forget it, you can add the wallet again with your viewing key (uview1…).',
   'password.repeat': 'Password (again)',
   'password.mismatch': 'Passwords do not match.',
   'password.tooShort': 'Must be at least {n} characters.',
@@ -61,6 +63,8 @@ export const en: Record<MessageKey, string> = {
   'restore.birthdayTitle': 'When did you first use this wallet?',
   'restore.birthdayHelp': 'Sync starts from this date. If unsure, pick a slightly earlier month.',
   'restore.birthdayMonth': 'Month',
+  'restore.birthdayPlaceholder': 'YYYY-MM',
+  'restore.birthdayInvalid': 'Enter a month such as 2023-05 or 05.2023, between 2018-10 and this month.',
   'restore.birthdayUnknown': 'I don’t know',
   'restore.birthdayUnknownHelp':
     'We will first look for the earliest transaction on your transparent address. If none is found we scan from Sapling activation in 2018, which can take hours.',
@@ -74,6 +78,9 @@ export const en: Record<MessageKey, string> = {
   'unlock.forgot': 'I forgot my password',
   'unlock.forgotHelp':
     'There is no way to recover the password. You can remove the wallet from this browser and restore it from your recovery phrase.',
+  'unlock.forgotHelpView':
+    'There is no way to recover the password. You can remove the wallet from this browser and add it again with your viewing key (uview1…).',
+  'unlock.autoLocked': 'Locked automatically after {n} minutes of inactivity.',
 
   'nav.home': 'Balance',
   'nav.receive': 'Receive',
@@ -103,7 +110,8 @@ export const en: Record<MessageKey, string> = {
 
   'receive.title': 'Receive ZEC',
   'receive.unified': 'Shielded address (recommended)',
-  'receive.unifiedHelp': 'Unified address. If the sender supports it, funds land directly in your shielded balance.',
+  'receive.unifiedHelp':
+    'Unified address. If the sender supports it, funds land directly in your shielded balance. You can share this address safely; nobody can spend your funds with it.',
   'receive.transparent': 'Transparent address',
   'receive.transparentHelp':
     'Only for exchanges that do not support unified addresses. Funds sent here are public; shield them once they arrive.',
@@ -191,12 +199,13 @@ export const en: Record<MessageKey, string> = {
   'settings.security': 'Security',
   'settings.showViewingKey': 'Show viewing key',
   'settings.viewingKeyHelp':
-    'This key reveals your balance and history but cannot spend. You could share it with your accountant, for example.',
+    'Anyone with this key can see all your past and future transactions and memos, but cannot spend. It cannot be revoked; share it only with someone you fully trust.',
   'settings.showSeed': 'Show recovery phrase',
   'settings.reveal': 'Reveal',
   'settings.danger': 'Danger zone',
   'settings.wipe': 'Remove wallet from this browser',
   'settings.wipeHelp': 'Without your recovery phrase, your funds will be lost for good.',
+  'settings.wipeHelpView': 'Without your viewing key you cannot add this wallet again. It cannot spend, so no funds are lost.',
   'settings.wipeConfirm': 'Type {word} to confirm',
   'settings.wipeWord': 'DELETE',
   'settings.about': 'About',

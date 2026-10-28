@@ -40,6 +40,8 @@ export const tr = {
   'password.title': 'Şifre belirle',
   'password.intro':
     'Bu şifre cüzdanını bu tarayıcıda kilitler. Unutursan cüzdanı kurtarma kelimelerinle yeniden yükleyebilirsin.',
+  'password.introView':
+    'Bu şifre cüzdanını bu tarayıcıda kilitler. Unutursan cüzdanı görüntüleme anahtarınla (uview1…) yeniden ekleyebilirsin.',
   'password.repeat': 'Şifre (tekrar)',
   'password.mismatch': 'Şifreler aynı değil.',
   'password.tooShort': 'En az {n} karakter olmalı.',
@@ -61,6 +63,8 @@ export const tr = {
   'restore.birthdayTitle': 'Cüzdanı ilk ne zaman kullandın?',
   'restore.birthdayHelp': 'Eşitleme bu tarihten başlar. Emin değilsen biraz daha eski bir ay seç.',
   'restore.birthdayMonth': 'Ay',
+  'restore.birthdayPlaceholder': 'YYYY-AA',
+  'restore.birthdayInvalid': 'Ayı 2023-05 ya da 05.2023 biçiminde, 2018-10 ile bu ay arasında gir.',
   'restore.birthdayUnknown': 'Bilmiyorum',
   'restore.birthdayUnknownHelp':
     'Önce şeffaf adresindeki ilk işlemi arayacağız. Bulamazsak Sapling’in başladığı 2018’den itibaren tararız; bu saatler sürebilir.',
@@ -74,6 +78,9 @@ export const tr = {
   'unlock.forgot': 'Şifremi unuttum',
   'unlock.forgotHelp':
     'Şifreyi kurtarmanın yolu yok. Cüzdanı bu tarayıcıdan silip kurtarma kelimelerinle yeniden yükleyebilirsin.',
+  'unlock.forgotHelpView':
+    'Şifreyi kurtarmanın yolu yok. Cüzdanı bu tarayıcıdan silip görüntüleme anahtarınla (uview1…) yeniden ekleyebilirsin.',
+  'unlock.autoLocked': '{n} dakika işlem yapılmadığı için otomatik olarak kilitlendi.',
 
   'nav.home': 'Bakiye',
   'nav.receive': 'Al',
@@ -104,7 +111,7 @@ export const tr = {
   'receive.title': 'ZEC al',
   'receive.unified': 'Gizli adres (önerilen)',
   'receive.unifiedHelp':
-    'Birleşik (unified) adres. Gönderen cüzdan destekliyorsa para doğrudan gizli bakiyene düşer.',
+    'Birleşik (unified) adres. Gönderen cüzdan destekliyorsa para doğrudan gizli bakiyene düşer. Bu adresi güvenle paylaşabilirsin; kimse bununla paranı harcayamaz.',
   'receive.transparent': 'Şeffaf adres',
   'receive.transparentHelp':
     'Sadece birleşik adresi desteklemeyen borsalar için. Bu adrese gelen para herkese açıktır; geldikten sonra gizliye aktar.',
@@ -181,23 +188,25 @@ export const tr = {
 
   'settings.title': 'Ayarlar',
   'settings.language': 'Dil',
-  'settings.server': 'Sunucu (lightwalletd gRPC-web vekili)',
+  'settings.server': 'Sunucu (lightwalletd gRPC-web proxy)',
   'settings.serverHelp':
     'Sunucu IP adresini ve gönderdiğin işlemleri görebilir; gizli bakiyeni ve kimden para aldığını göremez. Kendi sunucunu da çalıştırabilirsin.',
   'settings.serverSave': 'Kaydet ve yeniden başlat',
   'settings.serverReset': 'Varsayılana dön',
   'settings.serverInvalid': 'https:// ile başlayan geçerli bir adres gir.',
   'settings.autoLock': 'Otomatik kilit',
-  'settings.minutes': '{n} dakika hareketsizlikte',
+  'settings.minutes': '{n} dakika işlem yapılmazsa',
   'settings.security': 'Güvenlik',
   'settings.showViewingKey': 'Görüntüleme anahtarını göster',
   'settings.viewingKeyHelp':
-    'Bu anahtarla bakiyen ve geçmişin görülebilir ama para harcanamaz. Örneğin muhasebecinle paylaşabilirsin.',
+    'Bu anahtara sahip olan herkes geçmiş ve gelecekteki tüm işlemlerini ve notlarını görebilir ama harcama yapamaz. Geri alınamaz; yalnızca tamamen güvendiğin biriyle paylaş.',
   'settings.showSeed': 'Kurtarma kelimelerini göster',
   'settings.reveal': 'Göster',
   'settings.danger': 'Tehlikeli bölge',
   'settings.wipe': 'Cüzdanı bu tarayıcıdan sil',
   'settings.wipeHelp': 'Kurtarma kelimelerin yanında değilse paran kalıcı olarak kaybolur.',
+  'settings.wipeHelpView':
+    'Görüntüleme anahtarın yanında değilse bu cüzdanı yeniden ekleyemezsin. Harcama yetkisi olmadığı için para kaybı olmaz.',
   'settings.wipeConfirm': 'Onaylamak için {word} yaz',
   'settings.wipeWord': 'SİL',
   'settings.about': 'Hakkında',
