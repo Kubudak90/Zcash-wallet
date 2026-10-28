@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactNode } from 'react';
+import { useId, useState, type FormEvent, type ReactNode } from 'react';
 
 import { ErrorDetails, Notice, PasswordField, Screen, Spinner, StrengthMeter } from '../components/ui';
 import { useI18n } from '../i18n';
@@ -18,13 +18,18 @@ export function PasswordSetup({
   const [repeat, setRepeat] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
+  const tooShortId = useId();
+  const mismatchId = useId();
 
   const tooShort = password.length < MIN_PASSWORD_LENGTH;
-  const mismatch = repeat !== '' && repeat !== password;
+  const showTooShort = password !== '' && tooShort;
+  // Only flag the repeat once it goes wrong, not on every keystroke while it is
+  // still being typed; the error is announced as it appears.
+  const mismatch = repeat !== '' && !password.startsWith(repeat);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (tooShort || password !== repeat) return;
+    if (busy || tooShort || password !== repeat) return;
     setBusy(true);
     setError(null);
     try {
@@ -47,24 +52,39 @@ export function PasswordSetup({
           value={password}
           onChange={setPassword}
           autoFocus
+          invalid={showTooShort}
+          describedBy={showTooShort ? tooShortId : undefined}
         />
         <StrengthMeter password={password} />
-        {password && tooShort && <p className="field-error">{t('password.tooShort', { n: MIN_PASSWORD_LENGTH })}</p>}
+        {/* The error slots stay mounted (empty when valid) so the polite live region exists before its text. */}
+        <p id={tooShortId} className="field-error" aria-live="polite">
+          {showTooShort && t('password.tooShort', { n: MIN_PASSWORD_LENGTH })}
+        </p>
         <PasswordField
           label={t('password.repeat')}
           name="repeat-password"
           autoComplete="new-password"
           value={repeat}
           onChange={setRepeat}
+          invalid={mismatch}
+          describedBy={mismatch ? mismatchId : undefined}
         />
-        {mismatch && <p className="field-error">{t('password.mismatch')}</p>}
+        <p id={mismatchId} className="field-error" aria-live="polite">
+          {mismatch && t('password.mismatch')}
+        </p>
         {error != null && (
           <Notice tone="error">
             {t('common.genericError')}
             <ErrorDetails error={error} />
           </Notice>
         )}
-        <button type="submit" className="primary" disabled={busy || tooShort || password !== repeat}>
+        {/* aria-disabled while busy: a disabled button would drop focus to <body>. */}
+        <button
+          type="submit"
+          className="primary"
+          disabled={tooShort || password !== repeat}
+          aria-disabled={busy || undefined}
+        >
           {busy ? (
             <>
               <Spinner /> {t('password.creating')}
