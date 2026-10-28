@@ -682,6 +682,28 @@ ul.plain {
   gap: 8px;
 }
 
+/* A 44px target that does not make the row it sits in any taller. */
+button.icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  margin: -0.75rem -0.75rem -0.75rem auto;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: 50%;
+  color: var(--muted);
+}
+
+button.icon-button:hover {
+  color: var(--text);
+}
+
+button.icon-button[aria-pressed='true'] {
+  color: var(--accent-fg);
+}
+
 .badge {
   font-size: 0.7rem;
   padding: 2px 8px;
