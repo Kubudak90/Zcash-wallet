@@ -31,6 +31,11 @@ export interface HistoryItem {
   memo: string | null;
   /** Seconds since the Unix epoch, estimated from the block height. */
   timestamp: number | null;
+  /**
+   * Where the wallet's own outputs went: 'sapling', 'orchard', 'transparent',
+   * 'mixed' (more than one) or 'unknown', as WebZjs reports it; 'ironwood'
+   * once it knows NU6.3. See lib/privacy.ts.
+   */
   pool: string;
 }
 

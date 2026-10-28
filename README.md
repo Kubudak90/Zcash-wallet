@@ -33,6 +33,7 @@ Token yok, puan yok, "airdrop gelecek" vaadi yok. Sadece iyi çalışan, gizli b
 - **Sadece izleme modu:** Görüntüleme anahtarıyla (UFVK) bakiye ve geçmiş takibi. Harcama yetkisi yoktur, ama anahtarı alan herkes tüm geçmişi ve gelecekteki işlemleri görür; yalnızca tamamen güvendiğin biriyle paylaş.
 - **Akıllı başlangıç bloğu:** Geri yüklerken "cüzdanı ne zaman açtın?" sorusundan eşitleme bloğunu hesaplar; bilinmiyorsa şeffaf adresteki ilk işlemi arar.
 - **Yazım hatası yakalama:** Adresler gönderimden önce bech32/bech32m/base58check sağlama toplamıyla doğrulanır. Test ağı adresleri reddedilir. `zcash:` ödeme bağlantıları (ZIP-321) okunur; istedikleri not da doldurulur, ZIP-321'e uymayan bağlantılar tahmin edilmeden reddedilir.
+- **Geçmişte gizlilik etiketi:** Her işlem "Gizli", "Kısmen gizli" ya da "Şeffaf · herkese açık" diye işaretlenir (yazıyla ve şekille, yalnızca renkle değil). Etiket, WebZjs'in söylediği gibi yalnızca cüzdanın kendi çıktılarına bakar; havuzu belli olmayan işlem etiketsiz kalır.
 - **Şifreli not (memo):** Gizli adreslere giden ödemeye 512 bayta kadar not eklenebilir; yalnızca sen ve alıcı okuyabilir. Şeffaf ve TEX adresleri not alamaz, form bunu söyler.
 - **Türkçe ve İngilizce** arayüz, Türkçe ondalık virgül desteği (`0,25`).
 - **Kendi sunucunu kullan:** lightwalletd vekil adresi ayarlardan değiştirilebilir.
@@ -125,6 +126,7 @@ MIT veya Apache-2.0, tercihine göre. WebZjs © ChainSafe Systems, MIT / Apache-
 - Unified (shielded) address by default; one-click shielding of transparent funds. Both are limited in this release: shielding is disabled, and shielded payments that arrive through the Ironwood pool do not show yet (see the warning at the top).
 - Network version guard: the app asks the server which consensus rules the network runs (lightwalletd `GetLightdInfo`) at start-up, on every sync and before every broadcast, and keeps sending and shielding off while the engine does not support them or the answer does not come.
 - Keys and the wallet database are stored only encrypted (PBKDF2-SHA256 600k + AES-256-GCM); the seed is decrypted only to sign and the password is asked on every spend.
+- History rows say whether they were shielded, partly shielded or transparent, judged from the wallet's own outputs only.
 - View-only mode with a UFVK, birthday estimation from a month, checksum-validated addresses, ZIP-321 `zcash:` links, encrypted memos to shielded addresses.
 - Turkish and English UI. Configurable lightwalletd gRPC-web proxy.
 
