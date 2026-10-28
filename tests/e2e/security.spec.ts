@@ -98,6 +98,10 @@ test('view-only wallet: recovery and wipe texts talk about the viewing key', asy
   await page.getByRole('button', { name: 'Settings' }).click();
   await expect(page.getByText('Without your viewing key you cannot add this wallet again.', { exact: false })).toBeVisible();
   await expect(page.getByText(/funds will be lost/)).toBeHidden();
+
+  await page.getByRole('button', { name: 'Lock' }).click();
+  await page.getByRole('button', { name: 'I forgot my password' }).click();
+  await expect(page.getByText(/remove the wallet from this browser and add it again with your viewing key/)).toBeVisible();
 });
 
 test('Turkish: the wipe confirmation accepts SİL typed as SIL', async ({ page }) => {
@@ -113,6 +117,10 @@ test('Turkish: the wipe confirmation accepts SİL typed as SIL', async ({ page }
   await expect(wipe).toBeEnabled();
   await page.getByLabel('Onaylamak için SİL yaz').fill('SOL');
   await expect(wipe).toBeDisabled();
+
+  await page.getByRole('button', { name: 'Kilitle' }).click();
+  await page.getByRole('button', { name: 'Şifremi unuttum' }).click();
+  await expect(page.getByText(/görüntüleme anahtarınla \(uview1…\) yeniden ekleyebilirsin/)).toBeVisible();
   await page.getByLabel('Onaylamak için SİL yaz').fill('sil');
   await wipe.click();
   await expect(page.getByRole('button', { name: 'Yeni cüzdan oluştur' })).toBeVisible();

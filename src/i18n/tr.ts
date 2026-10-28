@@ -77,6 +77,8 @@ export const tr = {
   'unlock.forgot': 'Şifremi unuttum',
   'unlock.forgotHelp':
     'Şifreyi kurtarmanın yolu yok. Cüzdanı bu tarayıcıdan silip kurtarma kelimelerinle yeniden yükleyebilirsin.',
+  'unlock.forgotHelpView':
+    'Şifreyi kurtarmanın yolu yok. Cüzdanı bu tarayıcıdan silip görüntüleme anahtarınla (uview1…) yeniden ekleyebilirsin.',
   'unlock.autoLocked': '{n} dakika işlem yapılmadığı için otomatik olarak kilitlendi.',
 
   'nav.home': 'Bakiye',
