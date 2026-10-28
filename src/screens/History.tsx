@@ -5,7 +5,7 @@ import { useI18n } from '../i18n';
 import { txPrivacy, type Privacy } from '../lib/privacy';
 import { useWallet } from '../state/wallet';
 
-/** Full, half and empty: the mark tells the labels apart without colour, as do the words. */
+/** Full, half and empty marks back the words up without colour; the two half-shielded labels differ in words. */
 const PRIVACY_MARK: Record<Privacy, string> = { shielded: '●', shielding: '◐', partial: '◐', transparent: '○' };
 
 export function History() {

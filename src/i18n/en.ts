@@ -101,7 +101,7 @@ export const en: Record<MessageKey, string> = {
 
   'network.outdatedTitle': 'Celari is behind the Zcash network',
   'network.outdatedText':
-    'The Zcash network now runs on {upgrade}, which this version of Celari does not support yet. Sending and shielding are disabled until the update, because the network would reject anything this version builds. Your keys and funds are safe.',
+    'The Zcash network has moved to rules this version of Celari does not support yet: {upgrade}. Sending and shielding are disabled until the update, because the network would reject anything this version builds. Your keys and funds are safe.',
   'network.unreachable': 'Celari could not check the network version. Sending and shielding stay disabled until it can.',
   'network.serverBehind':
     'The server Celari uses is behind the Zcash network. Choose another server in Settings. Sending and shielding stay disabled until then.',
@@ -121,7 +121,7 @@ export const en: Record<MessageKey, string> = {
     '{amount} ZEC sits on a public transparent address. Shield it to protect your future transactions.',
   'home.shieldButton': 'Shield funds',
   'home.shieldBelowThreshold': 'At least {amount} ZEC is needed to shield.',
-  'home.outdatedBalance': 'Payments sent to you through {upgrade} are not in this balance yet.',
+  'home.outdatedBalance': 'Payments sent to you through the new Ironwood pool are not in this balance yet.',
   'home.orchardMigrateNoticeViewOnly':
     'This wallet watches a balance in the Orchard pool, which Zcash is retiring. Only a wallet that holds the recovery phrase can move it to the new Ironwood pool.',
   'home.orchardMigrateNotice':

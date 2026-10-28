@@ -2,7 +2,10 @@
 // controller's last network check. Kept pure so its rules (fail closed) can be
 // unit-tested.
 
+import { LAG_BLOCKS } from '../engine/lightd';
 import type { NetworkStatus } from '../engine/types';
+
+export { LAG_BLOCKS };
 
 export interface NetworkCheck {
   /** The last answer from the server (ZcashEngine.networkStatus); null until one arrives. */
@@ -15,15 +18,12 @@ export type NetworkView =
   /** No answer yet: spending waits, nothing is claimed about the network. */
   | { kind: 'checking' }
   | { kind: 'supported' }
-  /** The network runs rules the engine does not support; `upgrade` names them. */
+  /** The network runs rules the engine does not support; `upgrade` names them (one or a list). */
   | { kind: 'outdated'; upgrade: string }
   /** The server runs older rules than the network, or lags behind it: another server may do. */
   | { kind: 'serverBehind' }
   /** The last check failed, so support is not verified. */
   | { kind: 'unverified' };
-
-/** A server this many blocks under a tip already seen lags behind the network. */
-export const LAG_BLOCKS = 20;
 
 const engineBehind = (status: NetworkStatus | null): boolean =>
   status !== null && !status.supported && status.behind !== 'server';
@@ -82,7 +82,8 @@ export function networkView(check: NetworkCheck): NetworkView {
   // The network never goes back to older rules, so a failed check after
   // "the engine is behind" still means behind.
   if (status && engineBehind(status)) {
-    return { kind: 'outdated', upgrade: (status.lacks && upgradeName(status.lacks)) || branchName(status.branchId) };
+    const names = (status.lacks ?? []).map(upgradeName).filter((n) => n !== null);
+    return { kind: 'outdated', upgrade: names.length > 0 ? names.join(', ') : branchName(status.branchId) };
   }
   if (error !== null) return { kind: 'unverified' };
   if (!status) return { kind: 'checking' };

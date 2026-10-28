@@ -2,15 +2,13 @@ import { useState } from 'react';
 
 import { CopyButton, Notice, QrCode, Screen } from '../components/ui';
 import { useI18n } from '../i18n';
-import { spendingDisabled } from '../lib/network';
 import { useWallet } from '../state/wallet';
-import { useNetworkView } from './NetworkBanner';
 
 export function Receive() {
   const { t } = useI18n();
-  const { addresses } = useWallet();
-  // Outdated, or not verified: shielded payments from up-to-date wallets land in a pool this engine cannot see.
-  const outdated = spendingDisabled(useNetworkView());
+  const { addresses, ironwood } = useWallet();
+  // Since NU6.3, shielded payments from up-to-date wallets land in Ironwood: an engine without it cannot see them.
+  const outdated = !ironwood;
   const [transparent, setTransparent] = useState(false);
 
   if (!addresses) return <Screen title={t('receive.title')}>…</Screen>;

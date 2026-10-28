@@ -102,7 +102,7 @@ export const tr = {
 
   'network.outdatedTitle': 'Celari Zcash ağının gerisinde kaldı',
   'network.outdatedText':
-    'Zcash ağı artık {upgrade} kurallarıyla çalışıyor; Celari’nin bu sürümü bunu henüz desteklemiyor. Güncelleme gelene kadar gönderme ve gizliye aktarma kapalı, çünkü bu sürümün hazırladığı her işlemi ağ reddeder. Anahtarların ve paran güvende.',
+    'Zcash ağı, Celari’nin bu sürümünün henüz desteklemediği kurallara geçti: {upgrade}. Güncelleme gelene kadar gönderme ve gizliye aktarma kapalı, çünkü bu sürümün hazırladığı her işlemi ağ reddeder. Anahtarların ve paran güvende.',
   'network.unreachable': 'Celari ağ sürümünü doğrulayamadı. Doğrulayana kadar gönderme ve gizliye aktarma kapalı kalır.',
   'network.serverBehind':
     'Celari’nin kullandığı sunucu Zcash ağının gerisinde. Ayarlar’dan başka bir sunucu seç. O zamana kadar gönderme ve gizliye aktarma kapalı kalır.',
@@ -122,7 +122,7 @@ export const tr = {
     '{amount} ZEC herkesin görebildiği şeffaf adreste duruyor. Gizliye aktararak gelecekteki işlemlerini koruyabilirsin.',
   'home.shieldButton': 'Gizliye aktar',
   'home.shieldBelowThreshold': 'Gizliye aktarmak için en az {amount} ZEC gerekir.',
-  'home.outdatedBalance': '{upgrade} üzerinden sana gönderilen ödemeler henüz bu bakiyede yok.',
+  'home.outdatedBalance': 'Yeni Ironwood havuzu üzerinden sana gönderilen ödemeler henüz bu bakiyede yok.',
   'home.orchardMigrateNoticeViewOnly':
     'Bu cüzdan, Zcash’in kullanımdan kaldırdığı Orchard havuzundaki bir bakiyeyi izliyor. Onu yeni Ironwood havuzuna yalnızca kurtarma kelimelerini tutan bir cüzdan taşıyabilir.',
   'home.orchardMigrateNotice':

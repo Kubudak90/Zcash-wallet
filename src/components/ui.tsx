@@ -89,9 +89,18 @@ export function Screen({ title, children, onBack }: { title?: string; children: 
   );
 }
 
-export function Notice({ tone = 'info', children }: { tone?: 'info' | 'warn' | 'error' | 'ok'; children: ReactNode }) {
+/** `live={false}` inside a live region of its own, so the two are not announced twice. */
+export function Notice({
+  tone = 'info',
+  live = true,
+  children,
+}: {
+  tone?: 'info' | 'warn' | 'error' | 'ok';
+  live?: boolean;
+  children: ReactNode;
+}) {
   return (
-    <div className={`notice notice-${tone}`} role={tone === 'error' ? 'alert' : 'status'}>
+    <div className={`notice notice-${tone}`} role={live ? (tone === 'error' ? 'alert' : 'status') : undefined}>
       {children}
     </div>
   );

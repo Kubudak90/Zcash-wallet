@@ -4,7 +4,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   decodeLightdInfo,
   fetchLightdInfo,
+  LAG_BLOCKS,
   grpcWebUnary,
+  localStatus,
   networkStatusFor,
   type LightdInfo,
 } from '../../src/engine/lightd';
@@ -177,11 +179,23 @@ describe('fetchLightdInfo', () => {
   });
 });
 
-describe('WebZjs network support', () => {
-  // Rules as WebZjs knew them before NU6.2 was scheduled: what the strict branch rule alone decides.
+describe('network support rule', () => {
+  // Rules as WebZjs knew them before NU6.2 was scheduled: what the branch rule alone decides.
   const OLD_RULES = { known: WEBZJS_UPGRADES, missing: [] };
   const status = (patch: Partial<LightdInfo>, floor = 0) => networkStatusFor(info(patch), OLD_RULES, 'main', floor);
   const today = (patch: Partial<LightdInfo>, floor = 0) => networkStatusFor(info(patch), WEBZJS_RULES, 'main', floor);
+  // A future engine that implements NU6.2, NU6.3 and NU7.
+  const PORTED = {
+    known: [
+      ...WEBZJS_UPGRADES,
+      { name: 'NU6.2', branchId: '5437f330', activation: 3_364_600 },
+      { name: 'NU6.3', branchId: '37a5165b', activation: 3_428_143 },
+      { name: 'NU7', branchId: '77190ad9', activation: 3_543_405 },
+    ],
+    missing: [],
+  };
+  const ported = (patch: Partial<LightdInfo>, floor = 0) =>
+    networkStatusFor(info({ consensusBranchId: '37a5165b', blockHeight: 3_533_575, ...patch }), PORTED, 'main', floor);
 
   it('does not support the network the captured answer describes (NU6.3), nor the NU7 it announces', () => {
     const live = decodeLightdInfo(grpcWebUnary(CAPTURED));
@@ -190,22 +204,38 @@ describe('WebZjs network support', () => {
       height: 3_533_505,
       supported: false,
       behind: 'engine',
-      lacks: 'NU6.3',
+      lacks: ['NU6.2', 'NU6.3'],
       upcoming: { name: 'NU7', height: 3_543_405, supported: false },
     });
   });
 
   it('is outdated from the first upgrade it lacks on, whatever branch a server reports', () => {
     // A node that missed NU6.2 and NU6.3 still reports NU6.1, at a height or stuck before them.
-    expect(today({ blockHeight: 3_533_575 })).toMatchObject({ supported: false, behind: 'engine', lacks: 'NU6.3' });
-    expect(today({ blockHeight: 3_364_599 })).toMatchObject({ supported: false, behind: 'engine', lacks: 'NU6.2' });
+    expect(today({ blockHeight: 3_533_575 })).toMatchObject({ behind: 'engine', lacks: ['NU6.2', 'NU6.3'] });
+    expect(today({ blockHeight: 3_364_599 })).toMatchObject({ supported: false, behind: 'engine', lacks: ['NU6.2'] });
     // A spend built a few blocks before the activation could be mined after it.
-    expect(today({ blockHeight: 3_364_600 - 1 - 5 })).toMatchObject({ supported: false, lacks: 'NU6.2' });
+    expect(today({ blockHeight: 3_364_600 - 1 - 5 })).toMatchObject({ supported: false, lacks: ['NU6.2'] });
     expect(today({ blockHeight: 3_364_600 - 2 - 5 })).toMatchObject({ supported: true });
-    // A server stuck in the past does not outweigh the clock.
+    // A server stuck in the past does not outweigh the floor.
     expect(today({ blockHeight: 3_300_000 })).toMatchObject({ supported: true });
-    expect(today({ blockHeight: 3_300_000 }, 3_531_000)).toMatchObject({ supported: false, lacks: 'NU6.3' });
-    expect(today({ blockHeight: 3_300_000 }, 3_364_594)).toMatchObject({ supported: false, lacks: 'NU6.2' });
+    expect(today({ blockHeight: 3_300_000 }, 3_531_000)).toMatchObject({ supported: false, lacks: ['NU6.2', 'NU6.3'] });
+    expect(today({ blockHeight: 3_300_000 }, 3_364_594)).toMatchObject({ supported: false, lacks: ['NU6.2'] });
+    // From NU7 on (within the margin), all three, oldest first.
+    expect(today({ blockHeight: 3_543_399 }).lacks).toEqual(['NU6.2', 'NU6.3', 'NU7']);
+    expect(today({ blockHeight: 3_543_398 }).lacks).toEqual(['NU6.2', 'NU6.3']);
+  });
+
+  it('says what it knows without a server', () => {
+    expect(localStatus(WEBZJS_RULES, 3_533_575)).toEqual({
+      branchId: '37a5165b',
+      height: 3_533_575,
+      supported: false,
+      behind: 'engine',
+      lacks: ['NU6.2', 'NU6.3'],
+    });
+    expect(localStatus(WEBZJS_RULES, 3_364_594)?.lacks).toEqual(['NU6.2']);
+    expect(localStatus(WEBZJS_RULES, 3_364_593)).toBeNull();
+    expect(localStatus(PORTED, 3_600_000)).toBeNull();
   });
 
   it('supports the rules it expects at the tip, and only those', () => {
@@ -219,23 +249,28 @@ describe('WebZjs network support', () => {
     // A node still on NU6 or NU5 after NU6.1 activated missed an upgrade: the server is behind.
     expect(status({ consensusBranchId: 'c8e71055' })).toMatchObject({ supported: false, behind: 'server' });
     expect(status({ consensusBranchId: 'c2d6d0b4' })).toMatchObject({ supported: false, behind: 'server' });
-    // Just before NU6.1 activates, NU6 is right, and NU6.1 a branch the engine does not expect yet.
-    expect(status({ consensusBranchId: 'c8e71055', blockHeight: 3_146_399 }).supported).toBe(true);
-    expect(status({ consensusBranchId: '4dec4df0', blockHeight: 3_146_399 })).toMatchObject({
+    // Just before NU6.1 activates, NU6 is right if the server knows NU6.1 is coming.
+    const nu61 = { upgradeName: 'NU6.1', upgradeHeight: 3_146_400 };
+    expect(status({ ...nu61, consensusBranchId: 'c8e71055', blockHeight: 3_146_399 }).supported).toBe(true);
+    expect(status({ ...nu61, consensusBranchId: '4dec4df0', blockHeight: 3_146_399 })).toMatchObject({
       supported: false,
       behind: 'engine',
     });
   });
 
-  it('says whether an announced upgrade is one it knows, at that height', () => {
+  it('matches an announced upgrade by its height, whatever the server calls it', () => {
     const before = { consensusBranchId: 'c8e71055', blockHeight: 3_140_000 };
     expect(status({ ...before, upgradeName: 'NU6.1', upgradeHeight: 3_146_400 }).upcoming).toEqual({
       name: 'NU6.1',
       height: 3_146_400,
       supported: true,
     });
+    expect(status({ ...before, upgradeName: 'NU6_1', upgradeHeight: 3_146_400 }).upcoming?.supported).toBe(true);
     expect(status({ ...before, upgradeName: 'NU6.1', upgradeHeight: 3_150_000 }).upcoming?.supported).toBe(false);
     expect(status({ upgradeName: 'NU7', upgradeHeight: 3_543_405 }).upcoming?.supported).toBe(false);
+    // Ironwood by its other name, for an engine that has it.
+    const ironwood = { consensusBranchId: '5437f330', blockHeight: 3_400_000, upgradeName: 'Ironwood', upgradeHeight: 3_428_143 };
+    expect(ported(ironwood)).toMatchObject({ supported: true, upcoming: { supported: true } });
     // An upgrade already behind the tip, or none, is not upcoming.
     expect(status({ upgradeName: 'NU6.1', upgradeHeight: 3_146_400 }).upcoming).toBeUndefined();
     expect(status({ upgradeName: '', upgradeHeight: 0 }).upcoming).toBeUndefined();
@@ -243,12 +278,25 @@ describe('WebZjs network support', () => {
 
   it('is outdated once an announced upgrade it does not support could take the next spend', () => {
     const nu7 = { upgradeName: 'NU7', upgradeHeight: 3_543_405 };
-    expect(status({ ...nu7, blockHeight: 3_543_404 })).toMatchObject({ supported: false, behind: 'engine', lacks: 'NU7' });
-    expect(status({ ...nu7, blockHeight: 3_543_405 - 1 - 5 })).toMatchObject({ supported: false, lacks: 'NU7' });
+    expect(status({ ...nu7, blockHeight: 3_543_404 })).toMatchObject({ supported: false, behind: 'engine', lacks: ['NU7'] });
+    expect(status({ ...nu7, blockHeight: 3_543_405 - 1 - 5 })).toMatchObject({ supported: false, lacks: ['NU7'] });
     expect(status({ ...nu7, blockHeight: 3_543_405 - 2 - 5 }).supported).toBe(true);
-    // One it supports does not count.
-    const nu61 = { consensusBranchId: 'c8e71055', upgradeName: 'NU6.1', upgradeHeight: 3_146_400 };
-    expect(status({ ...nu61, blockHeight: 3_146_399 }).supported).toBe(true);
+  });
+
+  it('wants the network to switch where the engine switches', () => {
+    const nu7 = { upgradeName: 'NU7', upgradeHeight: 3_543_405, blockHeight: 3_543_404 };
+    expect(ported(nu7).supported).toBe(true);
+    // The network postponed NU7: what the engine builds for it would be rejected.
+    expect(ported({ ...nu7, upgradeHeight: 3_600_000 })).toMatchObject({ supported: false, behind: 'engine' });
+    // A server with no word of it runs an old node.
+    expect(ported({ ...nu7, upgradeName: '', upgradeHeight: 0 })).toMatchObject({ supported: false, behind: 'server' });
+    // Far from the switch, no announcement is needed.
+    expect(ported({ upgradeName: '', upgradeHeight: 0 }).supported).toBe(true);
+  });
+
+  it('does not take a server under the floor for current', () => {
+    expect(ported({}, 3_533_575 + LAG_BLOCKS).supported).toBe(true);
+    expect(ported({}, 3_533_575 + LAG_BLOCKS + 1)).toMatchObject({ supported: false, behind: 'server' });
   });
 
   it('refuses an answer it cannot judge', () => {
