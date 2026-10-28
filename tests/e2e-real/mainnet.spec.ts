@@ -3,8 +3,8 @@ import { expect, test } from '@playwright/test';
 const PASSWORD = 'Gizli-Parola-2026';
 
 test('real engine: create a wallet, sync from the tip, lock and unlock', async ({ page }) => {
-  // A wasm panic can leave a call hanging instead of rejecting, and a fresh
-  // wallet already reads as 100% synced, so the UI alone would not show it.
+  // A wasm panic can leave a call hanging instead of rejecting, so the UI
+  // alone would not show it.
   // Panics, uncaught errors and a database rebuilt instead of reopened are
   // collected, and the sync waits below stop as soon as one shows up.
   const failures: string[] = [];

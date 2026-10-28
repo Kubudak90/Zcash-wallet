@@ -1,34 +1,7 @@
 import { bech32m } from '@scure/base';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 
-const PASSWORD = 'Gizli-Parola-2026';
-// A valid-checksum unified address (example from the WebZjs docs).
-const UA =
-  'u18rakpts0de589sx9dkamcjms3apruqqax9k2s6e7zjxx9vv5kc67pks2trg9d3nrgd5acu8w8arzjjuepakjx38dyxl6ahd948w0mhdt9jxqsntan6px3ysz80s04a87pheg2mqvlzpehrgup7568nfd6ez23xd69ley7802dfvplnfn7c07vlyumcnfjul4pvv630ac336rjhjyak5';
-
-async function createWallet(page: Page) {
-  await page.goto('/');
-  await page.getByRole('button', { name: 'Create a new wallet' }).click();
-  await page.getByRole('button', { name: 'Reveal words' }).click();
-
-  const words = await page.locator('[data-testid="seed-grid"] .seed-word').allTextContents();
-  expect(words).toHaveLength(24);
-
-  await page.getByLabel('I wrote the words down in order').check();
-  await page.getByRole('button', { name: 'Continue' }).click();
-
-  for (const label of await page.locator('form .field > span').allTextContents()) {
-    const n = Number(label.replace('Word #', ''));
-    await page.getByLabel(label, { exact: true }).fill(words[n - 1]!);
-  }
-  await page.getByRole('button', { name: 'Continue' }).click();
-
-  await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
-  await page.getByLabel('Password (again)').fill(PASSWORD);
-  await page.getByRole('button', { name: 'Create wallet' }).click();
-  await expect(page.getByTestId('sync-status')).toContainText('Up to date', { timeout: 20_000 });
-  return words;
-}
+import { PASSWORD, UA, createWallet } from './helpers';
 
 test('create, receive, send, shield, lock and unlock', async ({ page }) => {
   await createWallet(page);

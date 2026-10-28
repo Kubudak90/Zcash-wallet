@@ -11,6 +11,7 @@ export async function createWallet(page: Page): Promise<string[]> {
   await page.getByRole('button', { name: 'Create a new wallet' }).click();
   await page.getByRole('button', { name: 'Reveal words' }).click();
   const words = await page.locator('[data-testid="seed-grid"] .seed-word').allTextContents();
+  expect(words).toHaveLength(24);
   await page.getByLabel('I wrote the words down in order').check();
   await page.getByRole('button', { name: 'Continue' }).click();
   await fillVerification(page, words);

@@ -1,31 +1,10 @@
 import { expect, test, type Page } from '@playwright/test';
 
+import { PASSWORD, UA, createWallet } from './helpers';
+
 // Send and shield flows on the fake engine. The fake wallet holds 1.25 ZEC
 // shielded and 0.50 ZEC transparent after its first sync; sends of 0.0333 and
 // 0.0666 ZEC fail while proving and while broadcasting (src/engine/fake.ts).
-
-const PASSWORD = 'Gizli-Parola-2026';
-// A valid-checksum unified address (example from the WebZjs docs).
-const UA =
-  'u18rakpts0de589sx9dkamcjms3apruqqax9k2s6e7zjxx9vv5kc67pks2trg9d3nrgd5acu8w8arzjjuepakjx38dyxl6ahd948w0mhdt9jxqsntan6px3ysz80s04a87pheg2mqvlzpehrgup7568nfd6ez23xd69ley7802dfvplnfn7c07vlyumcnfjul4pvv630ac336rjhjyak5';
-
-async function createWallet(page: Page) {
-  await page.goto('/');
-  await page.getByRole('button', { name: 'Create a new wallet' }).click();
-  await page.getByRole('button', { name: 'Reveal words' }).click();
-  const words = await page.locator('[data-testid="seed-grid"] .seed-word').allTextContents();
-  await page.getByLabel('I wrote the words down in order').check();
-  await page.getByRole('button', { name: 'Continue' }).click();
-  for (const label of await page.locator('form .field > span').allTextContents()) {
-    const n = Number(label.replace('Word #', ''));
-    await page.getByLabel(label, { exact: true }).fill(words[n - 1]!);
-  }
-  await page.getByRole('button', { name: 'Continue' }).click();
-  await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
-  await page.getByLabel('Password (again)').fill(PASSWORD);
-  await page.getByRole('button', { name: 'Create wallet' }).click();
-  await expect(page.getByTestId('sync-status')).toContainText('Up to date', { timeout: 20_000 });
-}
 
 async function review(page: Page, to: string, amount: string) {
   await page.getByLabel('Recipient address').fill(to);
@@ -95,6 +74,30 @@ test('a failed spend says whether it is safe to try again', async ({ page }) => 
 
   await page.getByRole('button', { name: 'View in history' }).click();
   await expect(page.getByRole('heading', { name: 'Transaction history' })).toBeVisible();
+});
+
+test('spending waits while the wallet is catching up', async ({ page }) => {
+  await createWallet(page);
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await review(page, UA, '0.1');
+  // The send kicks off a pass; 50 new blocks make it a catch-up, held open here.
+  await page.evaluate(() => {
+    (globalThis as { __fakeEngine?: object }).__fakeEngine = { chainGrowth: 50, holdPass: true };
+  });
+  await sendButton(page).click();
+  await expect(page.getByRole('heading', { name: '0.10 ZEC sent' })).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId('sync-status')).toHaveText('Syncing · 50 blocks left');
+
+  await page.getByRole('button', { name: 'New payment' }).click();
+  await review(page, UA, '0.2');
+  await expect(page.getByTestId('spend-wait')).toHaveText(/still syncing \(50 blocks left\)/);
+  await expect(sendButton(page)).toBeDisabled();
+
+  await page.evaluate(() => {
+    (globalThis as { __fakeEngine?: { holdPass?: boolean } }).__fakeEngine!.holdPass = false;
+  });
+  await expect(page.getByTestId('spend-wait')).toHaveCount(0);
+  await expect(sendButton(page)).toBeEnabled();
 });
 
 test('payment links that cannot be paid as asked are refused', async ({ page }) => {

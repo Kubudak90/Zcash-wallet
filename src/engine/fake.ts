@@ -32,8 +32,13 @@ interface FakeKnobs {
   midPassProgress?: boolean;
   /** Answer latestHeight() this many blocks above where sync() stops, like one lightwalletd server ahead of another. */
   tipAhead?: number;
+  /** Keep a pass running until this is cleared, to look at the UI mid-pass. */
+  holdPass?: boolean;
+  /** Blocks mined since the wallet last synced: the tip and where sync() stops both move up. */
+  chainGrowth?: number;
 }
 const knobs = (): FakeKnobs => (globalThis as { __fakeEngine?: FakeKnobs }).__fakeEngine ?? {};
+const chainTip = () => TIP + (knobs().chainGrowth ?? 0);
 
 interface FakeAccount {
   id: number;
@@ -71,7 +76,7 @@ export class FakeEngine implements ZcashEngine {
   }
 
   async latestHeight(): Promise<number> {
-    return TIP + (knobs().tipAhead ?? 0);
+    return chainTip() + (knobs().tipAhead ?? 0);
   }
 
   async detectBirthday(): Promise<number | null> {
@@ -136,12 +141,14 @@ export class FakeEngine implements ZcashEngine {
 
   private async runPass(): Promise<void> {
     const start = new Map(this.accounts.map((a) => [a, a.scanned]));
-    const behind = Math.max(0, ...this.accounts.map((a) => TIP - a.scanned));
-    for (const a of this.accounts) a.tip = TIP;
+    const tip = chainTip();
+    const behind = Math.max(0, ...this.accounts.map((a) => tip - a.scanned));
+    for (const a of this.accounts) a.tip = tip;
+    while (knobs().holdPass) await sleep(50);
     for (const step of knobs().midPassProgress ? [0.25, 0.5, 0.75, 1] : [1]) {
       // Long enough for UI tests to see a restore scan; quick near the tip.
       await sleep(behind > 1000 ? 2500 : 250);
-      for (const [a, from] of start) a.scanned = Math.round(from + (TIP - from) * step);
+      for (const [a, from] of start) a.scanned = Math.round(from + (tip - from) * step);
     }
     for (const a of this.accounts) {
       if (a.funded) continue;
