@@ -121,10 +121,10 @@ index cacd624..4c0380d 100644
  pub mod wallet;
 diff --git a/crates/webzjs-wallet/src/progress.rs b/crates/webzjs-wallet/src/progress.rs
 new file mode 100644
-index 0000000..7c22b2a
+index 0000000..f58a6ff
 --- /dev/null
 +++ b/crates/webzjs-wallet/src/progress.rs
-@@ -0,0 +1,161 @@
+@@ -0,0 +1,163 @@
 +//! Lock-free progress counters for a running sync pass.
 +//!
 +//! `Wallet::sync` holds the database write lock for the whole pass, so every reader
@@ -188,10 +188,12 @@ index 0000000..7c22b2a
 +        self.running.store(true, Relaxed);
 +    }
 +
-+    /// Called when a pass ends (with or without error).
-+    pub fn finish(&self) {
-+        // Every downloaded batch has been scanned by the time `run` returns.
-+        self.scanned.store(self.downloaded.load(Relaxed), Relaxed);
++    /// Called when a pass ends. Only a pass that succeeded has committed every
++    /// batch it downloaded; after an error the counts stay as they were.
++    pub fn finish(&self, ok: bool) {
++        if ok {
++            self.scanned.store(self.downloaded.load(Relaxed), Relaxed);
++        }
 +        self.running.store(false, Relaxed);
 +    }
 +
@@ -287,7 +289,7 @@ index 0000000..7c22b2a
 +    }
 +}
 diff --git a/crates/webzjs-wallet/src/wallet.rs b/crates/webzjs-wallet/src/wallet.rs
-index 025bc09..9cb64ad 100644
+index 025bc09..6e38202 100644
 --- a/crates/webzjs-wallet/src/wallet.rs
 +++ b/crates/webzjs-wallet/src/wallet.rs
 @@ -9,6 +9,7 @@ use tonic::{
@@ -343,7 +345,7 @@ index 025bc09..9cb64ad 100644
          .await
 -        .map_err(Into::into)
 +        .map_err(Into::into);
-+        self.progress.finish();
++        self.progress.finish(result.is_ok());
 +        result
 +    }
 +

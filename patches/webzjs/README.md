@@ -1,8 +1,12 @@
 # WebZjs patches
 
 `scripts/build-webzjs.sh` checks out the pinned WebZjs commit and applies every
-`*.patch` here with `git apply`, in file name order. A patch that does not apply
-stops the build. Each file starts with a description; the diff follows.
+`*.patch` here that is committed to this repository, with `git apply`, in file
+name order. A patch that does not apply stops the build, and so does any
+uncommitted change in this directory, so nothing unreviewed reaches `vendor/`.
+cargo runs with `--locked`: a patch that changes dependencies must also carry
+the matching `Cargo.lock` change. Each file starts with a description; the diff
+follows.
 
 | Patch | What it changes | Used by |
 | --- | --- | --- |
@@ -23,6 +27,7 @@ git add -A && git commit -qm base       # the current patches as one commit
 git diff > ../patches/webzjs/0003-something.patch   # then put a description on top
 ```
 
-The next run of the build script resets `.webzjs/` to the pinned commit and
-applies the patches again, so a patch that only applies on top of local edits
-is caught there.
+Commit the new or edited patch before the next build: the build script refuses
+to run with uncommitted changes here. It then resets `.webzjs/` to the pinned
+commit and applies the patches again, so a patch that only applies on top of
+local edits is caught there.
