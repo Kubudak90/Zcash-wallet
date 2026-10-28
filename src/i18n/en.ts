@@ -171,7 +171,18 @@ export const en: Record<MessageKey, string> = {
   'send.err.link.req':
     'This payment link uses a feature Celari does not support yet, so it cannot be paid. Ask the recipient for a plain address.',
   'send.err.link.memo':
-    'This link asks for a memo, which Celari cannot send yet. Without it the recipient may not be able to match your payment.',
+    'This link asks for a memo, but its address cannot receive one: memos only go to shielded addresses. Ask the recipient for a shielded address.',
+  'send.err.link.invalid':
+    'This payment link is not valid. Celari will not guess what it asks for; ask the recipient for a new link.',
+  'send.memo': 'Memo (optional)',
+  'send.memoHelp': 'Encrypted; only you and the recipient can read it.',
+  'send.memoCount': '{used} / {max} bytes',
+  'send.memoFromLink': 'Memo filled in from the payment link.',
+  'send.memoUnavailable': 'This address cannot receive a memo: memos only travel with payments to shielded addresses.',
+  'send.confirmMemo': 'Memo',
+  'send.err.memo.tooLong':
+    'The memo is too long: at most 512 bytes. Letters such as é or ü take 2 bytes, emoji 4.',
+  'send.err.memo.nul': 'The memo contains an invisible NUL character (usually from a paste). Type it again.',
 
   'shield.title': 'Shield funds',
   'shield.intro': '{amount} ZEC of transparent funds will move to your shielded Orchard balance. The network fee is deducted.',

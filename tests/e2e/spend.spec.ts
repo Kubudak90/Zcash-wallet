@@ -1,3 +1,5 @@
+import { sha256 } from '@noble/hashes/sha256';
+import { base58check, base64urlnopad, bech32m } from '@scure/base';
 import { expect, test, type Page } from '@playwright/test';
 
 import { PASSWORD, UA, createWallet } from './helpers';
@@ -5,6 +7,12 @@ import { PASSWORD, UA, createWallet } from './helpers';
 // Send and shield flows on the fake engine. The fake wallet holds 1.25 ZEC
 // shielded and 0.50 ZEC transparent after its first sync; sends of 0.0333 and
 // 0.0666 ZEC fail while proving and while broadcasting (src/engine/fake.ts).
+
+// Valid-checksum transparent and TEX addresses; neither can receive a memo.
+const T1 = base58check(sha256).encode(new Uint8Array([0x1c, 0xb8, ...new Uint8Array(20).fill(7)]));
+const TEX = bech32m.encode('tex', bech32m.toWords(new Uint8Array(20).fill(7)), false);
+/** A ZIP-321 memo value: base64url of the UTF-8 text, without padding. */
+const linkMemo = (text: string) => base64urlnopad.encode(new TextEncoder().encode(text));
 
 async function review(page: Page, to: string, amount: string) {
   await page.getByLabel('Recipient address').fill(to);
@@ -72,25 +80,39 @@ test('a failed spend says whether it is safe to try again', async ({ page }) => 
   await createWallet(page);
   await page.getByRole('button', { name: 'Send', exact: true }).click();
 
-  // Proving fails: nothing left the wallet, so the retry form stays.
+  // Proving fails: nothing left the wallet, so the retry form stays, and Back keeps the payment.
   await review(page, UA, '0.0333');
   await sendButton(page).click();
   await expect(page.getByText('Nothing was sent. You can try again.')).toBeVisible({ timeout: 10_000 });
   await expect(sendButton(page)).toBeVisible();
+  await page.getByRole('button', { name: /Back/ }).click();
+  await expect(page.getByLabel('Recipient address')).toHaveValue(UA);
+  await expect(page.getByLabel('Amount (ZEC)')).toHaveValue('0.0333');
 
   // Broadcasting fails: the payment may be out, so no retry is offered and no fix is suggested.
-  await page.getByRole('button', { name: /Back/ }).click();
-  await review(page, UA, '0.0666');
+  await page.getByLabel('Amount (ZEC)').fill('0.0666');
+  await page.getByLabel('Memo (optional)').fill('one try only');
+  await page.getByRole('button', { name: 'Review' }).click();
+  await page.getByLabel('Enter your password to confirm').fill(PASSWORD);
   await sendButton(page).click();
   await expect(page.getByText('may have reached the network anyway')).toBeVisible({ timeout: 10_000 });
   await expect(page.getByText('Lower the amount')).toHaveCount(0);
   await expect(page.getByLabel('Enter your password to confirm')).toHaveCount(0);
   await expect(sendButton(page)).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Balance' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'View in history' })).toBeVisible();
+
+  // Back does not hand the same payment back for a second try.
+  await page.getByRole('button', { name: /Back/ }).click();
+  await expect(page.getByRole('heading', { name: 'Send ZEC' })).toBeVisible();
+  await expect(page.getByLabel('Recipient address')).toHaveValue('');
+  await expect(page.getByLabel('Amount (ZEC)')).toHaveValue('');
+  await page.getByLabel('Recipient address').fill(UA);
+  await expect(page.getByLabel('Memo (optional)')).toHaveValue('');
 
   // Like WebZjs, the fake engine stored the transaction before broadcasting it:
   // History shows it at once, and it is saved, so it survives a lock.
-  await page.getByRole('button', { name: 'View in history' }).click();
+  await page.getByRole('button', { name: 'History', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Transaction history' })).toBeVisible();
   const sent = page.getByTestId('history').locator('.tx-sent');
   await expect(sent).toHaveCount(1);
@@ -133,7 +155,10 @@ test('spending waits while the wallet is catching up', async ({ page }) => {
   await expect(page.getByRole('heading', { name: '0.10 ZEC sent' })).toBeVisible({ timeout: 10_000 });
   await expect(page.getByTestId('sync-status')).toHaveText('Syncing · 50 blocks left');
 
+  // The form has the result's title; focus starts it again at the recipient, not on <body>.
   await page.getByRole('button', { name: 'New payment' }).click();
+  await expect(page.getByLabel('Recipient address')).toBeFocused();
+  await expect(page.getByLabel('Recipient address')).toHaveValue('');
   await review(page, UA, '0.2');
   await expect(page.getByTestId('spend-wait')).toHaveText(/still syncing \(50 blocks left\)/);
   await expect(sendButton(page)).toBeDisabled();
@@ -160,15 +185,144 @@ test('payment links that cannot be paid as asked are refused', async ({ page }) 
   await to.fill(`zcash:${UA}?amount=0.3&req-futurefeature=1`);
   await expect(page.getByText('uses a feature Celari does not support')).toBeVisible();
 
-  await to.fill(`zcash:${UA}?amount=0.2&memo=SGk`);
+  // A memo for a transparent address cannot be honoured, so the link is not paid without it.
+  const memoToT1 = `zcash:${T1}?amount=0.2&memo=SGk`;
+  await to.fill(memoToT1);
+  await expect(to).toHaveValue(memoToT1);
   await page.getByRole('button', { name: 'Review' }).click();
-  await expect(to).toHaveAccessibleDescription(/asks for a memo/);
+  await expect(to).toHaveAccessibleDescription(/asks for a memo, but its address cannot receive one/);
+  await expect(confirm).toHaveCount(0);
+
+  // ZIP-321 asks wallets to refuse a malformed link rather than pick one reading of it.
+  for (const link of [
+    `zcash:${UA}?amount=0.1&amount=10`,
+    `zcash:${UA}?address=${T1}&amount=1`,
+    `zcash:${UA}?amount=0.123456789`,
+    `zcash:${UA}?memo=SGk=`,
+  ]) {
+    await to.fill(link);
+    await expect(page.getByText('This payment link is not valid.')).toBeVisible();
+    await expect(page.getByLabel('Amount (ZEC)')).toHaveValue('');
+  }
+  await page.getByRole('button', { name: 'Review' }).click();
   await expect(confirm).toHaveCount(0);
 
   // Typing a link by hand does not wipe it at the colon.
   await to.fill('');
   await to.pressSequentially('zcash:');
   await expect(to).toHaveValue('zcash:');
+});
+
+test('a memo goes with a shielded payment and shows in History', async ({ page }) => {
+  await createWallet(page);
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  const to = page.getByLabel('Recipient address');
+  const memo = page.getByLabel('Memo (optional)');
+  const count = page.getByTestId('memo-count');
+  const unavailable = page.getByText('This address cannot receive a memo');
+
+  // No field until the recipient is known to take a memo.
+  await expect(memo).toHaveCount(0);
+  await to.fill(UA);
+  await expect(count).toHaveText('0 / 512 bytes');
+  await expect(memo).toHaveAccessibleDescription(/only you and the recipient can read it.*0 \/ 512 bytes/);
+
+  // The counter counts bytes: 29 characters, but "ç", "ş" and "ü" take two each.
+  await memo.fill('Fatura #4521 için\nteşekkürler');
+  await expect(count).toHaveText('32 / 512 bytes');
+
+  // Transparent and TEX recipients get a note instead of the field.
+  for (const address of [T1, TEX]) {
+    await to.fill(address);
+    await expect(memo).toHaveCount(0);
+    await expect(unavailable).toBeVisible();
+  }
+  await to.fill(UA);
+  await expect(unavailable).toHaveCount(0);
+  await expect(memo).toHaveValue('Fatura #4521 için\nteşekkürler');
+
+  // Too long is caught before Review, on the field itself.
+  await memo.fill('ş'.repeat(257));
+  await expect(count).toHaveText('514 / 512 bytes');
+  await page.getByLabel('Amount (ZEC)').fill('0.1');
+  await page.getByRole('button', { name: 'Review' }).click();
+  await expect(memo).toBeFocused();
+  await expect(memo).toHaveAttribute('aria-invalid', 'true');
+  await expect(memo).toHaveAccessibleDescription(/too long: at most 512 bytes/);
+  await expect(page.getByRole('heading', { name: 'Confirm sending' })).toHaveCount(0);
+  await memo.fill('a\u0000b');
+  await page.getByRole('button', { name: 'Review' }).click();
+  await expect(memo).toHaveAccessibleDescription(/NUL character/);
+
+  // The confirm screen and the result show the memo; History shows it on the sent payment.
+  await memo.fill('Fatura #4521 için\nteşekkürler');
+  await page.getByRole('button', { name: 'Review' }).click();
+  await expect(page.getByTestId('confirm-memo')).toHaveText('Fatura #4521 için\nteşekkürler');
+  await page.getByLabel('Enter your password to confirm').fill(PASSWORD);
+  await sendButton(page).click();
+  await expect(page.getByRole('heading', { name: '0.10 ZEC sent' })).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId('confirm-memo')).toHaveText('Fatura #4521 için\nteşekkürler');
+  await page.getByRole('button', { name: 'View in history' }).click();
+  await expect(page.getByTestId('history').locator('.tx-sent .tx-memo')).toHaveText('“Fatura #4521 için\nteşekkürler”');
+});
+
+test('a memo typed for a shielded address is not sent to a transparent one', async ({ page }) => {
+  await createWallet(page);
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await page.getByLabel('Recipient address').fill(UA);
+  await page.getByLabel('Memo (optional)').fill('for the shielded address');
+  // The fake engine, like WebZjs, refuses a memo to a transparent address.
+  await review(page, T1, '0.1');
+  await expect(page.getByTestId('confirm-memo')).toHaveCount(0);
+  await sendButton(page).click();
+  await expect(page.getByRole('heading', { name: '0.10 ZEC sent' })).toBeVisible({ timeout: 10_000 });
+  await page.getByRole('button', { name: 'View in history' }).click();
+  await expect(page.getByTestId('history').locator('.tx-sent')).toHaveCount(1);
+  await expect(page.getByTestId('history').locator('.tx-sent .tx-memo')).toHaveCount(0);
+});
+
+test('a payment link fills in its memo, and only for its own recipient', async ({ page }) => {
+  await createWallet(page);
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  const to = page.getByLabel('Recipient address');
+  const amount = page.getByLabel('Amount (ZEC)');
+  const memo = page.getByLabel('Memo (optional)');
+  const amountNote = page.getByText('Amount filled in from the payment link.');
+  const memoNote = page.getByText('Memo filled in from the payment link.');
+
+  await to.fill(`zcash:${UA}?amount=0.25&memo=${linkMemo('Sipariş 7781')}&message=thanks`);
+  await expect(to).toHaveValue(UA);
+  await expect(amount).toHaveValue('0.25');
+  await expect(memo).toHaveValue('Sipariş 7781');
+  await expect(amountNote).toBeVisible();
+  await expect(memoNote).toBeVisible();
+
+  // Max replaces the link's amount, so the note no longer credits the link.
+  await page.getByRole('button', { name: 'Max' }).click();
+  await expect(amount).toHaveValue('1.2499');
+  await expect(amountNote).toHaveCount(0);
+  await expect(memoNote).toBeVisible();
+
+  // Another link replaces what the first one filled in, and keeps what was typed.
+  await amount.fill('0.3');
+  await to.fill(`zcash:${UA}?memo=${linkMemo('Sipariş 9000')}`);
+  await expect(amount).toHaveValue('0.3');
+  await expect(memo).toHaveValue('Sipariş 9000');
+  await to.fill(`zcash:${UA}?amount=0.5`);
+  await expect(amount).toHaveValue('0.5');
+  await expect(memo).toHaveValue('');
+  await expect(memoNote).toHaveCount(0);
+
+  // A different recipient drops the amount a link asked for someone else.
+  await to.fill(T1);
+  await expect(amount).toHaveValue('');
+  await expect(amountNote).toHaveCount(0);
+
+  // The memo link is paid with its memo.
+  await to.fill(`zcash:${UA}?amount=0.2&memo=${linkMemo('Sipariş 7781')}`);
+  await page.getByRole('button', { name: 'Review' }).click();
+  await expect(page.getByTestId('confirm-memo')).toHaveText('Sipariş 7781');
+  await expect(page.getByTestId('confirm-amount')).toHaveText('0.20 ZEC');
 });
 
 test('send form errors are tied to their fields', async ({ page }) => {
@@ -238,8 +392,13 @@ test('Turkish amount entry uses a decimal comma', async ({ page }) => {
   await amount.fill('1.000');
   await expect(page.getByText('= 1,00 ZEC')).toBeVisible();
 
-  await page.getByLabel('Alıcı adresi').fill(`zcash:${UA}?amount=1.001`);
+  await page.getByLabel('Alıcı adresi').fill(`zcash:${UA}?amount=1.001&memo=${linkMemo('Teşekkürler')}`);
   await expect(amount).toHaveValue('1,001');
+  await expect(page.getByLabel('Not (isteğe bağlı)')).toHaveValue('Teşekkürler');
+  await expect(page.getByTestId('memo-count')).toHaveText('13 / 512 bayt');
+  await expect(page.getByText('Not ödeme bağlantısından dolduruldu.')).toBeVisible();
+  await page.getByLabel('Alıcı adresi').fill(T1);
+  await expect(page.getByText('Bu adres not alamaz')).toBeVisible();
 });
 
 test.describe('copying', () => {

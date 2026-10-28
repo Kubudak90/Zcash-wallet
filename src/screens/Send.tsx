@@ -2,9 +2,17 @@ import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { flushSync } from 'react-dom';
 
 import { Notice, Screen } from '../components/ui';
-import { SHIELDING_THRESHOLD_ZATS, TYPICAL_FEE_ZATS, shieldedTotal } from '../engine';
+import { MEMO_MAX_BYTES, SHIELDING_THRESHOLD_ZATS, TYPICAL_FEE_ZATS, shieldedTotal, type SendStage } from '../engine';
 import { useI18n, type MessageKey } from '../i18n';
-import { checkAddress, parsePaymentInput, shortAddress, type AddressCheck, type PaymentRequest } from '../lib/address';
+import {
+  acceptsMemo,
+  checkAddress,
+  parsePaymentInput,
+  shortAddress,
+  type AddressCheck,
+  type PaymentRequest,
+} from '../lib/address';
+import { memoBytes, memoProblem } from '../lib/memo';
 import { AmountError, formatZec, formatZecInput, parseZec } from '../lib/zec';
 import { useController, useWallet } from '../state/wallet';
 import type { Tab } from './Main';
@@ -16,14 +24,20 @@ interface Draft {
   to: string;
   zats: bigint;
   kind: Extract<AddressCheck, { ok: true }>['kind'];
+  /** Only set for a recipient that can take one. */
+  memo?: string;
+}
+
+/** What a payment link filled in, and for which recipient. */
+interface LinkFill {
+  to: string;
+  amount: boolean;
+  memo: boolean;
 }
 
 /** Why a payment link cannot be paid as it stands, or null if it can. */
 function linkProblem(request: PaymentRequest): MessageKey | null {
-  if (request.unsupported) return `send.err.link.${request.unsupported}`;
-  // Paying without the memo can leave the payment unmatched, e.g. an exchange deposit.
-  if (request.memo !== undefined) return 'send.err.link.memo';
-  return null;
+  return request.refused ? `send.err.link.${request.refused}` : null;
 }
 
 function tryParseZec(input: string): bigint | null {
@@ -43,16 +57,21 @@ export function Send({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
   const [step, setStep] = useState<Step>('form');
   const [to, setTo] = useState('');
   const [amount, setAmount] = useState('');
-  const [uriFilled, setUriFilled] = useState(false);
+  const [memo, setMemo] = useState('');
+  const [linkFill, setLinkFill] = useState<LinkFill | null>(null);
   const [toError, setToError] = useState<MessageKey | null>(null);
   const [amountError, setAmountError] = useState<MessageKey | null>(null);
+  const [memoError, setMemoError] = useState<MessageKey | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
 
   const toErrorId = useId();
   const amountErrorId = useId();
   const amountEchoId = useId();
+  const memoErrorId = useId();
+  const memoInfoId = useId();
   const toRef = useRef<HTMLTextAreaElement>(null);
   const amountRef = useRef<HTMLInputElement>(null);
+  const memoRef = useRef<HTMLTextAreaElement>(null);
   const resultRef = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
@@ -64,6 +83,9 @@ export function Send({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
   const shieldable = transparent >= SHIELDING_THRESHOLD_ZATS + TYPICAL_FEE_ZATS;
   const max = available > TYPICAL_FEE_ZATS ? available - TYPICAL_FEE_ZATS : 0n;
   const addressCheck = to.trim() ? checkAddress(to) : null;
+  // null until the recipient is a valid address.
+  const takesMemo = addressCheck?.ok ? acceptsMemo(to) : null;
+  const memoUsed = memoBytes(memo);
   // Echoed under the field: a lone separator is always decimal, so "1.000" reads as 1 ZEC.
   const typedZats = tryParseZec(amount);
 
@@ -81,10 +103,23 @@ export function Send({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
     // A link that cannot be paid as asked stays as typed, so the user sees what it asked for.
     setTo(problem ? value : request.address);
     setToError(problem);
-    if (!problem && request.amountZats !== undefined) {
-      setAmount(formatZecInput(request.amountZats, lang));
-      setAmountError(null);
-      setUriFilled(true);
+    const fills = !problem && (request.amountZats !== undefined || request.memo !== undefined);
+    // What a link filled in was asked for its own recipient: a new link or recipient drops it.
+    if (linkFill && (fills || problem || request.address !== linkFill.to)) {
+      if (linkFill.amount) setAmount('');
+      if (linkFill.memo) setMemo('');
+      setLinkFill(null);
+    }
+    if (fills) {
+      if (request.amountZats !== undefined) {
+        setAmount(formatZecInput(request.amountZats, lang));
+        setAmountError(null);
+      }
+      if (request.memo !== undefined) {
+        setMemo(request.memo);
+        setMemoError(null);
+      }
+      setLinkFill({ to: request.address, amount: request.amountZats !== undefined, memo: request.memo !== undefined });
     }
   }
 
@@ -111,10 +146,16 @@ export function Send({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
       nextAmountError = err instanceof AmountError ? `send.err.amount.${err.code}` : 'send.err.amount.invalid';
     }
 
-    if (check.ok && nextToError === null && zats !== null) {
+    // A recipient that cannot take a memo shows a note instead of the field, so none is sent.
+    const sendMemo = check.ok && acceptsMemo(to) && memo !== '' ? memo : undefined;
+    const problem = sendMemo === undefined ? null : memoProblem(sendMemo);
+    const nextMemoError: MessageKey | null = problem && `send.err.memo.${problem}`;
+
+    if (check.ok && nextToError === null && zats !== null && nextMemoError === null) {
       setToError(null);
       setAmountError(null);
-      setDraft({ to: to.trim(), zats, kind: check.kind });
+      setMemoError(null);
+      setDraft({ to: to.trim(), zats, kind: check.kind, memo: sendMemo });
       setStep('confirm');
       return;
     }
@@ -122,16 +163,29 @@ export function Send({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
     flushSync(() => {
       setToError(nextToError);
       setAmountError(nextAmountError);
+      setMemoError(nextMemoError);
     });
-    (nextToError ? toRef : amountRef).current?.focus();
+    (nextToError ? toRef : nextAmountError ? amountRef : memoRef).current?.focus();
+  }
+
+  function clearForm() {
+    setTo('');
+    setAmount('');
+    setMemo('');
+    setLinkFill(null);
+    setToError(null);
+    setAmountError(null);
+    setMemoError(null);
   }
 
   function newPayment() {
-    setTo('');
-    setAmount('');
-    setDraft(null);
-    setUriFilled(false);
-    setStep('form');
+    flushSync(() => {
+      clearForm();
+      setDraft(null);
+      setStep('form');
+    });
+    // The form has the result's title, so Screen keeps focus where it is: it would fall to <body>.
+    toRef.current?.focus();
   }
 
   if (step === 'done' && draft) {
@@ -170,7 +224,12 @@ export function Send({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
           failureHint={t('send.failedHint')}
           onViewHistory={() => onNavigate('history')}
           run={async (password, onStage) => {
-            await controller.send(draft.to, draft.zats, password, onStage);
+            const stage = (s: SendStage) => {
+              // From here the payment may go out even if the step fails, so Back must not offer it again.
+              if (s === 'broadcasting') clearForm();
+              onStage(s);
+            };
+            await controller.send(draft.to, draft.zats, password, stage, draft.memo);
             setStep('done');
           }}
         />
@@ -225,7 +284,7 @@ export function Send({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
               onChange={(e) => {
                 setAmount(e.target.value);
                 setAmountError(null);
-                setUriFilled(false);
+                setLinkFill((f) => f && { ...f, amount: false });
               }}
             />
             <button
@@ -235,6 +294,7 @@ export function Send({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
               onClick={() => {
                 setAmount(formatZecInput(max, lang));
                 setAmountError(null);
+                setLinkFill((f) => f && { ...f, amount: false });
               }}
             >
               {t('send.max')}
@@ -251,10 +311,49 @@ export function Send({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
             = {fmt(typedZats)} ZEC
           </p>
         )}
-        {uriFilled && <p className="muted small">{t('send.uriFilled')}</p>}
+        {linkFill?.amount && <p className="muted small">{t('send.uriFilled')}</p>}
         <p className="muted small">
           {t('send.available', { amount: fmt(available) })} · {t('send.fee', { amount: fmt(TYPICAL_FEE_ZATS) })}
         </p>
+
+        {takesMemo === true && (
+          <>
+            <label className="field">
+              <span>{t('send.memo')}</span>
+              <textarea
+                ref={memoRef}
+                name="memo"
+                className="memo"
+                rows={2}
+                value={memo}
+                autoComplete="off"
+                // Some browsers' enhanced spell check sends the text to a server.
+                spellCheck={false}
+                aria-invalid={memoError !== null}
+                aria-describedby={[memoError && memoErrorId, memoInfoId].filter(Boolean).join(' ')}
+                onChange={(e) => {
+                  setMemo(e.target.value);
+                  setMemoError(null);
+                  setLinkFill((f) => f && { ...f, memo: false });
+                }}
+              />
+            </label>
+            {memoError && (
+              <p id={memoErrorId} className="field-error">
+                {t(memoError)}
+              </p>
+            )}
+            <p id={memoInfoId} className="memo-info small">
+              <span className="muted">{t('send.memoHelp')}</span>
+              <span className={memoUsed > MEMO_MAX_BYTES ? 'memo-count over' : 'memo-count muted'} data-testid="memo-count">
+                {t('send.memoCount', { used: memoUsed, max: MEMO_MAX_BYTES })}
+              </span>
+            </p>
+            {linkFill?.memo && <p className="muted small">{t('send.memoFromLink')}</p>}
+          </>
+        )}
+        {takesMemo === false && <p className="muted small">{t('send.memoUnavailable')}</p>}
+
         {shieldable && (
           <Notice tone="info">
             <p>{t('send.shieldFirst', { amount: fmt(transparent) })}</p>
@@ -290,6 +389,12 @@ function DraftSummary({ draft }: { draft: Draft }) {
         <dt>{t('send.confirmFee')}</dt>
         <dd>~{fmt(TYPICAL_FEE_ZATS)} ZEC</dd>
       </div>
+      {draft.memo && (
+        <div className="summary-memo">
+          <dt>{t('send.confirmMemo')}</dt>
+          <dd data-testid="confirm-memo">{draft.memo}</dd>
+        </div>
+      )}
     </dl>
   );
 }
