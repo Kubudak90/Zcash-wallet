@@ -3,6 +3,48 @@ import QRCode from 'qrcode';
 
 import { useI18n, type Lang } from '../i18n';
 import { passwordStrength, type PasswordStrength } from '../lib/vault';
+import { formatZec } from '../lib/zec';
+import { useController, useWallet } from '../state/wallet';
+
+/** Shown in place of an amount while balances are hidden. */
+export const HIDDEN_AMOUNT = '••••';
+
+/**
+ * The "hide balances" setting. `fmt` formats an amount for running text (a
+ * translated sentence), or gives HIDDEN_AMOUNT while balances are hidden.
+ * Use it, or <Amount>, for balances and history only: where a spend is
+ * confirmed or its result shown, the real amount always shows.
+ */
+export function useHideBalances(): { hidden: boolean; fmt: (zats: bigint) => string; toggle: () => void } {
+  const { lang } = useI18n();
+  const controller = useController();
+  const { settings } = useWallet();
+  const hidden = settings.hideBalances;
+  return {
+    hidden,
+    fmt: (zats) => (hidden ? HIDDEN_AMOUNT : formatZec(zats, { locale: lang })),
+    toggle: () => void controller.saveSettings({ ...settings, hideBalances: !hidden }),
+  };
+}
+
+/**
+ * An amount in ZEC, without the unit, masked while balances are hidden;
+ * screen readers then hear "amount hidden" rather than the dots. `signed`
+ * adds "+" to incoming amounts (formatZec writes the minus) and keeps the
+ * sign when masked: a history row says Sent or Received anyway.
+ */
+export function Amount({ zats, signed = false }: { zats: bigint; signed?: boolean }) {
+  const { t } = useI18n();
+  const { hidden, fmt } = useHideBalances();
+  const sign = signed && zats > 0n ? '+' : signed && hidden && zats < 0n ? '-' : '';
+  if (!hidden) return <>{sign + fmt(zats)}</>;
+  return (
+    <>
+      <span aria-hidden="true">{sign + HIDDEN_AMOUNT}</span>
+      <span className="visually-hidden">{t('common.amountHidden')}</span>
+    </>
+  );
+}
 
 export function Screen({ title, children, onBack }: { title?: string; children: ReactNode; onBack?: () => void }) {
   const { t, lang } = useI18n();

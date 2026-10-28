@@ -11,6 +11,7 @@ export const tr = {
   'common.details': 'Ayrıntılar',
   'common.genericError': 'Bir şeyler ters gitti.',
   'common.viewHistory': 'Geçmişte gör',
+  'common.amountHidden': 'tutar gizlendi',
 
   'boot.loading': 'Zcash motoru hazırlanıyor…',
   'boot.errorTitle': 'Celari başlatılamadı',
@@ -99,6 +100,7 @@ export const tr = {
   'sync.firstSyncNote': 'Eşitleme sürüyor. Bitene kadar bakiye eksik görünebilir.',
 
   'home.total': 'Toplam bakiye',
+  'home.hideBalances': 'Bakiyeleri gizle',
   'home.shielded': 'Gizli',
   'home.shieldedHelp': 'Orchard + Sapling. Tutar ve taraflar zincirde görünmez.',
   'home.transparent': 'Şeffaf',

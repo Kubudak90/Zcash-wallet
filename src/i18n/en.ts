@@ -11,6 +11,7 @@ export const en: Record<MessageKey, string> = {
   'common.details': 'Details',
   'common.genericError': 'Something went wrong.',
   'common.viewHistory': 'View in history',
+  'common.amountHidden': 'amount hidden',
 
   'boot.loading': 'Preparing the Zcash engine…',
   'boot.errorTitle': 'Celari could not start',
@@ -98,6 +99,7 @@ export const en: Record<MessageKey, string> = {
   'sync.firstSyncNote': 'Sync in progress. Your balance may be incomplete until it finishes.',
 
   'home.total': 'Total balance',
+  'home.hideBalances': 'Hide balances',
   'home.shielded': 'Shielded',
   'home.shieldedHelp': 'Orchard + Sapling. Amounts and parties are hidden on chain.',
   'home.transparent': 'Transparent',
