@@ -6,8 +6,8 @@ import { syncProgress } from './birthday';
 
 /**
  * A wallet more than this many blocks behind the network tip is shown as
- * syncing. Steady-state passes (every 30 s, one block per ~75 s) start 0–3
- * blocks behind and keep showing "up to date".
+ * syncing. Steady-state passes (every 30 s; a block every ~75 s, ~25 s from
+ * NU7 on) start 0–3 blocks behind and keep showing "up to date".
  */
 export const CATCH_UP_BLOCKS = 10;
 
