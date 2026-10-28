@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { useI18n, type MessageKey } from '../i18n';
-import { syncProgress } from '../lib/birthday';
+import { useI18n, type Lang, type MessageKey, type Translate } from '../i18n';
+import { syncView, type SyncView } from '../lib/syncView';
 import { useController, useWallet } from '../state/wallet';
 import { History } from './History';
 import { Home } from './Home';
@@ -20,41 +20,46 @@ const NAV: { tab: Exclude<Tab, 'shield'>; label: MessageKey; icon: string }[] = 
   { tab: 'settings', label: 'nav.settings', icon: '⚙' },
 ];
 
-export function useSyncPercent(): number | null {
-  const { summary, meta } = useWallet();
-  if (!summary || !meta) return null;
-  return Math.floor(syncProgress(meta.birthday, summary.scannedHeight, summary.tipHeight) * 100);
+export function useSyncView(): SyncView {
+  const { sync, summary, meta } = useWallet();
+  return syncView(sync, summary, meta?.birthday ?? null);
 }
 
-function SyncPill() {
-  const { t } = useI18n();
-  const { sync, summary } = useWallet();
-  const pct = useSyncPercent();
-
-  let label: string;
-  let tone: string;
-  if (sync.status === 'error') {
-    label = t('sync.error');
-    tone = 'error';
-  } else if (pct !== null && pct < 100) {
-    label = t('sync.syncing', { pct });
-    tone = 'busy';
-  } else if (summary && sync.status !== 'starting') {
-    label = t('sync.upToDate', { height: summary.tipHeight.toLocaleString() });
-    tone = 'ok';
-  } else {
-    label = t('sync.starting');
-    tone = 'busy';
+/** The indicator's text, shared by the top-bar pill and the Home progress bar. */
+export function syncLabel(view: SyncView, t: Translate, lang: Lang): string {
+  const n = (x: number) => x.toLocaleString(lang === 'tr' ? 'tr-TR' : 'en-US');
+  switch (view.kind) {
+    case 'error':
+      return t('sync.error');
+    case 'syncing':
+      return t('sync.syncing', { blocks: n(view.blocksLeft) });
+    case 'upToDate':
+      return t('sync.upToDate', { height: n(view.height) });
+    case 'connecting':
+      return t('sync.starting');
   }
+}
+
+const SYNC_TONE: Record<SyncView['kind'], string> = {
+  connecting: 'busy',
+  error: 'error',
+  syncing: 'busy',
+  upToDate: 'ok',
+};
+
+function SyncPill() {
+  const { t, lang } = useI18n();
+  const { sync } = useWallet();
+  const view = useSyncView();
   return (
     <span
-      className={`pill pill-${tone}`}
+      className={`pill pill-${SYNC_TONE[view.kind]}`}
       role="status"
       data-testid="sync-status"
       data-sync={sync.status}
       title={sync.error ?? undefined}
     >
-      {label}
+      {syncLabel(view, t, lang)}
     </span>
   );
 }

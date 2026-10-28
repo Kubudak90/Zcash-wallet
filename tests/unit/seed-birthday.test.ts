@@ -126,7 +126,7 @@ describe('i18n', () => {
   });
 
   it('interpolates variables', () => {
-    expect(translate('tr', 'sync.syncing', { pct: 42 })).toBe('Eşitleniyor %42');
-    expect(translate('en', 'sync.syncing', { pct: 42 })).toBe('Syncing 42%');
+    expect(translate('tr', 'sync.syncing', { blocks: '47.654' })).toBe('Eşitleniyor · 47.654 blok kaldı');
+    expect(translate('en', 'sync.syncing', { blocks: '47,654' })).toBe('Syncing · 47,654 blocks left');
   });
 });

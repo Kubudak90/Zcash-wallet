@@ -1,0 +1,85 @@
+// What the sync indicator shows, derived from the controller's sync state and
+// the wallet summary. Kept pure so its rules (and the "no flicker" guarantee)
+// can be unit-tested.
+
+import { syncProgress } from './birthday';
+
+/**
+ * A wallet more than this many blocks behind the network tip is shown as
+ * syncing. Steady-state passes (every 30 s, one block per ~75 s) start 0–3
+ * blocks behind and keep showing "up to date".
+ */
+export const CATCH_UP_BLOCKS = 10;
+
+export type SyncStatus = 'starting' | 'syncing' | 'idle' | 'error';
+
+/** Heights read just before a pass, while the engine could still answer. */
+export interface CatchUp {
+  /** The wallet's fully scanned height. */
+  from: number;
+  /** The network tip (lightwalletd GetLatestBlock). */
+  to: number;
+}
+
+export interface SyncInfo {
+  status: SyncStatus;
+  /** The last pass's error; it stands through a retry until the server answers again. */
+  error: string | null;
+  /**
+   * Set while a pass that started far behind the network runs. WebZjs keeps
+   * its database locked for the whole pass, so the summary cannot say this
+   * until the pass ends; the heights are read just before it starts.
+   */
+  catchUp: CatchUp | null;
+  /** The highest network tip read so far, kept across passes. */
+  networkTip: number | null;
+}
+
+export type SyncView =
+  | { kind: 'connecting' }
+  | { kind: 'error' }
+  // `pct` is null while the engine reports no progress mid-pass, as with WebZjs.
+  | { kind: 'syncing'; blocksLeft: number; pct: number | null }
+  | { kind: 'upToDate'; height: number };
+
+export function catchUpFor(scannedHeight: number, networkTip: number): CatchUp | null {
+  return networkTip - scannedHeight > CATCH_UP_BLOCKS ? { from: scannedHeight, to: networkTip } : null;
+}
+
+const percent = (from: number, scanned: number, to: number) => Math.floor(syncProgress(from, scanned, to) * 100);
+
+export function syncView(
+  sync: SyncInfo,
+  summary: { scannedHeight: number; tipHeight: number } | null,
+  birthday: number | null,
+): SyncView {
+  if (sync.status === 'error' || sync.error !== null) return { kind: 'error' };
+
+  if (sync.catchUp) {
+    const { from, to } = sync.catchUp;
+    const scanned = summary?.scannedHeight ?? from;
+    // WebZjs answers no summary until the pass ends, so the gap stays as measured.
+    if (scanned <= from) return { kind: 'syncing', blocksLeft: to - from, pct: null };
+    // Within reach of the target the pass is done scanning, even while the
+    // wallet is still being saved; lightwalletd servers can be a block apart.
+    if (to - scanned > CATCH_UP_BLOCKS) {
+      return { kind: 'syncing', blocksLeft: to - scanned, pct: percent(from, scanned, to) };
+    }
+  }
+  if (!summary) return { kind: 'connecting' };
+
+  // The wallet's own record of the tip can be newer than the last reading.
+  const tip = Math.max(summary.tipHeight, sync.networkTip ?? 0);
+  const behind = tip - summary.scannedHeight;
+  if (behind > CATCH_UP_BLOCKS) {
+    const pct = birthday === null ? null : percent(birthday, summary.scannedHeight, tip);
+    return { kind: 'syncing', blocksLeft: behind, pct };
+  }
+  // Below the birthday no pass has finished yet (WebZjs reports birthday - 1).
+  if (birthday !== null && summary.scannedHeight < birthday) return { kind: 'connecting' };
+  // "Up to date" needs word from the network: a finished pass, or a tip read for this one.
+  if (sync.status === 'idle' || (sync.status === 'syncing' && sync.networkTip !== null)) {
+    return { kind: 'upToDate', height: tip };
+  }
+  return { kind: 'connecting' };
+}

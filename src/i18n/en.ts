@@ -90,7 +90,7 @@ export const en: Record<MessageKey, string> = {
   'nav.lock': 'Lock',
 
   'sync.starting': 'Connecting…',
-  'sync.syncing': 'Syncing {pct}%',
+  'sync.syncing': 'Syncing · {blocks} blocks left',
   'sync.upToDate': 'Up to date · block {height}',
   'sync.error': 'Connection problem, will retry',
   'sync.firstSyncNote': 'Sync in progress. Your balance may be incomplete until it finishes.',

@@ -90,7 +90,7 @@ export const tr = {
   'nav.lock': 'Kilitle',
 
   'sync.starting': 'Ağa bağlanılıyor…',
-  'sync.syncing': 'Eşitleniyor %{pct}',
+  'sync.syncing': 'Eşitleniyor · {blocks} blok kaldı',
   'sync.upToDate': 'Güncel · blok {height}',
   'sync.error': 'Bağlantı sorunu, yeniden denenecek',
   'sync.firstSyncNote': 'Eşitleme sürüyor. Bitene kadar bakiye eksik görünebilir.',
