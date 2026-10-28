@@ -155,6 +155,8 @@ test('keyboard focus is never hidden under the top bar or the tab bar', async ({
 test('the top bar keeps Lock on screen at 320px, in both languages', async ({ page }) => {
   await createWallet(page);
   // Where everything fits on one line, the sync pill sits next to Lock, not halfway to the brand.
+  // DejaVu Sans, the wide fallback font on Linux CI runners, is the case that has to fit.
+  await page.addStyleTag({ content: '.topbar, .topbar * { font-family: "DejaVu Sans", sans-serif !important; }' });
   for (const width of [412, 360]) {
     await page.setViewportSize({ width, height: 640 });
     const pill = (await page.getByTestId('sync-status').boundingBox())!;
@@ -162,6 +164,8 @@ test('the top bar keeps Lock on screen at 320px, in both languages', async ({ pa
     expect(lock.y, `one line at ${width}px`).toBeLessThan(pill.y + pill.height);
     expect(lock.x - (pill.x + pill.width), `pill to Lock at ${width}px`).toBeLessThanOrEqual(12);
   }
+  // Narrow, only the logo shows, but the name is still there for screen readers.
+  await expect(page.locator('.topbar-brand')).toHaveText('Celari');
   await page.setViewportSize({ width: 320, height: 640 });
   for (const [language, lock, settings, home] of [
     ['English', 'Lock', 'Settings', 'Balance'],
