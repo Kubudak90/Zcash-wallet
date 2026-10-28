@@ -33,7 +33,7 @@ async function restoreFromThisMonth(page: Page, lang: 'en' | 'tr' = 'en'): Promi
 }
 
 /** Switches on behaviour of the fake engine that WebZjs does not show today. */
-async function fakeEngine(page: Page, knobs: { midPassProgress?: boolean; tipAhead?: number }) {
+async function fakeEngine(page: Page, knobs: { midPassProgress?: boolean; passCounters?: boolean; tipAhead?: number }) {
   await page.addInitScript((k) => {
     (window as unknown as { __fakeEngine: typeof k }).__fakeEngine = k;
   }, knobs);
@@ -42,8 +42,8 @@ async function fakeEngine(page: Page, knobs: { midPassProgress?: boolean; tipAhe
 test('a restore shows how many blocks are left, then up to date', async ({ page }) => {
   const birthday = await restoreFromThisMonth(page);
   const status = page.getByTestId('sync-status');
-  // Like WebZjs, the fake engine reports no progress mid-pass: the gap stays as
-  // measured before the pass (WebZjs starts at birthday - 1).
+  // Like WebZjs without its pass counters, the fake engine reports no progress
+  // mid-pass: the gap stays as measured before the pass (WebZjs starts at birthday - 1).
   const label = `Syncing · ${en(TIP - (birthday - 1))} blocks left`;
   await expect(status).toHaveText(label);
   await expect(status).toHaveAttribute('data-sync', 'syncing');
@@ -114,6 +114,51 @@ test('an engine that reports progress mid-pass fills the bar and counts down', a
     .poll(async () => Number((await read()).pill.replace(/\D/g, '') || Infinity), { timeout: 10_000 })
     .toBeLessThan(left);
   await expect(status).toHaveText(`Up to date · block ${en(TIP)}`, { timeout: 20_000 });
+  await expect(page.getByRole('progressbar')).toHaveCount(0);
+});
+
+test('pass counters move the bar while the summary waits for the pass', async ({ page }) => {
+  // Like WebZjs with patches/webzjs/0001-sync-progress.patch: summary() only
+  // answers once the pass ends, syncProgress() answers at once.
+  await fakeEngine(page, { passCounters: true });
+  const birthday = await restoreFromThisMonth(page);
+  const gap = TIP - (birthday - 1);
+  const status = page.getByTestId('sync-status');
+  await expect(status).toHaveText(`Syncing · ${en(gap)} blocks left`);
+  // Record every state of the bar and the pill until the pass ends.
+  await page.evaluate(() => {
+    const seen: string[] = [];
+    (window as unknown as { seen: string[] }).seen = seen;
+    const record = () => {
+      const bar = document.querySelector('[role="progressbar"]');
+      const pill = document.querySelector('[data-testid="sync-status"]')!.textContent!;
+      seen.push(`${bar?.getAttribute('aria-valuenow') ?? ''}|${bar?.querySelector('span')?.style.width ?? ''}|${pill}`);
+    };
+    record();
+    new MutationObserver(record).observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true });
+  });
+  await expect(status).toHaveText(`Up to date · block ${en(TIP)}`, { timeout: 20_000 });
+
+  const seen = await page.evaluate(() => (window as unknown as { seen: string[] }).seen);
+  const counting = seen
+    .map((s) => s.split('|') as [string, string, string])
+    .filter(([pct]) => pct !== '')
+    .map(([pct, width, pill]) => ({ pct: Number(pct), width, pill, left: Number(pill.replace(/\D/g, '')) }));
+  // 0% when the counters first answer, then at least two steps up, never 100%.
+  const pcts = [...new Set(counting.map((c) => c.pct))];
+  expect(pcts[0]).toBe(0);
+  expect(pcts.filter((p) => p > 0).length).toBeGreaterThanOrEqual(2);
+  for (let i = 1; i < counting.length; i++) {
+    expect(counting[i]!.pct).toBeGreaterThanOrEqual(counting[i - 1]!.pct);
+    expect(counting[i]!.left).toBeLessThanOrEqual(counting[i - 1]!.left);
+  }
+  for (const c of counting) {
+    expect(c.pct).toBeLessThanOrEqual(99);
+    expect(c.width).toBe(`${c.pct}%`);
+    expect(c.pill).toBe(`Syncing · ${en(c.left)} blocks left`);
+    // The count and the bar agree: a percentage of the measured gap.
+    expect(Math.floor(((gap - c.left) / gap) * 100)).toBe(c.pct);
+  }
   await expect(page.getByRole('progressbar')).toHaveCount(0);
 });
 

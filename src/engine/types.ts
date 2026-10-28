@@ -47,6 +47,20 @@ export interface SpendAuthority {
   onStage?: (stage: SendStage) => void;
 }
 
+/**
+ * Counters for the running sync pass, in blocks of that pass. Engines that keep
+ * their database locked for a whole pass (WebZjs) cannot report progress
+ * through summary(); these counters answer mid-pass.
+ */
+export interface SyncProgress {
+  /** False once the pass has ended; the counts then describe that pass. */
+  running: boolean;
+  /** Blocks the scanner has reached (trial decryption under way or done). */
+  visited: number;
+  /** Blocks whose batch is scanned and committed to the wallet database. */
+  scanned: number;
+}
+
 export interface ZcashEngine {
   /** Loads the wasm runtime and connects to the lightwalletd proxy. Call once per page. */
   init(serverUrl: string): Promise<void>;
@@ -63,6 +77,8 @@ export interface ZcashEngine {
   exportDb(): Promise<Uint8Array>;
 
   sync(): Promise<void>;
+  /** Progress of the running pass, readable while sync() runs. Optional: engines that cannot tell leave it out. */
+  syncProgress?(): Promise<SyncProgress | null>;
   summary(account: number): Promise<Summary | null>;
   addresses(account: number): Promise<Addresses>;
   history(account: number, limit: number): Promise<HistoryItem[]>;

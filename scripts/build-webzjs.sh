@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Builds the WebZjs wallet and keys wasm packages from source into vendor/.
 #
-# WebZjs is pinned to a reviewed commit; bump WEBZJS_COMMIT deliberately and
+# WebZjs is pinned to a reviewed commit, with the patches in patches/webzjs/
+# applied on top; bump WEBZJS_COMMIT deliberately, refresh the patches and
 # re-run the full test suite (including tests/e2e-real) when you do.
 #
 # Needs: git, rustup, clang >= 17 and wasm-pack. The Rust nightly toolchain
@@ -23,7 +24,23 @@ if [ ! -d "$SRC/.git" ]; then
 fi
 git -C "$SRC" fetch -q --depth 1 origin "$WEBZJS_COMMIT"
 git -C "$SRC" checkout -q --force FETCH_HEAD
+# Files a previous run's patches added are untracked, so checkout leaves them;
+# drop them too (ignored files such as target/ stay) so the patches apply again.
+git -C "$SRC" clean -q -d --force
 echo "WebZjs at $(git -C "$SRC" rev-parse HEAD)"
+
+# Celari's patches on top of the pinned commit (see patches/webzjs/README.md),
+# applied in file name order. git apply changes nothing unless the whole patch
+# applies, and a patch that does not apply stops the build.
+patches=("$ROOT"/patches/webzjs/*.patch)
+[ -f "${patches[0]}" ] || { echo "no patches found in $ROOT/patches/webzjs" >&2; exit 1; }
+for patch in "${patches[@]}"; do
+  echo "Applying ${patch#"$ROOT/"}"
+  git -C "$SRC" apply "$patch" || {
+    echo "error: ${patch#"$ROOT/"} does not apply to WebZjs $WEBZJS_COMMIT" >&2
+    exit 1
+  }
+done
 
 channel="$(sed -n 's/^channel *= *"\(.*\)"/\1/p' "$SRC/rust-toolchain.toml")"
 rustup toolchain install "$channel" --profile minimal --component rust-src --target wasm32-unknown-unknown

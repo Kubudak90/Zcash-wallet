@@ -1,0 +1,356 @@
+Sync progress counters and a nested-read fix for get_transaction_history
+
+Applies to ChainSafe/WebZjs a50df944c32243cb8da9f86e7d52cb65ac926439
+(scripts/build-webzjs.sh applies patches/webzjs/*.patch in order).
+
+1. WebWallet.sync_progress(): lock-free counters for the running sync pass.
+   Wallet::sync holds the database write lock for the whole pass, so
+   get_wallet_summary cannot answer until it ends. A BlockCache wrapper
+   (src/progress.rs) counts blocks as zcash_client_backend::sync::run moves
+   them through insert (downloaded), the scanner's first walk (visited) and
+   the next batch's insert (scanned = committed). sync_progress() only reads
+   atomics, so it answers mid-pass. Adds async-trait (already in Cargo.lock
+   through zcash_client_memory) to webzjs-wallet's dependencies.
+
+2. get_transaction_history took db.read() and, holding it, called
+   get_wallet_summary(), which takes db.read() again. tokio's RwLock is
+   write-preferring: if sync asks for the write lock between the two reads,
+   the second read queues behind the writer, the writer waits for the first
+   read, and every later wallet call hangs. The fix reuses the held guard.
+
+diff --git a/Cargo.lock b/Cargo.lock
+index 0748ff4..3584ea1 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -3360,6 +3360,7 @@ dependencies = [
+ name = "webzjs-wallet"
+ version = "0.1.0"
+ dependencies = [
++ "async-trait",
+  "bip0039",
+  "bip32",
+  "console_error_panic_hook",
+diff --git a/crates/webzjs-wallet/Cargo.toml b/crates/webzjs-wallet/Cargo.toml
+index 865fd2b..7abc215 100644
+--- a/crates/webzjs-wallet/Cargo.toml
++++ b/crates/webzjs-wallet/Cargo.toml
+@@ -84,6 +84,7 @@ bip0039 = "0.12.0"
+ secrecy = "0.8.0"
+ futures-util = "0.3.30"
+ nonempty = "0.11"
++async-trait = "0.1"
+ hex = "0.4.3"
+ tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+ tracing = "0.1.40"
+diff --git a/crates/webzjs-wallet/src/bindgen/wallet.rs b/crates/webzjs-wallet/src/bindgen/wallet.rs
+index 7b29651..9501706 100644
+--- a/crates/webzjs-wallet/src/bindgen/wallet.rs
++++ b/crates/webzjs-wallet/src/bindgen/wallet.rs
+@@ -312,6 +312,25 @@ impl WebWallet {
+         Ok(self.inner.get_wallet_summary().await?.map(Into::into))
+     }
+ 
++    /// Progress of the running (or most recent) `sync` pass.
++    ///
++    /// Unlike `get_wallet_summary`, this never waits for the wallet database lock, so it
++    /// answers immediately while a sync pass is running. Counts are blocks in this pass:
++    /// `downloaded` (fetched from lightwalletd), `visited` (handed to the scanner, i.e.
++    /// trial decryption started), `scanned` (batch scanned and committed). `scanned_to`
++    /// is the highest block height visited so far.
++    pub fn sync_progress(&self) -> SyncProgress {
++        let s = self.inner.sync_progress();
++        SyncProgress {
++            running: s.running,
++            downloaded: s.downloaded,
++            visited: s.visited,
++            revisited: s.revisited,
++            scanned: s.scanned,
++            scanned_to: s.scanned_to,
++        }
++    }
++
+     /// Create a new transaction proposal to send funds to a given address
+     ///
+     /// Not this does NOT sign, generate a proof, or send the transaction. It will only craft the proposal which designates how notes from this account can be spent to realize the requested transfer.
+@@ -577,10 +596,11 @@ impl WebWallet {
+         offset: Option<u32>,
+     ) -> Result<super::transaction_history::TransactionHistoryResponse, Error> {
+         let db = self.inner.db.read().await;
+-        let chain_tip_height = self
+-            .inner
+-            .get_wallet_summary()
+-            .await
++        // Use the guard we already hold. A second `db.read()` here would queue behind any
++        // writer (e.g. `sync`) that asked for the lock in between, and that writer waits for
++        // this guard: tokio's RwLock is write-preferring, so that is a deadlock.
++        let chain_tip_height = db
++            .get_wallet_summary(self.inner.min_confirmations)
+             .ok()
+             .flatten()
+             .map(|s| s.chain_tip_height().into());
+@@ -663,6 +683,18 @@ impl WebWallet {
+     }
+ }
+ 
++/// Snapshot of a sync pass, see `WebWallet::sync_progress`.
++#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
++#[wasm_bindgen(inspectable)]
++pub struct SyncProgress {
++    pub running: bool,
++    pub downloaded: u32,
++    pub visited: u32,
++    pub revisited: u32,
++    pub scanned: u32,
++    pub scanned_to: u32,
++}
++
+ #[derive(Debug, Serialize, Deserialize)]
+ #[wasm_bindgen(inspectable)]
+ pub struct WalletSummary {
+diff --git a/crates/webzjs-wallet/src/lib.rs b/crates/webzjs-wallet/src/lib.rs
+index cacd624..4c0380d 100644
+--- a/crates/webzjs-wallet/src/lib.rs
++++ b/crates/webzjs-wallet/src/lib.rs
+@@ -8,6 +8,7 @@ pub mod bindgen;
+ 
+ mod error;
+ pub mod init;
++pub mod progress;
+ pub mod validation;
+ 
+ pub mod wallet;
+diff --git a/crates/webzjs-wallet/src/progress.rs b/crates/webzjs-wallet/src/progress.rs
+new file mode 100644
+index 0000000..7c22b2a
+--- /dev/null
++++ b/crates/webzjs-wallet/src/progress.rs
+@@ -0,0 +1,161 @@
++//! Lock-free progress counters for a running sync pass.
++//!
++//! `Wallet::sync` holds the database write lock for the whole pass, so every reader
++//! (`get_wallet_summary`, `get_transaction_history`, ...) waits until the pass ends and
++//! the UI cannot show progress. The sync loop in `zcash_client_backend::sync::run` has no
++//! progress callback, but it drives its block cache in a fixed order per batch:
++//! `insert` (download done) -> `with_blocks` twice (trial decryption, then note tracking)
++//! -> `delete` (lazy, awaited at the end of the pass). Wrapping the cache lets us count
++//! blocks as they move through those steps, with atomics any thread may read without
++//! touching the wallet database lock.
++
++use std::sync::atomic::{AtomicBool, AtomicU32, Ordering::Relaxed};
++use std::sync::Arc;
++
++use async_trait::async_trait;
++use zcash_client_backend::data_api::chain::{error::Error as ChainError, BlockCache, BlockSource};
++use zcash_client_backend::data_api::scanning::ScanRange;
++use zcash_client_backend::proto::compact_formats::CompactBlock;
++use zcash_protocol::consensus::BlockHeight;
++
++/// Counters for the current (or most recent) sync pass. All methods are lock-free.
++#[derive(Debug, Default)]
++pub struct SyncCounters {
++    running: AtomicBool,
++    /// Compact blocks downloaded into the block cache during this pass.
++    downloaded: AtomicU32,
++    /// Blocks handed to the scanner so far (each block counted once, on its first visit).
++    visited: AtomicU32,
++    /// Blocks seen again on the scanner's second walk of a batch (note tracking, after
++    /// trial decryption); diagnostic, to see where a batch spends its time.
++    revisited: AtomicU32,
++    /// Blocks whose batch has been scanned and committed to the wallet database.
++    scanned: AtomicU32,
++    /// Highest block height visited during this pass (0 if none yet).
++    scanned_to: AtomicU32,
++    /// Highest height visited since the last batch download. `scan_cached_blocks` walks
++    /// each batch twice, so a block only counts when it exceeds this.
++    batch_max: AtomicU32,
++}
++
++/// A copy of the counters at one instant.
++#[derive(Debug, Clone, Copy, PartialEq, Eq)]
++pub struct SyncSnapshot {
++    pub running: bool,
++    pub downloaded: u32,
++    pub visited: u32,
++    pub revisited: u32,
++    pub scanned: u32,
++    pub scanned_to: u32,
++}
++
++impl SyncCounters {
++    /// Called when a pass starts: clears the counters of the previous pass.
++    pub fn start(&self) {
++        self.downloaded.store(0, Relaxed);
++        self.visited.store(0, Relaxed);
++        self.revisited.store(0, Relaxed);
++        self.scanned.store(0, Relaxed);
++        self.scanned_to.store(0, Relaxed);
++        self.batch_max.store(0, Relaxed);
++        self.running.store(true, Relaxed);
++    }
++
++    /// Called when a pass ends (with or without error).
++    pub fn finish(&self) {
++        // Every downloaded batch has been scanned by the time `run` returns.
++        self.scanned.store(self.downloaded.load(Relaxed), Relaxed);
++        self.running.store(false, Relaxed);
++    }
++
++    fn on_insert(&self, blocks: &[CompactBlock]) {
++        // `sync::run` is sequential: the previous batch was scanned and committed before
++        // this one was fetched, so everything downloaded so far is now scanned.
++        self.scanned.store(self.downloaded.load(Relaxed), Relaxed);
++        self.downloaded.fetch_add(blocks.len() as u32, Relaxed);
++        let first = blocks.iter().map(|b| u32::from(b.height())).min().unwrap_or(0);
++        self.batch_max.store(first.saturating_sub(1), Relaxed);
++    }
++
++    fn on_block(&self, height: BlockHeight) {
++        let h = u32::from(height);
++        if h > self.batch_max.load(Relaxed) {
++            self.batch_max.store(h, Relaxed);
++            self.visited.fetch_add(1, Relaxed);
++            self.scanned_to.fetch_max(h, Relaxed);
++        } else {
++            self.revisited.fetch_add(1, Relaxed);
++        }
++    }
++
++    pub fn snapshot(&self) -> SyncSnapshot {
++        SyncSnapshot {
++            running: self.running.load(Relaxed),
++            downloaded: self.downloaded.load(Relaxed),
++            visited: self.visited.load(Relaxed),
++            revisited: self.revisited.load(Relaxed),
++            scanned: self.scanned.load(Relaxed),
++            scanned_to: self.scanned_to.load(Relaxed),
++        }
++    }
++}
++
++/// A `BlockCache` that forwards to another cache and reports progress to `SyncCounters`.
++pub struct ProgressCache<C> {
++    inner: C,
++    counters: Arc<SyncCounters>,
++}
++
++impl<C> ProgressCache<C> {
++    pub fn new(inner: C, counters: Arc<SyncCounters>) -> Self {
++        Self { inner, counters }
++    }
++}
++
++impl<C: BlockSource> BlockSource for ProgressCache<C> {
++    type Error = C::Error;
++
++    fn with_blocks<F, WalletErrT>(
++        &self,
++        from_height: Option<BlockHeight>,
++        limit: Option<usize>,
++        mut with_block: F,
++    ) -> Result<(), ChainError<WalletErrT, Self::Error>>
++    where
++        F: FnMut(CompactBlock) -> Result<(), ChainError<WalletErrT, Self::Error>>,
++    {
++        self.inner.with_blocks(from_height, limit, |block| {
++            let height = block.height();
++            with_block(block)?;
++            self.counters.on_block(height);
++            Ok(())
++        })
++    }
++}
++
++#[async_trait]
++impl<C> BlockCache for ProgressCache<C>
++where
++    C: BlockCache,
++    C::Error: Send,
++{
++    fn get_tip_height(&self, range: Option<&ScanRange>) -> Result<Option<BlockHeight>, Self::Error> {
++        self.inner.get_tip_height(range)
++    }
++
++    async fn read(&self, range: &ScanRange) -> Result<Vec<CompactBlock>, Self::Error> {
++        self.inner.read(range).await
++    }
++
++    async fn insert(&self, compact_blocks: Vec<CompactBlock>) -> Result<(), Self::Error> {
++        // Runs when `download_blocks` awaits it, right after the batch arrived.
++        self.counters.on_insert(&compact_blocks);
++        self.inner.insert(compact_blocks).await
++    }
++
++    async fn delete(&self, range: ScanRange) -> Result<(), Self::Error> {
++        // `run` collects these futures and awaits them at the end of the pass, so this
++        // body is not a usable per-batch hook; `insert` and `with_blocks` are.
++        self.inner.delete(range).await
++    }
++}
+diff --git a/crates/webzjs-wallet/src/wallet.rs b/crates/webzjs-wallet/src/wallet.rs
+index 025bc09..9cb64ad 100644
+--- a/crates/webzjs-wallet/src/wallet.rs
++++ b/crates/webzjs-wallet/src/wallet.rs
+@@ -9,6 +9,7 @@ use tonic::{
+ };
+ 
+ use crate::error::Error;
++use crate::progress::{ProgressCache, SyncCounters, SyncSnapshot};
+ use crate::BlockRange;
+ use webzjs_common::Network;
+ 
+@@ -93,6 +94,8 @@ pub struct Wallet<W, T> {
+     pub(crate) target_note_count: usize,
+     /// Note management: the minimum allowed value for split change amounts
+     pub(crate) min_split_output_value: u64,
++    /// Progress of the running sync pass; readable without the database lock.
++    pub(crate) progress: Arc<SyncCounters>,
+ }
+ 
+ impl<W, T: Clone> Clone for Wallet<W, T> {
+@@ -104,6 +107,7 @@ impl<W, T: Clone> Clone for Wallet<W, T> {
+             min_confirmations: self.min_confirmations,
+             target_note_count: self.target_note_count,
+             min_split_output_value: self.min_split_output_value,
++            progress: self.progress.clone(),
+         }
+     }
+ }
+@@ -163,6 +167,7 @@ where
+             min_confirmations,
+             target_note_count: 4,
+             min_split_output_value: 10000000,
++            progress: Arc::new(SyncCounters::default()),
+         })
+     }
+ 
+@@ -275,10 +280,11 @@ where
+     pub async fn sync(&self) -> Result<(), Error> {
+         let mut client = self.client.clone();
+         // TODO: This should be held in the Wallet struct so we can download in parallel
+-        let db_cache = MemBlockCache::new();
++        let db_cache = ProgressCache::new(MemBlockCache::new(), self.progress.clone());
+ 
+         let mut db = self.db.write().await;
+-        run(
++        self.progress.start();
++        let result = run(
+             &mut client,
+             &self.network.clone(),
+             &db_cache,
+@@ -286,7 +292,15 @@ where
+             BATCH_SIZE,
+         )
+         .await
+-        .map_err(Into::into)
++        .map_err(Into::into);
++        self.progress.finish();
++        result
++    }
++
++    /// Progress of the running (or last) sync pass. Reads only atomics, so it answers
++    /// while `sync` holds the database write lock.
++    pub fn sync_progress(&self) -> SyncSnapshot {
++        self.progress.snapshot()
+     }
+ 
+     pub async fn get_wallet_summary(&self) -> Result<Option<WalletSummary<AccountId>>, Error> {

@@ -24,6 +24,17 @@ declare module '@chainsafe/webzjs-wallet' {
     fully_scanned_height: number;
   }
 
+  /** From patches/webzjs/0001-sync-progress.patch. */
+  export class SyncProgress {
+    free(): void;
+    running: boolean;
+    downloaded: number;
+    visited: number;
+    revisited: number;
+    scanned: number;
+    scanned_to: number;
+  }
+
   export class TransactionHistoryResponse {
     free(): void;
     readonly transactions: any;
@@ -52,6 +63,8 @@ declare module '@chainsafe/webzjs-wallet' {
       birthday_height?: number | null,
     ): Promise<number>;
     sync(): Promise<void>;
+    // Optional here: the adapter feature-detects it (patches/webzjs/0001-sync-progress.patch).
+    sync_progress?(): SyncProgress;
     get_wallet_summary(): Promise<WalletSummary | undefined>;
     db_to_bytes(): Promise<Uint8Array>;
     get_current_address(account_id: number): Promise<string>;
