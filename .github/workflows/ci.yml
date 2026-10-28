@@ -5,17 +5,31 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      full_rebuild:
+        description: Build WebZjs from source instead of restoring vendor/, check it against scripts/webzjs-vendor.sha256 and save it to the cache
+        type: boolean
+        default: false
+  schedule:
+    # Weekly from-source build: shows the pinned build still reproduces the
+    # committed hashes, and refreshes the cache before its 7-day eviction.
+    - cron: '23 4 * * 1'
 
 permissions:
   contents: read
 
+# Actions are pinned by commit SHA (tag in the comment). The tags were
+# resolved with `git ls-remote https://github.com/actions/<name> refs/tags/<tag>`;
+# all four are lightweight tags on the commit itself.
 jobs:
   app:
     name: Typecheck, unit and UI tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: npm
@@ -28,41 +42,231 @@ jobs:
         env:
           CI: '1'
 
+  # vendor/ (the WebZjs wasm packages) is pinned by scripts/webzjs-vendor.sha256,
+  # the sorted SHA-256 of every file in vendor/:
+  #   (cd vendor && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum)
+  # The build is bit-for-bit reproducible on this runner image, so the list is
+  # a reviewable record of what CI ships, and a cached vendor/ is used only
+  # when it matches the list.
+  #
+  # - From-source runs (push to main, the weekly schedule, "Run workflow" with
+  #   full_rebuild) never restore vendor/. They build it, fail unless it
+  #   matches the list, and save it to the cache right after that check,
+  #   before setup-node restores the npm cache and before npm ci or any other
+  #   third-party code runs.
+  # - All other runs (pull requests, "Run workflow" without full_rebuild)
+  #   restore the entry for the current key and check it against the list.
+  #   On a mismatch they report an error, discard it and build from source,
+  #   which must match the list too. They never save.
+  # The key hashes the list, scripts/build-webzjs.sh and patches/webzjs/**, so
+  # changing any of them (or WASM_PACK_VERSION) starts from source.
+  # A restore unpacks a tarball as the runner user, so a poisoned entry could
+  # write outside vendor/; that is why only runs that restore nothing before
+  # the check may save. Pull request runs trust the cache no more than they
+  # already trust setup-node's npm cache.
+  #
+  # Creating or updating scripts/webzjs-vendor.sha256 (it has to come from CI:
+  # the wasm embeds the runner's cargo paths, so a local build differs):
+  #   1. Run this job without the file, or with changed build inputs (a new
+  #      WEBZJS_COMMIT, a patch, WASM_PACK_VERSION). The "Check vendor/" step
+  #      prints the new list in the log, the job summary and an annotation, and
+  #      uploads it as the artifact webzjs-vendor-sha256. Without the file the
+  #      run only adds a notice and passes, and nothing is cached; with a stale
+  #      file it fails and shows the diff.
+  #   2. gh run download <run-id> -n webzjs-vendor-sha256 -D scripts
+  #      writes scripts/webzjs-vendor.sha256. Compare it with a second
+  #      from-source run (Run workflow, full_rebuild) before you trust it,
+  #      review the diff and commit the file.
+  #   3. After the merge, the push to main builds, matches and saves the cache;
+  #      later pull requests restore it and skip the Rust build.
+  # If a pull request reports a cached vendor/ that does not match, delete
+  # that entry (gh cache delete <key>) and find out which run wrote it.
   webzjs:
     name: Build WebZjs from source, production build, mainnet smoke test
     # Same runner image upstream WebZjs builds on.
     runs-on: ubuntu-22.04
+    env:
+      # From github.com/wasm-bindgen/wasm-pack/releases. The release publishes
+      # no checksum file; this hash was computed from repeated downloads of the
+      # x86_64-unknown-linux-musl asset.
+      WASM_PACK_VERSION: 0.15.0
+      WASM_PACK_SHA256: c09f971ecaed9a2efc80fdcea7a00ef6b53c7fadc8c57d1f61b53a6aa66b668a
+    defaults:
+      run:
+        shell: bash
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Choose between the vendor/ cache and a from-source build
+        id: plan
+        env:
+          FROM_SOURCE: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.full_rebuild) }}
+          INPUTS_HASH: ${{ hashFiles('scripts/build-webzjs.sh', 'scripts/webzjs-vendor.sha256', 'patches/webzjs/**') }}
+        run: |
+          if [ -f scripts/webzjs-vendor.sha256 ]; then have_list=true; else have_list=false; fi
+          key="webzjs-vendor-v1-$RUNNER_OS-wasm-pack-$WASM_PACK_VERSION-$INPUTS_HASH"
+          {
+            echo "from_source=$FROM_SOURCE"
+            echo "have_list=$have_list"
+            echo "key=$key"
+          } >> "$GITHUB_OUTPUT"
+          echo "from_source=$FROM_SOURCE have_list=$have_list key=$key"
+
+      - name: Restore vendor/ from the cache
+        id: restore
+        if: steps.plan.outputs.from_source != 'true' && steps.plan.outputs.have_list == 'true'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: vendor
+          key: ${{ steps.plan.outputs.key }}
+
+      - name: Check the cached vendor/ against scripts/webzjs-vendor.sha256
+        id: cached
+        if: steps.restore.outputs.cache-hit == 'true'
+        env:
+          CACHE_KEY: ${{ steps.plan.outputs.key }}
+        run: |
+          actual="$RUNNER_TEMP/webzjs-vendor.cached.sha256"
+          # Every entry must be a regular file or a directory, since the list
+          # only covers files. Names in the entry are untrusted: ls -b and
+          # cat -v keep them from injecting workflow commands into the log.
+          odd="$(find vendor ! -type f ! -type d -exec ls -ldb -- {} +)" || odd="vendor/ cannot be listed"
+          if [ -z "$odd" ] &&
+            (cd vendor && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum) > "$actual" &&
+            [ -s "$actual" ] && cmp -s scripts/webzjs-vendor.sha256 "$actual"; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+            echo "Cached vendor/ matches scripts/webzjs-vendor.sha256 ($(wc -l < "$actual") files)."
+            exit 0
+          fi
+          [ -z "$odd" ] || printf 'Not a regular file or directory:\n%s\n' "$odd" | cat -v
+          [ ! -f "$actual" ] || diff -u scripts/webzjs-vendor.sha256 "$actual" | cat -v || true
+          echo "::error title=Cached vendor/ does not match scripts/webzjs-vendor.sha256::Ignoring cache entry $CACHE_KEY and building from source. Entries are saved only after this check passes, so this one is corrupt or was written by something else: delete it (gh cache delete $CACHE_KEY) and find out which run created it."
+          {
+            echo "### Cached vendor/ does not match scripts/webzjs-vendor.sha256"
+            echo
+            echo "Cache entry \`$CACHE_KEY\` was ignored; vendor/ is rebuilt from source."
+            echo "Delete the entry (\`gh cache delete $CACHE_KEY\`) and find out which run created it."
+          } >> "$GITHUB_STEP_SUMMARY"
+          rm -rf vendor
+
+      - name: Install wasm-pack (pinned, checksum-verified)
+        if: steps.cached.outputs.ok != 'true'
+        run: |
+          asset="wasm-pack-v${WASM_PACK_VERSION}-x86_64-unknown-linux-musl"
+          tgz="$RUNNER_TEMP/$asset.tar.gz"
+          curl --proto '=https' --tlsv1.2 -sSfL --retry 3 -o "$tgz" \
+            "https://github.com/wasm-bindgen/wasm-pack/releases/download/v${WASM_PACK_VERSION}/$asset.tar.gz"
+          echo "$WASM_PACK_SHA256  $tgz" | sha256sum --check --strict -
+          bin="$RUNNER_TEMP/wasm-pack-bin"
+          mkdir -p "$bin"
+          tar -xzf "$tgz" -C "$bin" --strip-components=1 "$asset/wasm-pack"
+          echo "$bin" >> "$GITHUB_PATH"
+          "$bin/wasm-pack" --version
+
+      - name: Build WebZjs wasm packages from source
+        if: steps.cached.outputs.ok != 'true'
+        run: bash scripts/build-webzjs.sh
+
+      - name: Check vendor/ against scripts/webzjs-vendor.sha256
+        id: check
+        if: steps.cached.outputs.ok != 'true'
+        env:
+          HAVE_LIST: ${{ steps.plan.outputs.have_list }}
+        run: |
+          # Workflow command values must escape %, CR and LF.
+          escape() {
+            local s
+            s=${1//'%'/%25}
+            s=${s//$'\r'/%0D}
+            printf '%s' "${s//$'\n'/%0A}"
+          }
+          list="$RUNNER_TEMP/webzjs-vendor.sha256"
+          # Same listing as the cached check: files and directories only, and
+          # names go to the log through ls -b / cat -v.
+          odd="$(find vendor ! -type f ! -type d -exec ls -ldb -- {} +)"
+          if [ -n "$odd" ]; then
+            printf '%s\n' "$odd" | cat -v
+            echo "::error title=vendor/ holds entries that are not regular files::$(escape "$odd")"
+            exit 1
+          fi
+          (cd vendor && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum) > "$list"
+          if [ ! -s "$list" ]; then
+            echo "::error::vendor/ has no files"
+            exit 1
+          fi
+          echo "SHA-256 of vendor/ ($(wc -l < "$list") files):"
+          cat -v "$list"
+
+          if [ "$HAVE_LIST" != true ]; then
+            echo "::notice title=No scripts/webzjs-vendor.sha256 yet::$(escape "This build was not checked and vendor/ was not cached. To pin it, commit this list as scripts/webzjs-vendor.sha256 (artifact webzjs-vendor-sha256 of this run):"$'\n'"$(cat "$list")")"
+            {
+              echo "### scripts/webzjs-vendor.sha256 does not exist yet"
+              echo
+              echo "This build was not checked and vendor/ was not cached. To pin it, commit this list as"
+              echo "\`scripts/webzjs-vendor.sha256\` (\`gh run download $GITHUB_RUN_ID -n webzjs-vendor-sha256 -D scripts\`):"
+              echo
+              echo '```text'
+              cat "$list"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          if diff -u scripts/webzjs-vendor.sha256 "$list" > "$RUNNER_TEMP/webzjs-vendor.diff"; then
+            echo "vendor/ matches scripts/webzjs-vendor.sha256."
+            exit 0
+          fi
+          cat -v "$RUNNER_TEMP/webzjs-vendor.diff"
+          echo "::error title=vendor/ does not match scripts/webzjs-vendor.sha256::The build from source produced different files (diff in the log and the job summary). If the build inputs changed on purpose, replace scripts/webzjs-vendor.sha256 with the artifact webzjs-vendor-sha256 of this run."
+          {
+            echo "### vendor/ does not match scripts/webzjs-vendor.sha256"
+            echo
+            echo "If the build inputs changed on purpose (WEBZJS_COMMIT, patches/webzjs, WASM_PACK_VERSION),"
+            echo "replace the file with this run's list: \`gh run download $GITHUB_RUN_ID -n webzjs-vendor-sha256 -D scripts\`."
+            echo
+            echo '```diff'
+            cat "$RUNNER_TEMP/webzjs-vendor.diff"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+
+      # Right after the check: nothing else has run since the build.
+      - name: Save vendor/ to the cache
+        if: steps.plan.outputs.from_source == 'true' && steps.plan.outputs.have_list == 'true' && steps.check.outcome == 'success'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: vendor
+          key: ${{ steps.plan.outputs.key }}
+
+      - name: Upload the vendor/ hash list
+        if: ${{ !cancelled() && steps.check.outcome != 'skipped' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: webzjs-vendor-sha256
+          path: ${{ runner.temp }}/webzjs-vendor.sha256
+          if-no-files-found: warn
+
+      - name: List WebZjs exports
+        run: grep -hE '^export (default )?(class|function)' vendor/webzjs-wallet/webzjs_wallet.d.ts vendor/webzjs-keys/webzjs_keys.d.ts
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: npm
-      - name: Install wasm-pack
-        uses: jetli/wasm-pack-action@v0.4.0
-        with:
-          version: latest
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: .webzjs
-          cache-on-failure: true
-      - name: Build WebZjs wasm packages
-        run: bash scripts/build-webzjs.sh
-      - name: List WebZjs exports
-        run: grep -hE '^export (default )?(class|function)' vendor/webzjs-wallet/webzjs_wallet.d.ts vendor/webzjs-keys/webzjs_keys.d.ts
       - run: npm ci
       - name: Check the adapter against the generated WebZjs typings
         run: npm run typecheck:vendor
       - name: Production build
         run: npm run build
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: celari-dist
           path: dist
       - run: npx playwright install --with-deps chromium
       - name: Mainnet smoke test (real engine)
         run: npm run test:e2e:real
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: failure()
         with:
           name: playwright-traces
