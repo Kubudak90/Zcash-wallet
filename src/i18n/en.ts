@@ -77,6 +77,8 @@ export const en: Record<MessageKey, string> = {
   'unlock.forgot': 'I forgot my password',
   'unlock.forgotHelp':
     'There is no way to recover the password. You can remove the wallet from this browser and restore it from your recovery phrase.',
+  'unlock.forgotHelpView':
+    'There is no way to recover the password. You can remove the wallet from this browser and add it again with your viewing key (uview1…).',
   'unlock.autoLocked': 'Locked automatically after {n} minutes of inactivity.',
 
   'nav.home': 'Balance',

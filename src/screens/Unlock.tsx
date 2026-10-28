@@ -4,7 +4,7 @@ import { ErrorDetails, Notice, PasswordField, Spinner } from '../components/ui';
 import { useI18n } from '../i18n';
 import { WrongPasswordError } from '../lib/vault';
 import { useAutoLockedMinutes } from '../state/autoLockNotice';
-import { useController } from '../state/wallet';
+import { useController, useWallet } from '../state/wallet';
 import { LanguageSwitch } from './LanguageSwitch';
 import { WipeWallet } from './Settings';
 
@@ -15,6 +15,7 @@ export function Unlock() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [forgot, setForgot] = useState(false);
+  const { meta } = useWallet();
   const autoLocked = useAutoLockedMinutes();
 
   async function submit(e: FormEvent) {
@@ -61,7 +62,7 @@ export function Unlock() {
       </button>
       {forgot && (
         <div className="stack">
-          <p className="muted">{t('unlock.forgotHelp')}</p>
+          <p className="muted">{t(meta?.kind === 'view' ? 'unlock.forgotHelpView' : 'unlock.forgotHelp')}</p>
           <WipeWallet />
         </div>
       )}
