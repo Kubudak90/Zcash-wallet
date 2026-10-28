@@ -2,6 +2,8 @@ import { generateMnemonic } from '@scure/bip39';
 import { wordlist } from '@scure/bip39/wordlists/english';
 import { expect, test, type Page } from '@playwright/test';
 
+import { currentMonth } from '../../src/lib/birthday';
+
 const PASSWORD = 'Gizli-Parola-2026';
 // The fake engine's chain tip (src/engine/fake.ts).
 const TIP = 3_100_000;
@@ -23,7 +25,8 @@ async function restoreFromThisMonth(page: Page, lang: 'en' | 'tr' = 'en'): Promi
   await page.getByRole('button', { name: s.restore }).click();
   await page.getByRole('textbox').fill(generateMnemonic(wordlist, 256));
   await page.getByRole('button', { name: s.next }).click();
-  await page.getByLabel(s.month, { exact: true }).fill(new Date().toISOString().slice(0, 7));
+  // The local month, as the app checks it: the UTC one is a month ahead west of UTC at a month's end.
+  await page.getByLabel(s.month, { exact: true }).fill(currentMonth());
   await page.getByRole('button', { name: s.next }).click();
   const start = await page.getByText(s.start).textContent();
   await page.getByLabel(pw.first, { exact: true }).fill(PASSWORD);

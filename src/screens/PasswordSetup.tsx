@@ -1,4 +1,4 @@
-import { useId, useState, type FormEvent, type ReactNode } from 'react';
+import { useId, useState, type FocusEvent, type FormEvent, type ReactNode } from 'react';
 
 import { ErrorDetails, Notice, PasswordField, Screen, Spinner, StrengthMeter } from '../components/ui';
 import { useI18n } from '../i18n';
@@ -21,14 +21,20 @@ export function PasswordSetup({
   const [repeat, setRepeat] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
+  const [typingRepeat, setTypingRepeat] = useState(false);
   const tooShortId = useId();
   const mismatchId = useId();
 
   const tooShort = password.length < MIN_PASSWORD_LENGTH;
   const showTooShort = password !== '' && tooShort;
-  // Only flag the repeat once it goes wrong, not on every keystroke while it is
-  // still being typed; the error is announced as it appears.
-  const mismatch = repeat !== '' && !password.startsWith(repeat);
+  // While the repeat is being typed, a correct start is not an error yet; the
+  // error is announced as it appears. Outside that field any difference is,
+  // e.g. a first password lengthened after the repeat was typed.
+  const mismatch = repeat !== '' && repeat !== password && !(typingRepeat && password.startsWith(repeat));
+  // PasswordField takes no focus handlers; focus events bubble up to the form.
+  const trackRepeat = (focused: boolean) => (e: FocusEvent<HTMLFormElement>) => {
+    if ((e.target as Element).getAttribute('name') === 'repeat-password') setTypingRepeat(focused);
+  };
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -47,7 +53,7 @@ export function PasswordSetup({
     <Screen title={t('password.title')} onBack={busy ? undefined : onBack}>
       <p className="muted">{t(viewOnly ? 'password.introView' : 'password.intro')}</p>
       {note}
-      <form onSubmit={submit} className="stack">
+      <form onSubmit={submit} className="stack" onFocus={trackRepeat(true)} onBlur={trackRepeat(false)}>
         <PasswordField
           label={t('common.password')}
           name="new-password"
