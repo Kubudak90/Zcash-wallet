@@ -68,7 +68,7 @@ index a360053..f3bc8b3 100644
      #[cfg(feature = "sqlite-db")]
      #[error("Sqlite error: {0}")]
 diff --git a/crates/webzjs-wallet/src/wallet.rs b/crates/webzjs-wallet/src/wallet.rs
-index 9cb64ad..8ff4f5d 100644
+index 6e38202..5dabddc 100644
 --- a/crates/webzjs-wallet/src/wallet.rs
 +++ b/crates/webzjs-wallet/src/wallet.rs
 @@ -54,6 +54,7 @@ use zcash_protocol::ShieldedProtocol;

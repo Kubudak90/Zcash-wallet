@@ -30,10 +30,17 @@ git -C "$SRC" clean -q -d --force
 echo "WebZjs at $(git -C "$SRC" rev-parse HEAD)"
 
 # Celari's patches on top of the pinned commit (see patches/webzjs/README.md),
-# applied in file name order. git apply changes nothing unless the whole patch
-# applies, and a patch that does not apply stops the build.
-patches=("$ROOT"/patches/webzjs/*.patch)
-[ -f "${patches[0]}" ] || { echo "no patches found in $ROOT/patches/webzjs" >&2; exit 1; }
+# applied in file name order. Only patches committed to this repository count:
+# an uncommitted or edited one stops the build rather than slipping into vendor/.
+# git apply changes nothing unless the whole patch applies, and a patch that
+# does not apply stops the build.
+if [ -n "$(git -C "$ROOT" status --porcelain -- patches/webzjs)" ]; then
+  echo "error: patches/webzjs has uncommitted changes:" >&2
+  git -C "$ROOT" status --short -- patches/webzjs >&2
+  exit 1
+fi
+mapfile -t patches < <(git -C "$ROOT" ls-files -- 'patches/webzjs/*.patch' | LC_ALL=C sort | sed "s|^|$ROOT/|")
+[ "${#patches[@]}" -gt 0 ] || { echo "no patches found in $ROOT/patches/webzjs" >&2; exit 1; }
 for patch in "${patches[@]}"; do
   echo "Applying ${patch#"$ROOT/"}"
   git -C "$SRC" apply "$patch" || {
@@ -49,7 +56,7 @@ build() {
   local crate="$1" features="$2"
   (cd "$SRC/crates/$crate" && wasm-pack build -t web --release --scope chainsafe \
     --out-dir "$OUT/$crate" --no-default-features --features="$features" \
-    -Z build-std="panic_abort,std")
+    -Z build-std="panic_abort,std" --locked)
 }
 
 rm -rf "$OUT"

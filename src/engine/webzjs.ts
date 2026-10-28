@@ -280,10 +280,12 @@ export class WebzjsEngine implements ZcashEngine {
   }
 
   async send(account: number, to: string, zats: bigint, auth: SpendAuthority, memo?: string): Promise<void> {
+    auth.onStage?.('building');
     // pczt_create takes the memo as a 4th argument only with
     // patches/webzjs/0002-memo.patch; an unpatched build would silently drop it.
     if (memo && this.open_.pczt_create.length < 4) throw new Error('this WebZjs build cannot attach a memo');
-    auth.onStage?.('building');
+    // ZIP 302 reads trailing NULs as padding, so the recipient would see the memo cut short.
+    if (memo?.includes('\u0000')) throw new Error('a memo cannot contain NUL characters');
     // WebZjs encodes the memo and rejects one that is too long or goes to a
     // transparent or TEX address, before it touches the network.
     const pczt = await this.open_.pczt_create(account, to.trim(), zats, memo || undefined);
