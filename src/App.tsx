@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Spinner } from './components/ui';
 import { LangProvider, useI18n } from './i18n';
 import { HIDDEN_LOCK_MS, dueAutoLock } from './lib/autoLock';
+import { watchClipboard } from './lib/clipboard';
 import { CreateWallet } from './screens/CreateWallet';
 import { Main } from './screens/Main';
 import { RestoreWallet } from './screens/RestoreWallet';
@@ -114,6 +115,8 @@ function Onboarding() {
 export function App() {
   const { phase, bootError, settings } = useWallet();
   useAutoLock(phase === 'ready', settings.autoLockMinutes);
+  // In every phase: a clear that was due when the wallet locked runs on the lock screen.
+  useEffect(() => watchClipboard(), []);
 
   useEffect(() => {
     document.documentElement.lang = settings.lang;

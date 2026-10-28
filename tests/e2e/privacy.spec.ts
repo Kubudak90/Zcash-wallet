@@ -1,9 +1,11 @@
 import { expect, test, type Page } from '@playwright/test';
 
+import { CLEAR_AFTER_MS } from '../../src/lib/clipboard';
 import { PASSWORD, UA, createWallet } from './helpers';
 
-// Hiding balances on screen. The fake wallet holds 1.25 ZEC shielded and
-// 0.50 ZEC transparent after its first sync (src/engine/fake.ts).
+// Hiding balances on screen, and clearing a copied viewing key from the
+// clipboard. The fake wallet holds 1.25 ZEC shielded and 0.50 ZEC
+// transparent after its first sync (src/engine/fake.ts).
 
 const BALANCES = ['balance-total', 'balance-shielded', 'balance-transparent'];
 
@@ -54,6 +56,102 @@ test('the eye hides every balance, stays on across a lock, and never hides a spe
   await expect(toggle).toHaveAttribute('aria-pressed', 'false');
   await expect(page.getByTestId('balance-total')).toContainText('1.6499');
   await expect(page.getByText('0.50 ZEC sits on a public transparent address.')).toBeVisible();
+});
+
+test.describe('a copied viewing key', () => {
+  test.use({ permissions: ['clipboard-read', 'clipboard-write'] });
+
+  const clipboardText = (page: Page) => page.evaluate(() => navigator.clipboard.readText());
+
+  /** Shows the viewing key in Settings, copies it and returns it. */
+  async function copyViewingKey(page: Page): Promise<string> {
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await page.getByRole('button', { name: 'Show viewing key' }).click();
+    await page.getByLabel('Password').fill(PASSWORD);
+    await page.getByRole('button', { name: 'Reveal' }).click();
+    const key = (await page.getByTestId('viewing-key').textContent())!;
+    await page.getByRole('button', { name: 'Copy' }).click();
+    await expect(page.getByRole('button', { name: 'Copied' })).toBeVisible();
+    expect(await clipboardText(page)).toBe(key);
+    return key;
+  }
+
+  test('is cleared from the clipboard a minute later, and the note says how far that goes', async ({ page }) => {
+    await page.clock.install();
+    await createWallet(page);
+    const key = await copyViewingKey(page);
+    const note = page.getByRole('status').filter({ hasText: /clear the clipboard/ });
+    await expect(note).toHaveText(/60 seconds after copying.*only while this tab is in front.*may be cleared instead/);
+
+    await page.clock.fastForward(CLEAR_AFTER_MS - 1_000);
+    expect(await clipboardText(page)).toBe(key);
+    await page.clock.fastForward(2_000);
+    await expect.poll(() => clipboardText(page)).toBe('');
+    await expect(page.getByRole('status').filter({ hasText: 'Clipboard cleared.' })).toBeVisible();
+  });
+
+  test('waits for the tab to have focus again', async ({ page }) => {
+    await page.clock.install();
+    await createWallet(page);
+    const key = await copyViewingKey(page);
+    await page.evaluate(() => {
+      document.hasFocus = () => false;
+    });
+    await page.clock.fastForward(CLEAR_AFTER_MS + 30_000);
+    expect(await clipboardText(page)).toBe(key);
+
+    await page.evaluate(() => {
+      delete (document as { hasFocus?: unknown }).hasFocus;
+      window.dispatchEvent(new Event('focus'));
+    });
+    await expect.poll(() => clipboardText(page)).toBe('');
+  });
+
+  test('leaves the clipboard alone once something else was copied', async ({ page }) => {
+    await page.clock.install();
+    await createWallet(page);
+    await copyViewingKey(page);
+    await page.getByRole('button', { name: 'Receive' }).click();
+    await page.getByRole('button', { name: 'Copy' }).click();
+    const address = (await page.getByTestId('receive-address').textContent())!;
+    await page.clock.fastForward(2 * CLEAR_AFTER_MS);
+    expect(await clipboardText(page)).toBe(address);
+  });
+
+  test('copied by hand, it is cleared too; other text copied by hand is not', async ({ page }) => {
+    await page.clock.install();
+    await createWallet(page);
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await page.getByRole('button', { name: 'Show viewing key' }).click();
+    await page.getByLabel('Password').fill(PASSWORD);
+    await page.getByRole('button', { name: 'Reveal' }).click();
+    const key = page.getByTestId('viewing-key');
+    await key.selectText();
+    await page.keyboard.press('ControlOrMeta+C');
+    expect(await clipboardText(page)).toBe(await key.textContent());
+    await expect(page.getByRole('status').filter({ hasText: /clear the clipboard/ })).toBeVisible();
+    await page.clock.fastForward(CLEAR_AFTER_MS + 1_000);
+    await expect.poll(() => clipboardText(page)).toBe('');
+
+    // Some other text selected and copied: nothing is scheduled.
+    await page.getByText('Anyone with this key can see').selectText();
+    await page.keyboard.press('ControlOrMeta+C');
+    const help = await clipboardText(page);
+    expect(help).toMatch(/^Anyone with this key/);
+    await page.clock.fastForward(2 * CLEAR_AFTER_MS);
+    expect(await clipboardText(page)).toBe(help);
+  });
+
+  test('is still cleared when the wallet locks first', async ({ page }) => {
+    await page.clock.install();
+    await createWallet(page);
+    await copyViewingKey(page);
+    // Locking reloads the page; the pending clear outlives it.
+    await page.getByRole('button', { name: 'Lock' }).click();
+    await expect(page.getByRole('heading', { name: 'Your wallet is locked' })).toBeVisible();
+    await page.clock.fastForward(CLEAR_AFTER_MS + 1_000);
+    await expect.poll(() => clipboardText(page)).toBe('');
+  });
 });
 
 test('the eye is named in Turkish too', async ({ page }) => {

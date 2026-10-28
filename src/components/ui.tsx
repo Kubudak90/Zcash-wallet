@@ -1,7 +1,8 @@
-import { forwardRef, useEffect, useRef, useState, type ReactNode } from 'react';
+import { forwardRef, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import QRCode from 'qrcode';
 
 import { useI18n, type Lang } from '../i18n';
+import { clipboard, type ClearStatus } from '../lib/clipboard';
 import { passwordStrength, type PasswordStrength } from '../lib/vault';
 import { formatZec } from '../lib/zec';
 import { useController, useWallet } from '../state/wallet';
@@ -96,7 +97,13 @@ export function Notice({ tone = 'info', children }: { tone?: 'info' | 'warn' | '
   );
 }
 
-export function CopyButton({ value, label }: { value: string; label?: string }) {
+/**
+ * Copies `value`. Every copy goes through `clipboard`, so a pending clear of
+ * an earlier copy knows the clipboard now holds something else. `clearAfter`
+ * clears the clipboard again a minute later, as far as the browser allows
+ * (see lib/clipboard.ts); only the viewing key asks for that.
+ */
+export function CopyButton({ value, label, clearAfter = false }: { value: string; label?: string; clearAfter?: boolean }) {
   const { t } = useI18n();
   const [copied, setCopied] = useState(false);
   useEffect(() => {
@@ -110,7 +117,10 @@ export function CopyButton({ value, label }: { value: string; label?: string }) 
         type="button"
         className="secondary"
         onClick={() => {
-          void navigator.clipboard.writeText(value).then(() => setCopied(true));
+          void clipboard.copy(value, { clearAfter }).then(
+            () => setCopied(true),
+            (e) => console.warn('copy failed', e),
+          );
         }}
       >
         {copied ? t('common.copied') : (label ?? t('common.copy'))}
@@ -121,6 +131,11 @@ export function CopyButton({ value, label }: { value: string; label?: string }) 
       </span>
     </>
   );
+}
+
+/** Where the clipboard clear asked for by CopyButton's `clearAfter` stands. */
+export function useClipboardClear(): ClearStatus {
+  return useSyncExternalStore(clipboard.subscribe, clipboard.getStatus);
 }
 
 export function QrCode({ value, label }: { value: string; label: string }) {

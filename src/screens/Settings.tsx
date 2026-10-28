@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 
-import { CopyButton, ErrorDetails, Notice, PasswordField, Screen } from '../components/ui';
+import { CopyButton, ErrorDetails, Notice, PasswordField, Screen, useClipboardClear } from '../components/ui';
 import { useI18n } from '../i18n';
 import { DEFAULT_SERVER } from '../lib/storage';
 import { WrongPasswordError, type Secret } from '../lib/vault';
@@ -116,6 +116,37 @@ function PasswordGate({
   );
 }
 
+/**
+ * The viewing key and its Copy button. Unlike an address it is worth keeping
+ * out of the clipboard, so a copy, by the button or by hand, is cleared again
+ * a minute later as far as the browser allows; the note says how far that is.
+ */
+function ViewingKey({ value }: { value: string }) {
+  const { t } = useI18n();
+  const status = useClipboardClear();
+  // Only a copy made while the key is on screen gets a note, not one from before.
+  const [copiedHere, setCopiedHere] = useState(false);
+  useEffect(() => {
+    if (status === 'pending') setCopiedHere(true);
+  }, [status]);
+  let note = '';
+  if (copiedHere && status === 'pending') note = t('settings.clipboardClear');
+  else if (copiedHere && status === 'cleared') note = t('settings.clipboardCleared');
+  return (
+    <>
+      {/* data-clipboard-clear: a copy of this text by hand is cleared too (lib/clipboard.ts). */}
+      <code className="address" data-testid="viewing-key" data-clipboard-clear="">
+        {value}
+      </code>
+      <CopyButton value={value} clearAfter />
+      {/* Mounted while empty, so the note is announced when it appears. */}
+      <p className="muted small live-slot" role="status">
+        {note}
+      </p>
+    </>
+  );
+}
+
 // On a non-Turkish keyboard SİL comes out as 'SIL'; treat dotted and dotless I alike.
 const confirmWord = (s: string) => s.trim().toLocaleUpperCase('tr').replace(/I/g, 'İ');
 
@@ -222,14 +253,7 @@ export function Settings() {
       <section className="settings-group">
         <h2>{t('settings.security')}</h2>
         <PasswordGate label={t('settings.showViewingKey')} derive={(secret) => controller.viewingKeyFor(secret)}>
-          {(key) => (
-            <>
-              <code className="address" data-testid="viewing-key">
-                {key}
-              </code>
-              <CopyButton value={key} />
-            </>
-          )}
+          {(key) => <ViewingKey value={key} />}
         </PasswordGate>
         {/* Right under its own button, so it is not read as being about the recovery phrase. */}
         <p className="muted small">{t('settings.viewingKeyHelp')}</p>

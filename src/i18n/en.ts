@@ -207,6 +207,9 @@ export const en: Record<MessageKey, string> = {
   'settings.showViewingKey': 'Show viewing key',
   'settings.viewingKeyHelp':
     'Anyone with this key can see all your past and future transactions and memos, but cannot spend. It cannot be revoked; share it only with someone you fully trust.',
+  'settings.clipboardClear':
+    'Celari tries to clear the clipboard 60 seconds after copying. Browsers allow that only while this tab is in front, so it may happen later, when you come back, or not at all if you close the tab first. Anything you copy in another app meanwhile may be cleared instead.',
+  'settings.clipboardCleared': 'Clipboard cleared.',
   'settings.showSeed': 'Show recovery phrase',
   'settings.reveal': 'Reveal',
   'settings.danger': 'Danger zone',
