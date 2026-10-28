@@ -3,6 +3,7 @@ import { useState, type FormEvent } from 'react';
 import { ErrorDetails, Notice, PasswordField, Spinner } from '../components/ui';
 import { useI18n } from '../i18n';
 import { WrongPasswordError } from '../lib/vault';
+import { useAutoLockedMinutes } from '../state/autoLockNotice';
 import { useController } from '../state/wallet';
 import { LanguageSwitch } from './LanguageSwitch';
 import { WipeWallet } from './Settings';
@@ -14,6 +15,7 @@ export function Unlock() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [forgot, setForgot] = useState(false);
+  const autoLocked = useAutoLockedMinutes();
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -34,6 +36,7 @@ export function Unlock() {
       </div>
       <img src="/celari.svg" alt="" width={56} height={56} className="logo" />
       <h1>{t('unlock.title')}</h1>
+      {autoLocked !== null && <Notice tone="info">{t('unlock.autoLocked', { n: autoLocked })}</Notice>}
       <form className="stack" onSubmit={submit}>
         <PasswordField label={t('common.password')} name="password" value={password} onChange={setPassword} autoFocus />
         {error instanceof WrongPasswordError && <Notice tone="error">{t('unlock.wrongPassword')}</Notice>}

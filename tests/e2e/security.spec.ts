@@ -1,7 +1,7 @@
 import { bech32m } from '@scure/base';
 import { expect, test, type Page } from '@playwright/test';
 
-// Restore input and view-only wording. Kept apart from
+// Auto-lock, restore input and view-only wording. Kept apart from
 // wallet.spec.ts so these flows can be read (and run) on their own.
 
 const PASSWORD = 'Gizli-Parola-2026';
@@ -25,6 +25,43 @@ async function restore(page: Page, mode: 'seed' | 'view') {
   await page.getByLabel('Month').fill('2025-03');
   await page.getByRole('button', { name: 'Continue' }).click();
 }
+
+const nowInPage = (page: Page) => page.evaluate(() => Date.now());
+const wake = (page: Page) => page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+
+test('auto-lock counts the time the device slept and says why it locked', async ({ page }) => {
+  await page.clock.install();
+  await restore(page, 'seed');
+  await setPassword(page);
+
+  // Ten minutes asleep is under the 15-minute default: still unlocked.
+  await page.clock.setSystemTime((await nowInPage(page)) + 10 * 60_000);
+  await wake(page);
+  expect(await page.evaluate(() => sessionStorage.getItem('celari.autoLocked'))).toBeNull();
+  await expect(page.getByTestId('balance-total')).toBeVisible();
+
+  // A lid closed overnight: timers stood still, the wall clock did not.
+  await page.clock.setSystemTime((await nowInPage(page)) + 8 * 3600_000);
+  await wake(page);
+  await expect(page.getByRole('heading', { name: 'Your wallet is locked' })).toBeVisible();
+  await expect(page.getByText('Locked automatically after 15 minutes of inactivity.')).toBeVisible();
+
+  // The first key press after a long gap locks instead of restarting the countdown.
+  await page.getByLabel('Password').fill(PASSWORD);
+  await page.getByRole('button', { name: 'Unlock' }).click();
+  await expect(page.getByTestId('balance-total')).toBeVisible();
+  await page.clock.setSystemTime((await nowInPage(page)) + 8 * 3600_000);
+  await page.keyboard.press('Shift');
+  await expect(page.getByRole('heading', { name: 'Your wallet is locked' })).toBeVisible();
+  await expect(page.getByText('Locked automatically after 15 minutes of inactivity.')).toBeVisible();
+
+  // Locking by hand shows no such notice.
+  await page.getByLabel('Password').fill(PASSWORD);
+  await page.getByRole('button', { name: 'Unlock' }).click();
+  await page.getByRole('button', { name: 'Lock' }).click();
+  await expect(page.getByRole('heading', { name: 'Your wallet is locked' })).toBeVisible();
+  await expect(page.getByText(/Locked automatically/)).toBeHidden();
+});
 
 test('restore: a typed birthday month where the browser has no month picker', async ({ page }) => {
   await page.goto('/');
