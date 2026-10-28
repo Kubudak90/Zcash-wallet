@@ -119,20 +119,44 @@ test('nothing secret is stored in plaintext', async ({ page }) => {
   }
 });
 
-test('settings: reveal recovery phrase and viewing key, then wipe', async ({ page }) => {
+test('settings: reveal recovery phrase and viewing key, then wipe', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   const words = await createWallet(page);
   await page.getByRole('button', { name: 'Settings' }).click();
 
+  // The server field and the auto-lock select are named by their headings.
+  const server = page.getByLabel('Server (lightwalletd gRPC-web proxy)');
+  await expect(server).toHaveValue(/^https:/);
+  await expect(server).toHaveAccessibleDescription(/can see your IP address/);
+  await server.fill('http://insecure.example');
+  await expect(server).toHaveAttribute('aria-invalid', 'true');
+  await expect(server).toHaveAccessibleDescription(/valid address starting with https/);
+  await page.getByRole('button', { name: 'Reset to default' }).click();
+  await expect(server).toHaveAttribute('aria-invalid', 'false');
+  await page.getByLabel('Auto-lock').selectOption('30');
+  await expect(page.getByLabel('Auto-lock')).toHaveValue('30');
+
+  const security = page.locator('.settings-group', { has: page.getByRole('heading', { name: 'Security' }) });
   await page.getByRole('button', { name: 'Show recovery phrase' }).click();
   await page.getByLabel('Password').fill(PASSWORD);
   await page.getByRole('button', { name: 'Reveal' }).click();
   await expect(page.locator('[data-testid="seed-grid"] .seed-word').first()).toHaveText(words[0]!);
+  // The onboarding warnings come with the phrase here too.
+  await expect(security.locator('.notice-warn')).toContainText('Never share them');
+  await expect(security.locator('.notice-warn')).toContainText('Do not screenshot them');
   await page.getByRole('button', { name: 'Close' }).click();
+  await expect(security.locator('.notice-warn')).toBeHidden();
 
   await page.getByRole('button', { name: 'Show viewing key' }).click();
   await page.getByLabel('Password').fill(PASSWORD);
   await page.getByRole('button', { name: 'Reveal' }).click();
   await expect(page.getByTestId('viewing-key')).toHaveText(/^uview1/);
+  await expect(security).toContainText('It cannot be revoked');
+  await expect(security).not.toContainText('accountant');
+  await security.getByRole('button', { name: 'Copy' }).click();
+  await expect(security.getByRole('button', { name: 'Copied' })).toBeVisible();
+  const key = await page.getByTestId('viewing-key').textContent();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(key);
 
   const wipe = page.getByRole('button', { name: 'Remove wallet from this browser' });
   await expect(wipe).toBeDisabled();

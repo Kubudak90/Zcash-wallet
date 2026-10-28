@@ -1,8 +1,14 @@
-import { useState, type FormEvent } from 'react';
+import { useId, useState, type FormEvent } from 'react';
 
 import { ErrorDetails, Notice, Screen, Spinner } from '../components/ui';
 import { useI18n } from '../i18n';
-import { SAPLING_ACTIVATION_HEIGHT, estimateBirthday } from '../lib/birthday';
+import {
+  SAPLING_ACTIVATION_HEIGHT,
+  SAPLING_MONTH,
+  currentMonth,
+  estimateBirthday,
+  parseBirthdayMonth,
+} from '../lib/birthday';
 import { isValidSeedPhrase, normalizeSeedPhrase } from '../lib/seed';
 import type { Secret } from '../lib/vault';
 import { useController } from '../state/wallet';
@@ -10,9 +16,6 @@ import { PasswordSetup } from './PasswordSetup';
 
 type Step = 'secret' | 'birthday' | 'password';
 type Mode = 'seed' | 'view';
-
-const SAPLING_MONTH = '2018-10';
-const thisMonth = () => new Date().toISOString().slice(0, 7);
 
 export function RestoreWallet({ onCancel }: { onCancel: () => void }) {
   const { t, lang } = useI18n();
@@ -24,10 +27,16 @@ export function RestoreWallet({ onCancel }: { onCancel: () => void }) {
   const [secret, setSecret] = useState<Secret | null>(null);
 
   const [month, setMonth] = useState('');
+  const [monthTouched, setMonthTouched] = useState(false);
   const [unknown, setUnknown] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [birthday, setBirthday] = useState<number | null>(null);
+  const monthErrorId = useId();
+
+  // Browsers without a month picker show a text box, where people type '05.2023'.
+  const parsedMonth = parseBirthdayMonth(month);
+  const monthError = !unknown && monthTouched && month.trim() !== '' && parsedMonth === null;
 
   async function submitSecret(e: FormEvent) {
     e.preventDefault();
@@ -67,7 +76,8 @@ export function RestoreWallet({ onCancel }: { onCancel: () => void }) {
         );
         height = detected ?? SAPLING_ACTIVATION_HEIGHT;
       } else {
-        height = estimateBirthday(new Date(`${month}-01T00:00:00Z`), await controller.latestHeight());
+        if (!parsedMonth) return;
+        height = estimateBirthday(new Date(`${parsedMonth}-01T00:00:00Z`), await controller.latestHeight());
       }
       setBirthday(height);
       setStep('password');
@@ -134,12 +144,21 @@ export function RestoreWallet({ onCancel }: { onCancel: () => void }) {
               type="month"
               name="birthday-month"
               min={SAPLING_MONTH}
-              max={thisMonth()}
+              max={currentMonth()}
+              placeholder={t('restore.birthdayPlaceholder')}
               value={month}
               disabled={unknown}
+              aria-invalid={monthError}
+              aria-describedby={monthError ? monthErrorId : undefined}
               onChange={(e) => setMonth(e.target.value)}
+              onBlur={() => setMonthTouched(true)}
             />
           </label>
+          {monthError && (
+            <p id={monthErrorId} className="field-error">
+              {t('restore.birthdayInvalid')}
+            </p>
+          )}
           <label className="check">
             <input type="checkbox" checked={unknown} onChange={(e) => setUnknown(e.target.checked)} />
             {t('restore.birthdayUnknown')}
@@ -151,7 +170,7 @@ export function RestoreWallet({ onCancel }: { onCancel: () => void }) {
               <ErrorDetails error={error} />
             </Notice>
           )}
-          <button type="submit" className="primary" disabled={busy || (!unknown && !/^\d{4}-\d{2}$/.test(month))}>
+          <button type="submit" className="primary" disabled={busy || (!unknown && !parsedMonth)}>
             {busy ? (
               <>
                 <Spinner /> {unknown ? t('restore.birthdayDetecting') : t('common.continue')}
@@ -179,6 +198,7 @@ export function RestoreWallet({ onCancel }: { onCancel: () => void }) {
         if (!secret || birthday === null) return;
         await controller.createWallet(secret, birthday, password);
       }}
+      viewOnly={secret?.kind === 'ufvk'}
     />
   );
 }

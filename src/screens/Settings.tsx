@@ -1,9 +1,10 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { useId, useState, type FormEvent, type ReactNode } from 'react';
 
 import { CopyButton, ErrorDetails, Notice, PasswordField, Screen } from '../components/ui';
 import { useI18n } from '../i18n';
 import { DEFAULT_SERVER } from '../lib/storage';
 import { WrongPasswordError, type Secret } from '../lib/vault';
+import { NotASeedWalletError } from '../state/controller';
 import { useController, useWallet } from '../state/wallet';
 import { SeedGrid } from './CreateWallet';
 import { LanguageSwitch } from './LanguageSwitch';
@@ -19,35 +20,56 @@ function isHttpsUrl(value: string): boolean {
   }
 }
 
-/** Asks for the password, then shows something derived from the secret. */
-function PasswordGate({ label, children }: { label: string; children: (secret: Secret) => ReactNode }) {
+async function seedPhraseOf(secret: Secret): Promise<string> {
+  if (secret.kind !== 'seed') throw new NotASeedWalletError();
+  return secret.phrase;
+}
+
+/**
+ * Asks for the password, then shows a value derived from the secret. Only that
+ * value is kept: the decrypted secret is dropped as soon as `derive` returns.
+ */
+function PasswordGate({
+  label,
+  derive,
+  children,
+}: {
+  label: string;
+  derive: (secret: Secret) => Promise<string>;
+  children: (value: string) => ReactNode;
+}) {
   const { t } = useI18n();
   const controller = useController();
   const [open, setOpen] = useState(false);
   const [password, setPassword] = useState('');
-  const [secret, setSecret] = useState<Secret | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [value, setValue] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
+    if (busy) return;
+    setBusy(true);
     setError(null);
     try {
-      setSecret(await controller.revealSecret(password));
+      setValue(await derive(await controller.revealSecret(password)));
       setPassword('');
     } catch (err) {
       setError(err);
+    } finally {
+      setBusy(false);
     }
   }
 
-  if (secret) {
+  if (value !== null) {
     return (
       <div className="stack">
-        {children(secret)}
+        {children(value)}
         <button
           type="button"
           className="secondary"
           onClick={() => {
-            setSecret(null);
+            setValue(null);
             setOpen(false);
           }}
         >
@@ -80,40 +102,18 @@ function PasswordGate({ label, children }: { label: string; children: (secret: S
   );
 }
 
-function ViewingKey({ secret }: { secret: Secret }) {
-  const controller = useController();
-  const [key, setKey] = useState<string | null>(null);
-  const [error, setError] = useState<unknown>(null);
-  useEffect(() => {
-    let cancelled = false;
-    controller
-      .viewingKeyFor(secret)
-      .then((k) => !cancelled && setKey(k))
-      .catch((e: unknown) => !cancelled && setError(e));
-    return () => {
-      cancelled = true;
-    };
-  }, [controller, secret]);
-  if (error) return <ErrorDetails error={error} />;
-  if (!key) return <p className="muted">…</p>;
-  return (
-    <>
-      <code className="address" data-testid="viewing-key">
-        {key}
-      </code>
-      <CopyButton value={key} />
-    </>
-  );
-}
+// On a non-Turkish keyboard SİL comes out as 'SIL'; treat dotted and dotless I alike.
+const confirmWord = (s: string) => s.trim().toLocaleUpperCase('tr').replace(/I/g, 'İ');
 
 export function WipeWallet() {
   const { t } = useI18n();
   const controller = useController();
+  const { meta } = useWallet();
   const [typed, setTyped] = useState('');
   const word = t('settings.wipeWord');
   return (
     <div className="stack danger">
-      <p className="small">{t('settings.wipeHelp')}</p>
+      <p className="small">{t(meta?.kind === 'view' ? 'settings.wipeHelpView' : 'settings.wipeHelp')}</p>
       <label className="field">
         <span>{t('settings.wipeConfirm', { word })}</span>
         <input name="wipe-confirm" value={typed} autoComplete="off" onChange={(e) => setTyped(e.target.value)} />
@@ -121,7 +121,7 @@ export function WipeWallet() {
       <button
         type="button"
         className="danger-button"
-        disabled={typed.trim().toLocaleUpperCase('tr') !== word.toLocaleUpperCase('tr')}
+        disabled={confirmWord(typed) !== confirmWord(word)}
         onClick={() => void controller.wipe()}
       >
         {t('settings.wipe')}
@@ -136,6 +136,10 @@ export function Settings() {
   const { settings, meta } = useWallet();
   const [server, setServer] = useState(settings.serverUrl);
   const serverValid = isHttpsUrl(server);
+  const serverId = useId();
+  const serverHelpId = useId();
+  const serverErrorId = useId();
+  const lockId = useId();
 
   return (
     <Screen title={t('settings.title')}>
@@ -145,17 +149,26 @@ export function Settings() {
       </section>
 
       <section className="settings-group">
-        <h2>{t('settings.server')}</h2>
-        <p className="muted small">{t('settings.serverHelp')}</p>
+        <h2 id={serverId}>{t('settings.server')}</h2>
+        <p id={serverHelpId} className="muted small">
+          {t('settings.serverHelp')}
+        </p>
         <input
           name="server"
           value={server}
           inputMode="url"
           autoComplete="off"
           spellCheck={false}
+          aria-labelledby={serverId}
+          aria-describedby={serverValid ? serverHelpId : `${serverErrorId} ${serverHelpId}`}
+          aria-invalid={!serverValid}
           onChange={(e) => setServer(e.target.value)}
         />
-        {!serverValid && <p className="field-error">{t('settings.serverInvalid')}</p>}
+        {!serverValid && (
+          <p id={serverErrorId} className="field-error">
+            {t('settings.serverInvalid')}
+          </p>
+        )}
         <div className="row">
           <button type="button" className="secondary" onClick={() => setServer(DEFAULT_SERVER)}>
             {t('settings.serverReset')}
@@ -172,9 +185,10 @@ export function Settings() {
       </section>
 
       <section className="settings-group">
-        <h2>{t('settings.autoLock')}</h2>
+        <h2 id={lockId}>{t('settings.autoLock')}</h2>
         <select
           name="auto-lock"
+          aria-labelledby={lockId}
           value={settings.autoLockMinutes}
           onChange={(e) => void controller.saveSettings({ ...settings, autoLockMinutes: Number(e.target.value) })}
         >
@@ -188,11 +202,32 @@ export function Settings() {
 
       <section className="settings-group">
         <h2>{t('settings.security')}</h2>
+        <PasswordGate label={t('settings.showViewingKey')} derive={(secret) => controller.viewingKeyFor(secret)}>
+          {(key) => (
+            <>
+              <code className="address" data-testid="viewing-key">
+                {key}
+              </code>
+              <CopyButton value={key} />
+            </>
+          )}
+        </PasswordGate>
+        {/* Right under its own button, so it is not read as being about the recovery phrase. */}
         <p className="muted small">{t('settings.viewingKeyHelp')}</p>
-        <PasswordGate label={t('settings.showViewingKey')}>{(secret) => <ViewingKey secret={secret} />}</PasswordGate>
         {meta?.kind === 'seed' && (
-          <PasswordGate label={t('settings.showSeed')}>
-            {(secret) => (secret.kind === 'seed' ? <SeedGrid phrase={secret.phrase} /> : null)}
+          <PasswordGate label={t('settings.showSeed')} derive={seedPhraseOf}>
+            {(phrase) => (
+              <>
+                <Notice tone="warn">
+                  <ul className="plain">
+                    <li>{t('create.seedWarn1')}</li>
+                    <li>{t('create.seedWarn2')}</li>
+                    <li>{t('create.seedWarn3')}</li>
+                  </ul>
+                </Notice>
+                <SeedGrid phrase={phrase} />
+              </>
+            )}
           </PasswordGate>
         )}
       </section>
