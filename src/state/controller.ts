@@ -353,11 +353,18 @@ export class WalletController {
     return secret.phrase;
   }
 
-  async send(to: string, zats: bigint, password: string, onStage: (s: SendStage) => void): Promise<void> {
+  /** `memo`: optional UTF-8 text for a shielded recipient, see ZcashEngine.send. */
+  async send(
+    to: string,
+    zats: bigint,
+    password: string,
+    onStage: (s: SendStage) => void,
+    memo?: string,
+  ): Promise<void> {
     await this.spend(async () => {
       const id = this.requireAccount();
       const phrase = await this.spendingPhrase(password);
-      await this.eng.send(id, to, zats, { phrase, onStage });
+      await this.eng.send(id, to, zats, { phrase, onStage }, memo);
     });
   }
 
