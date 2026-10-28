@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  NU7_ACTIVATION_HEIGHT,
   SAPLING_ACTIVATION_HEIGHT,
   currentMonth,
   estimateBirthday,
+  heightBefore,
   newWalletBirthday,
   parseBirthdayMonth,
   syncProgress,
@@ -104,6 +106,57 @@ describe('birthday estimation', () => {
 
   it('starts new wallets just under the tip', () => {
     expect(newWalletBirthday(tip)).toBe(tip - 10);
+  });
+
+  describe('across NU7, where blocks go from 75 s to 25 s apart', () => {
+    const A = NU7_ACTIVATION_HEIGHT;
+    // Ten days of 25 s blocks (3456 a day) since the block before activation.
+    const tipAfter = A - 1 + 10 * 3456;
+    const daysAgo = (d: number) => new Date(now.getTime() - d * 86_400_000);
+
+    it('uses mainnet’s NU7 activation height', () => {
+      expect(NU7_ACTIVATION_HEIGHT).toBe(3_543_405);
+      // A day back from the activation block: that block at 25 s, then 75 s blocks.
+      expect(heightBefore(3_543_405, 86_400)).toBe(3_542_252);
+    });
+
+    it('counts 3456 blocks a day after activation', () => {
+      expect(estimateBirthday(daysAgo(4), tipAfter, now, 0)).toBe(tipAfter - 4 * 3456);
+    });
+
+    it('reaches the block before activation at the moment it activated', () => {
+      expect(estimateBirthday(daysAgo(10), tipAfter, now, 0)).toBe(A - 1);
+    });
+
+    it('counts 1152 blocks a day before activation', () => {
+      expect(estimateBirthday(daysAgo(12), tipAfter, now, 0)).toBe(A - 1 - 2 * 1152);
+      // The 14-day safety margin crosses activation too: 10 fast days, then 8 slow ones.
+      expect(estimateBirthday(daysAgo(4), tipAfter, now)).toBe(A - 1 - 8 * 1152);
+    });
+
+    it('keeps 75 s blocks while the tip is before activation', () => {
+      expect(estimateBirthday(daysAgo(1), A - 1, now, 0)).toBe(A - 1 - 1152);
+      // One block past it, that block counts 25 s and the rest of the day 75 s each.
+      expect(heightBefore(A, 86_400)).toBe(Math.floor(A - 1 - (86_400 - 25) / 75));
+    });
+
+    it('never jumps or turns back as the date moves across activation', () => {
+      let previous = Infinity;
+      for (let hours = 0; hours <= 24 * 30; hours += 1) {
+        const height = estimateBirthday(new Date(now.getTime() - hours * 3_600_000), tipAfter, now, 0);
+        expect(height).toBeLessThanOrEqual(previous);
+        // An hour is 144 blocks after activation and 48 before it.
+        if (previous !== Infinity) expect(previous - height).toBeLessThanOrEqual(144);
+        previous = height;
+      }
+    });
+
+    it('starts new wallets about 12 minutes of blocks under the tip', () => {
+      expect(newWalletBirthday(A - 1)).toBe(A - 11);
+      expect(newWalletBirthday(A + 100)).toBe(A + 70);
+      // Six 25 s blocks (A to A + 5), then eight 75 s ones.
+      expect(newWalletBirthday(A + 5)).toBe(A - 9);
+    });
   });
 
   it('computes sync progress', () => {
