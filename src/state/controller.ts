@@ -16,10 +16,10 @@ import {
   type ZcashEngine,
 } from '../engine';
 import { storage, type Settings, type WalletMeta } from '../lib/storage';
+import { catchUpFor, type SyncInfo } from '../lib/syncView';
 import { createVault, decryptDb, encryptDb, unlockVault, type Secret } from '../lib/vault';
 
 export type Phase = 'booting' | 'bootError' | 'welcome' | 'locked' | 'ready';
-export type SyncStatus = 'starting' | 'syncing' | 'idle' | 'error';
 
 export interface WalletState {
   phase: Phase;
@@ -30,7 +30,7 @@ export interface WalletState {
   summary: Summary | null;
   addresses: Addresses | null;
   history: HistoryItem[];
-  sync: { status: SyncStatus; error: string | null };
+  sync: SyncInfo;
 }
 
 const SYNC_INTERVAL_MS = 30_000;
@@ -50,6 +50,8 @@ export class WalletController {
   private key: CryptoKey | null = null;
   private listeners = new Set<() => void>();
   private syncTimer: ReturnType<typeof setTimeout> | null = null;
+  private syncing = false;
+  private summaryInFlight = false;
   private state: WalletState;
 
   constructor(settings: Settings) {
@@ -62,7 +64,7 @@ export class WalletController {
       summary: null,
       addresses: null,
       history: [],
-      sync: { status: 'starting', error: null },
+      sync: { status: 'starting', error: null, catchUp: null, networkTip: null },
     };
   }
 
@@ -166,7 +168,7 @@ export class WalletController {
   }
 
   private async enterReady() {
-    this.set({ phase: 'ready', sync: { status: 'starting', error: null } });
+    this.set({ phase: 'ready', sync: { ...this.state.sync, status: 'starting', error: null, catchUp: null } });
     await this.refresh();
     void this.syncLoop();
   }
@@ -204,41 +206,69 @@ export class WalletController {
 
   // --- sync -------------------------------------------------------------------
 
-  private async syncLoop(): Promise<void> {
-    if (this.state.phase !== 'ready') return;
-    this.set({ sync: { status: 'syncing', error: null } });
+  private setSync(patch: Partial<SyncInfo>) {
+    this.set({ sync: { ...this.state.sync, ...patch } });
+  }
 
-    // Sync runs in a worker; poll the summary meanwhile so progress moves.
+  private async syncLoop(): Promise<void> {
+    if (this.state.phase !== 'ready' || this.syncing) return;
+    this.syncing = true;
+    this.setSync({ status: 'syncing', ...(await this.measureGap()) });
+
+    // Engines that can report progress mid-pass move the bar; WebZjs answers
+    // only when the pass ends, so at most one summary call waits at a time.
     const poll = setInterval(() => void this.refreshSummary(), PROGRESS_POLL_MS);
     let delay = SYNC_INTERVAL_MS;
     try {
       await this.eng.sync();
       await this.refresh();
       await this.persist();
-      this.set({ sync: { status: 'idle', error: null } });
+      this.setSync({ status: 'idle', error: null, catchUp: null });
     } catch (e) {
       console.warn('sync failed', e);
-      this.set({ sync: { status: 'error', error: e instanceof Error ? e.message : String(e) } });
+      this.setSync({ status: 'error', error: e instanceof Error ? e.message : String(e), catchUp: null });
       delay = SYNC_RETRY_MS;
     } finally {
       clearInterval(poll);
+      this.syncing = false;
     }
     this.syncTimer = setTimeout(() => void this.syncLoop(), delay);
   }
 
+  /**
+   * Reads the network tip before a pass, while the engine can still answer,
+   * and compares it with the wallet's scanned height.
+   */
+  private async measureGap(): Promise<Partial<SyncInfo>> {
+    let tip: number;
+    try {
+      tip = await this.eng.latestHeight();
+    } catch {
+      // The pass itself reports connection problems; until then the last error stands.
+      return { catchUp: null };
+    }
+    // Servers behind one lightwalletd URL can be a block apart; never step back.
+    const networkTip = Math.max(tip, this.state.sync.networkTip ?? 0);
+    const scanned = this.state.summary?.scannedHeight;
+    return { error: null, networkTip, catchUp: scanned === undefined ? null : catchUpFor(scanned, networkTip) };
+  }
+
   /** Runs a sync now instead of waiting for the next tick (e.g. after sending). */
   private kickSync() {
-    if (this.state.sync.status === 'syncing') return;
+    if (this.syncing) return;
     if (this.syncTimer) clearTimeout(this.syncTimer);
     void this.syncLoop();
   }
 
   private async refreshSummary() {
-    if (this.state.accountId === null) return;
+    if (this.state.accountId === null || this.summaryInFlight) return;
+    this.summaryInFlight = true;
     try {
       this.set({ summary: await this.eng.summary(this.state.accountId) });
     } catch (e) {
       console.warn('summary failed', e);
+    } finally {
+      this.summaryInFlight = false;
     }
   }
 
