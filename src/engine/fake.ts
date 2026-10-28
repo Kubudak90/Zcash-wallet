@@ -52,8 +52,14 @@ export interface FakeKnobs {
   holdSpend?: boolean;
   /** The network runs NU6.3 (Ironwood), which this engine does not support, like the WebZjs Celari ships today. */
   networkOutdated?: boolean;
+  /** The server reports NU5 rules, older than the network's, like a node that missed upgrades. */
+  networkServerBehind?: boolean;
+  /** networkStatus() reports a tip this many blocks under latestHeight(), like a lagging server. */
+  networkLag?: number;
   /** networkStatus() fails, like a server that does not answer GetLightdInfo. */
   networkUnreachable?: boolean;
+  /** Set by the fake: how many times networkStatus() has answered, so tests can wait for the next check. */
+  networkChecks?: number;
   /** Keep networkStatus() from answering until this is cleared. */
   holdNetworkCheck?: boolean;
   /** An upgrade the server announces, as networkStatus() reports it. */
@@ -120,11 +126,15 @@ export class FakeEngine implements ZcashEngine {
     await sleep(20);
     while (knobs().holdNetworkCheck) await sleep(50);
     const k = knobs();
+    k.networkChecks = (k.networkChecks ?? 0) + 1;
     if (k.networkUnreachable) throw new Error('fake GetLightdInfo failure');
     // NU6 rules at the fake tip by default; NU6.3 (Ironwood) when outdated.
+    const height = chainTip() + (k.tipAhead ?? 0) - (k.networkLag ?? 0);
     const status: NetworkStatus = k.networkOutdated
-      ? { branchId: '37a5165b', height: chainTip(), supported: false }
-      : { branchId: 'c8e71055', height: chainTip(), supported: true };
+      ? { branchId: '37a5165b', height, supported: false, behind: 'engine', lacks: 'NU6.3' }
+      : k.networkServerBehind
+        ? { branchId: 'c2d6d0b4', height, supported: false, behind: 'server' }
+        : { branchId: 'c8e71055', height, supported: true };
     if (k.upcomingUpgrade) status.upcoming = k.upcomingUpgrade;
     return status;
   }

@@ -29,6 +29,27 @@ export function heightBefore(height: number, seconds: number): number {
   return Math.floor(height - fastBlocks - (seconds - fastSeconds) / BLOCK_TIME_SECONDS);
 }
 
+/** The height `seconds` of block time above `height`, at the spacing heightBefore uses. */
+export function heightAfter(height: number, seconds: number): number {
+  // Blocks above `height` and below NU7's activation height.
+  const slowBlocks = Math.max(0, NU7_ACTIVATION_HEIGHT - 1 - height);
+  const slowSeconds = slowBlocks * BLOCK_TIME_SECONDS;
+  if (seconds <= slowSeconds) return Math.floor(height + seconds / BLOCK_TIME_SECONDS);
+  return Math.floor(height + slowBlocks + (seconds - slowSeconds) / NU7_BLOCK_TIME_SECONDS);
+}
+
+/** A mainnet height and a time it had been reached by (a server's answer, 2026-10-28 12:50:36 UTC). */
+const HEIGHT_ANCHOR = { height: 3_533_575, time: Date.UTC(2026, 9, 28, 12, 50, 36) };
+
+/**
+ * The mainnet height at `date`, from the clock alone: counted from a known
+ * height at the target spacing. Only as good as the device's clock.
+ */
+export function estimateHeightAt(date: Date): number {
+  const seconds = (date.getTime() - HEIGHT_ANCHOR.time) / 1000;
+  return seconds >= 0 ? heightAfter(HEIGHT_ANCHOR.height, seconds) : heightBefore(HEIGHT_ANCHOR.height, -seconds);
+}
+
 /**
  * Estimates the height at `date` by counting back from the current tip, at
  * the target spacing (see heightBefore), which blocks have kept steadily

@@ -52,15 +52,20 @@ function SyncPill() {
   const { t, lang } = useI18n();
   const { sync } = useWallet();
   const view = useSyncView();
+  const network = useNetworkView();
+  // Scanned to the tip, but under rules that miss what the network now carries.
+  const behind = view.kind === 'upToDate' && network.kind === 'outdated';
   return (
     <span
-      className={`pill pill-${SYNC_TONE[view.kind]}`}
+      className={`pill pill-${behind ? 'warn' : SYNC_TONE[view.kind]}`}
       role="status"
       data-testid="sync-status"
       data-sync={sync.status}
       title={sync.error ?? undefined}
     >
-      {syncLabel(view, t, lang)}
+      {view.kind === 'upToDate' && behind
+        ? t('sync.behindNetwork', { height: view.height.toLocaleString(lang === 'tr' ? 'tr-TR' : 'en-US') })
+        : syncLabel(view, t, lang)}
     </span>
   );
 }

@@ -49,7 +49,8 @@ test('real engine: create a wallet, sync from the tip, lock and unlock', async (
   await page.getByRole('button', { name: 'Create wallet' }).click();
 
   await synced(8 * 60_000);
-  await expect(status).toContainText('Up to date');
+  // "Scanned to block N · behind the network" while the engine is outdated (below).
+  await expect(status).toHaveText(/^Up to date|behind the network$/);
   await expect(page.getByTestId('balance-total')).toContainText('0.00');
 
   // What the engine says about the rules the network runs (GetLightdInfo,
@@ -65,6 +66,8 @@ test('real engine: create a wallet, sync from the tip, lock and unlock', async (
   const outdated = network === 'outdated';
   if (outdated) {
     await expect(page.getByTestId('network-banner')).toContainText('Celari is behind the Zcash network');
+    await expect(status).toHaveText(/^Scanned to block [\d,]+ · behind the network$/);
+    await expect(page.getByTestId('balance-outdated')).toBeVisible();
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.getByTestId('spend-disabled')).toHaveText(
       'Sending is disabled until Celari is updated for the current Zcash network.',

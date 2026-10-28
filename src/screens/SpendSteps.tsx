@@ -8,7 +8,7 @@ import { spendWait } from '../lib/spendWait';
 import { WrongPasswordError } from '../lib/vault';
 import { useWallet } from '../state/wallet';
 import { useSyncView } from './Main';
-import { useNetworkView } from './NetworkBanner';
+import { disabledMessage, useNetworkView } from './NetworkBanner';
 
 const STAGES: SendStage[] = ['building', 'signing', 'proving', 'broadcasting'];
 
@@ -121,7 +121,7 @@ export function SpendConfirm({
     // The controller refuses too (NetworkNotSupportedError), before anything is built or sent.
     body = (
       <Notice tone="warn">
-        <p data-testid="spend-disabled">{network.kind === 'outdated' ? disabledText : t('network.unreachable')}</p>
+        <p data-testid="spend-disabled">{disabledMessage(network, disabledText, t)}</p>
         {/* A spend the check stopped before the broadcast: say that nothing went out. */}
         {error && <p>{t('send.nothingSent')}</p>}
       </Notice>

@@ -2,11 +2,11 @@ import { useId } from 'react';
 
 import { Amount, CopyButton, Screen, useHideBalances } from '../components/ui';
 import { useI18n } from '../i18n';
-import { poolPrivacy, type Privacy } from '../lib/privacy';
+import { txPrivacy, type Privacy } from '../lib/privacy';
 import { useWallet } from '../state/wallet';
 
-/** Full, half and empty: the mark tells the labels apart without colour. */
-const PRIVACY_MARK: Record<Privacy, string> = { shielded: '●', partial: '◐', transparent: '○' };
+/** Full, half and empty: the mark tells the labels apart without colour, as do the words. */
+const PRIVACY_MARK: Record<Privacy, string> = { shielded: '●', shielding: '◐', partial: '◐', transparent: '○' };
 
 export function History() {
   const { t, lang } = useI18n();
@@ -27,9 +27,10 @@ export function History() {
           <p id={noteId} className="muted small">
             {t('history.privacyNote')}
           </p>
-          <ul className="history" data-testid="history">
+          {/* The note scopes every label; a list announces its description on entry, a span would not. */}
+          <ul className="history" data-testid="history" aria-describedby={noteId}>
             {history.map((tx) => {
-              const privacy = poolPrivacy(tx.pool);
+              const privacy = txPrivacy(tx);
               return (
                 <li key={tx.txid} className={`tx tx-${tx.type}`}>
                   <div className="tx-main">
@@ -46,7 +47,7 @@ export function History() {
                     )}
                     {/* No label where WebZjs could not tell the pool: none is better than a guess. */}
                     {privacy && (
-                      <span className={`privacy privacy-${privacy}`} aria-describedby={noteId}>
+                      <span className={`privacy privacy-${privacy}`}>
                         <span aria-hidden="true">{PRIVACY_MARK[privacy]}</span>{' '}
                         <span className="visually-hidden">{t('history.privacyLabel')}: </span>
                         {t(`history.privacy.${privacy}`)}

@@ -3,7 +3,7 @@
 // at the wallet's own outputs: notes it received, and what it sent, change
 // included. Other inputs and outputs of the transaction are not classified.
 
-export type Privacy = 'shielded' | 'partial' | 'transparent';
+export type Privacy = 'shielded' | 'shielding' | 'partial' | 'transparent';
 
 const POOLS = new Map<string, Privacy>([
   ['sapling', 'shielded'],
@@ -19,4 +19,15 @@ const POOLS = new Map<string, Privacy>([
 /** null for 'unknown' and anything WebZjs may add later: no label rather than a guess. */
 export function poolPrivacy(pool: string): Privacy | null {
   return POOLS.get(pool.toLowerCase()) ?? null;
+}
+
+/**
+ * A row's label. WebZjs types a transfer between the wallet's own pools
+ * 'shielded': shielding transparent funds or moving them between shielded
+ * pools. Its outputs are shielded, but the transparent inputs, or the amount
+ * crossing pools, are public.
+ */
+export function txPrivacy(tx: { type: string; pool: string }): Privacy | null {
+  const privacy = poolPrivacy(tx.pool);
+  return tx.type === 'shielded' && privacy === 'shielded' ? 'shielding' : privacy;
 }
