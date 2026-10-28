@@ -63,10 +63,10 @@ test('create, receive, send, shield, lock and unlock', async ({ page }) => {
 
   await page.getByLabel('Enter your password to confirm').fill(PASSWORD);
   await page.locator('form').getByRole('button', { name: 'Send' }).click();
-  await expect(page.getByText('Generating zero-knowledge proofs')).toBeVisible();
-  await expect(page.getByText('Sent. The transaction will confirm')).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator('.stages').getByText('Generating zero-knowledge proofs')).toBeVisible();
+  await expect(page.getByRole('heading', { name: '0.50 ZEC sent' })).toBeVisible({ timeout: 10_000 });
 
-  await page.getByRole('button', { name: 'History' }).click();
+  await page.getByRole('button', { name: 'History', exact: true }).click();
   const history = page.getByTestId('history');
   await expect(history.locator('.tx').first()).toContainText('Sent');
   await expect(history.locator('.tx').first()).toContainText('-0.5001');
@@ -78,7 +78,7 @@ test('create, receive, send, shield, lock and unlock', async ({ page }) => {
   await page.getByRole('button', { name: 'Shield funds' }).click();
   await page.getByLabel('Enter your password to confirm').fill(PASSWORD);
   await page.getByRole('button', { name: 'Shield', exact: true }).click();
-  await expect(page.getByText('Shielding sent.')).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole('heading', { name: '0.50 ZEC is being shielded' })).toBeVisible({ timeout: 10_000 });
   await page.getByRole('button', { name: 'Close' }).click();
   await expect(page.getByTestId('balance-transparent')).toContainText('0.00');
 

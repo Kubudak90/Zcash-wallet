@@ -40,15 +40,21 @@ export function CopyButton({ value, label }: { value: string; label?: string }) 
     return () => clearTimeout(id);
   }, [copied]);
   return (
-    <button
-      type="button"
-      className="secondary"
-      onClick={() => {
-        void navigator.clipboard.writeText(value).then(() => setCopied(true));
-      }}
-    >
-      {copied ? t('common.copied') : (label ?? t('common.copy'))}
-    </button>
+    <>
+      <button
+        type="button"
+        className="secondary"
+        onClick={() => {
+          void navigator.clipboard.writeText(value).then(() => setCopied(true));
+        }}
+      >
+        {copied ? t('common.copied') : (label ?? t('common.copy'))}
+      </button>
+      {/* Screen readers rarely re-read a focused button whose name changed. */}
+      <span role="status" className="visually-hidden">
+        {copied ? t('common.copied') : ''}
+      </span>
+    </>
   );
 }
 

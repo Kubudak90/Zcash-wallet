@@ -31,6 +31,8 @@ export interface WalletState {
   addresses: Addresses | null;
   history: HistoryItem[];
   sync: { status: SyncStatus; error: string | null };
+  /** True while a send or shield runs; the UI keeps the user on its progress meanwhile. */
+  spending: boolean;
 }
 
 const SYNC_INTERVAL_MS = 30_000;
@@ -45,11 +47,19 @@ export class NotASeedWalletError extends Error {
   }
 }
 
+/** Asks before the tab is closed or reloaded while a spend is running. */
+function confirmLeave(e: BeforeUnloadEvent) {
+  e.preventDefault();
+  // Older Chromium shows the prompt only when returnValue is set.
+  e.returnValue = true;
+}
+
 export class WalletController {
   private engine: ZcashEngine | null = null;
   private key: CryptoKey | null = null;
   private listeners = new Set<() => void>();
   private syncTimer: ReturnType<typeof setTimeout> | null = null;
+  private lockAfterSpend = false;
   private state: WalletState;
 
   constructor(settings: Settings) {
@@ -63,6 +73,7 @@ export class WalletController {
       addresses: null,
       history: [],
       sync: { status: 'starting', error: null },
+      spending: false,
     };
   }
 
@@ -183,6 +194,11 @@ export class WalletController {
   }
 
   lock(): void {
+    // Reloading now would kill a payment half-way through; lock once it settles.
+    if (this.state.spending) {
+      this.lockAfterSpend = true;
+      return;
+    }
     this.key = null;
     window.location.reload();
   }
@@ -270,17 +286,35 @@ export class WalletController {
   }
 
   async send(to: string, zats: bigint, password: string, onStage: (s: SendStage) => void): Promise<void> {
-    const id = this.requireAccount();
-    const phrase = await this.spendingPhrase(password);
-    await this.eng.send(id, to, zats, { phrase, onStage });
-    await this.afterSpend();
+    await this.spend(async () => {
+      const id = this.requireAccount();
+      const phrase = await this.spendingPhrase(password);
+      await this.eng.send(id, to, zats, { phrase, onStage });
+    });
   }
 
   async shield(password: string, onStage: (s: SendStage) => void): Promise<void> {
-    const id = this.requireAccount();
-    const phrase = await this.spendingPhrase(password);
-    await this.eng.shield(id, { phrase, onStage });
-    await this.afterSpend();
+    await this.spend(async () => {
+      const id = this.requireAccount();
+      const phrase = await this.spendingPhrase(password);
+      await this.eng.shield(id, { phrase, onStage });
+    });
+  }
+
+  /** Runs one spend at a time, so a second click can never pay twice. */
+  private async spend(run: () => Promise<void>): Promise<void> {
+    if (this.state.spending) throw new Error('another payment is still in progress');
+    this.set({ spending: true });
+    window.addEventListener('beforeunload', confirmLeave);
+    try {
+      await run();
+      // The transaction is out at this point: a failed refresh must not read as a failed send.
+      await this.afterSpend().catch((e) => console.warn('refresh after spend failed', e));
+    } finally {
+      window.removeEventListener('beforeunload', confirmLeave);
+      this.set({ spending: false });
+      if (this.lockAfterSpend) this.lock();
+    }
   }
 
   private async afterSpend() {
