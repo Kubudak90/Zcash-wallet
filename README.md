@@ -1,5 +1,18 @@
 # Celari
 
+> [!CAUTION]
+> **Bu sürüm Zcash ağının NU6.3 (Ironwood) yükseltmesini desteklemiyor.** Ana ağ 28 Temmuz 2026'da, 3.428.143. blokta Ironwood kurallarına geçti; Celari'nin içindeki WebZjs motoru NU6.1'de kaldı. Sıradaki yükseltme NU7 (3.543.405. blok, Kasım 2026 başı) de bu sürümde desteklenmiyor.
+>
+> - **Gönderme ve gizliye aktarma kapalı.** Ağ, bu sürümün hazırladığı her işlemi reddeder. Celari ağın kurallarını açılışta ve her eşitlemede sunucuya sorar; motor desteklemiyorsa ya da cevap gelmezse hiçbir işlemi ağa göndermez ve nedenini ekranda söyler.
+> - **Birleşik (unified) adresine gelen gizli ödemeler motor güncellenene kadar görünmez.** Güncel cüzdanların bu adrese gönderdiği para yeni Ironwood havuzuna düşer; bu sürüm o havuzu göremez. **Para kaybolmaz**, güncellemeden sonra görünür; gönderenden tekrar ödeme isteme. Şeffaf (`t1…`) adrese gelen ödemeler bugün de görünür.
+> - **Paranı şimdi kullanman gerekiyorsa:** kurtarma kelimelerini Ironwood destekleyen bir cüzdana (örneğin Zodl 3.8.0 ve üzeri) geri yükle; başlangıç olarak cüzdanı ilk kullandığın tarihi ya da biraz öncesini ver. O cüzdan Ironwood'a gelen ödemeleri gösterir ve Orchard'daki gizli bakiyeni Ironwood'a taşıyabilir. Kelimeler aynı cüzdanı açar; Celari'deki kopya şifreli ve güvende kalır, ama oradan Ironwood'a taşıdığın para da bu Celari sürümünde görünmez.
+>
+> **This release does not support Zcash's NU6.3 (Ironwood) network upgrade.** Mainnet moved to Ironwood on 28 July 2026 at block 3,428,143, and the WebZjs engine inside Celari stops at NU6.1. The next upgrade, NU7 (block 3,543,405, early November 2026), is not supported either.
+>
+> - **Sending and shielding are disabled.** The network rejects every transaction this release builds. Celari asks the server which rules the network runs at start-up and on every sync; if the engine does not support them, or no answer comes, nothing is broadcast and the app says why.
+> - **Shielded payments to your unified address do not show until the engine is updated.** Up-to-date wallets paying that address put the funds in the new Ironwood pool, which this release cannot see. **The funds are not lost** and will show after the update; do not ask the sender to pay again. Payments to your transparent (`t1…`) address still show.
+> - **If you need your funds now:** restore your recovery phrase in a wallet that supports Ironwood (for example Zodl 3.8.0 or later), giving the date you first used the wallet, or a little earlier, as its start. That wallet shows payments received in Ironwood and can move your Orchard balance to Ironwood. The phrase opens the same wallet; the copy in Celari stays encrypted and safe, but funds you move to Ironwood there will not show in this release of Celari either.
+
 **Zcash için açık kaynak, gizlilik öncelikli tarayıcı cüzdanı.**
 Token yok, puan yok, "airdrop gelecek" vaadi yok. Sadece iyi çalışan, gizli bir ZEC cüzdanı.
 
@@ -12,8 +25,9 @@ Token yok, puan yok, "airdrop gelecek" vaadi yok. Sadece iyi çalışan, gizli b
 
 ## Özellikler
 
-- **Varsayılan olarak gizli:** Alma ekranı önce birleşik (unified) adresi gösterir; para doğrudan Orchard gizli havuzuna düşer.
-- **Tek tıkla gizliye aktarma:** Şeffaf (t-adres) bakiye varsa uyarır ve Orchard'a taşır.
+- **Varsayılan olarak gizli:** Alma ekranı önce birleşik (unified) adresi gösterir; gönderen cüzdan destekliyorsa para gizli bir havuza gider. Ironwood'dan beri güncel cüzdanlar için bu havuz Ironwood ve bu sürüm onu henüz göremez (yukarıdaki uyarı); ekran bunu adresin üstünde söyler.
+- **Tek tıkla gizliye aktarma:** Şeffaf (t-adres) bakiye varsa uyarır ve gizli bakiyeye aktarır. Bu sürümde kapalı: Ironwood'dan beri ağ Orchard'a yeni para almıyor ve motor Ironwood'a aktaramıyor.
+- **Ağ sürümü denetimi:** Celari ağın hangi kurallarla çalıştığını açılışta ve her eşitlemede sunucuya sorar (lightwalletd `GetLightdInfo`), harcamadan önce ve yayından hemen önce bir kez daha. Motor bu kuralları desteklemiyorsa ya da cevap gelmezse gönderme ve gizliye aktarma kapanır, ekranda nedeni yazar; duyurulmuş ama desteklenmeyen bir sonraki yükseltme de önceden gösterilir.
 - **Anahtarlar tarayıcıdan çıkmaz:** Kurtarma kelimeleri ve cüzdan veritabanı tarayıcıda yalnızca şifreli durur (PBKDF2-SHA256 600.000 tur + AES-256-GCM).
 - **Her harcamada şifre:** Kurtarma kelimeleri sadece imzalama anında çözülür, bellekte tutulmaz.
 - **Sadece izleme modu:** Görüntüleme anahtarıyla (UFVK) bakiye ve geçmiş takibi. Harcama yetkisi yoktur, ama anahtarı alan herkes tüm geçmişi ve gelecekteki işlemleri görür; yalnızca tamamen güvendiğin biriyle paylaş.
@@ -92,6 +106,7 @@ Cross-Origin-Embedder-Policy: require-corp
 - [ ] Bağımsız güvenlik denetimi
 - [ ] Ledger / Keystone donanım cüzdanı ile imzalama (PCZT akışı buna hazır)
 - [ ] Tarayıcı eklentisi (anahtarları sayfadan ayrı süreçte tutmak için)
+- [ ] NU6.3 (Ironwood) ve NU7 desteği: güncel bir WebZjs/librustzcash, Orchard'dan Ironwood'a taşıma
 - [x] Gönderimde not (memo) desteği
 - [ ] Birden çok hesap, çoklu alıcılı ZIP-321
 - [ ] Test ağı modu, kendi lightwalletd vekilini kurma rehberi
@@ -107,7 +122,8 @@ MIT veya Apache-2.0, tercihine göre. WebZjs © ChainSafe Systems, MIT / Apache-
 
 **Celari** is an open-source, privacy-first browser wallet for Zcash, built on ChainSafe's [WebZjs](https://github.com/ChainSafe/WebZjs). No token, no points, no airdrop promises.
 
-- Shielded (unified/Orchard) address by default; one-click shielding of transparent funds.
+- Unified (shielded) address by default; one-click shielding of transparent funds. Both are limited in this release: shielding is disabled, and shielded payments that arrive through the Ironwood pool do not show yet (see the warning at the top).
+- Network version guard: the app asks the server which consensus rules the network runs (lightwalletd `GetLightdInfo`) at start-up, on every sync and before every broadcast, and keeps sending and shielding off while the engine does not support them or the answer does not come.
 - Keys and the wallet database are stored only encrypted (PBKDF2-SHA256 600k + AES-256-GCM); the seed is decrypted only to sign and the password is asked on every spend.
 - View-only mode with a UFVK, birthday estimation from a month, checksum-validated addresses, ZIP-321 `zcash:` links, encrypted memos to shielded addresses.
 - Turkish and English UI. Configurable lightwalletd gRPC-web proxy.
