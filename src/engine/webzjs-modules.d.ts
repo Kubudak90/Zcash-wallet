@@ -76,7 +76,8 @@ declare module '@chainsafe/webzjs-wallet' {
     ): Promise<TransactionHistoryResponse>;
     get_latest_block(): Promise<bigint>;
     detect_birthday_from_transparent_address(transparent_address: string): Promise<number | undefined>;
-    pczt_create(account_id: number, to_address: string, value: bigint): Promise<Pczt>;
+    // `memo` comes from patches/webzjs/0002-memo.patch.
+    pczt_create(account_id: number, to_address: string, value: bigint, memo?: string | null): Promise<Pczt>;
     pczt_shield(account_id: number): Promise<Pczt>;
     pczt_prove(pczt: Pczt, sapling_proof_gen_key?: ProofGenerationKey | null): Promise<Pczt>;
     pczt_send(pczt: Pczt): Promise<void>;

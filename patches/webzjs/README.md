@@ -7,8 +7,9 @@ stops the build. Each file starts with a description; the diff follows.
 | Patch | What it changes | Used by |
 | --- | --- | --- |
 | `0001-sync-progress.patch` | `WebWallet.sync_progress()`: lock-free block counters for the running sync pass. Also fixes a possible deadlock in `get_transaction_history` (a second `db.read()` while holding the first one). | `WebzjsEngine.syncProgress()`, the Home sync bar |
+| `0002-memo.patch` | `WebWallet.pczt_create(account, to, value, memo?)`: an optional UTF-8 text memo (at most 512 bytes) for shielded recipients. A memo to a transparent or TEX address is rejected, as ZIP 321 requires. | `WebzjsEngine.send(..., memo)` |
 
-It is meant to go upstream to ChainSafe/WebZjs; drop a patch once the pinned
+Both are meant to go upstream to ChainSafe/WebZjs; drop a patch once the pinned
 commit contains the change.
 
 To change a patch or add one, work in the checkout the build script leaves in

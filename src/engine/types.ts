@@ -61,6 +61,9 @@ export interface SyncProgress {
   scanned: number;
 }
 
+/** A memo holds at most this many bytes of UTF-8 text (ZIP 302). */
+export const MEMO_MAX_BYTES = 512;
+
 export interface ZcashEngine {
   /** Loads the wasm runtime and connects to the lightwalletd proxy. Call once per page. */
   init(serverUrl: string): Promise<void>;
@@ -83,7 +86,13 @@ export interface ZcashEngine {
   addresses(account: number): Promise<Addresses>;
   history(account: number, limit: number): Promise<HistoryItem[]>;
 
-  send(account: number, to: string, zats: bigint, auth: SpendAuthority): Promise<void>;
+  /**
+   * Builds, signs, proves and broadcasts a payment. `memo` is UTF-8 text for
+   * the recipient, at most MEMO_MAX_BYTES bytes; only shielded recipients can
+   * receive one, so a memo to a transparent or TEX address is rejected before
+   * anything is built. An empty or missing memo sends none.
+   */
+  send(account: number, to: string, zats: bigint, auth: SpendAuthority, memo?: string): Promise<void>;
   shield(account: number, auth: SpendAuthority): Promise<void>;
 }
 
