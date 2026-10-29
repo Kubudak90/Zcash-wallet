@@ -1,7 +1,7 @@
 librustzcash 2026-10 cohort: manifests, toolchain and cargo configuration
 
 Applies on top of 0002-memo.patch. Generated from the engine-port working tree at
-a59b211 (make-celari-files.sh); the Rust changes that go with it are in
+88ccb43 (make-celari-files.sh); the Rust changes that go with it are in
 0004-ironwood-nu7.patch, and the two only build together.
 
 - Zcash crates from crates.io (releases of 2026-10-21, NU6.2/NU6.3/NU7-aware) instead of
@@ -10,7 +10,11 @@ a59b211 (make-celari-files.sh); the Rust changes that go with it are in
   zcash_protocol 0.11.0, pczt 0.10.0, zip321 0.10.0, zcash_transparent 0.11.0,
   zcash_address 0.14.0, orchard 0.16, sapling-crypto 0.9, zip32 0.3.
 - zcash_client_memory from ../engine/zcash_client_memory (Celari's ported backend, a
-  sibling of the .webzjs/ checkout) instead of the fork.
+  sibling of the .webzjs/ checkout) instead of the fork, through the symlink
+  celari-engine -> ../engine this patch adds, and excluded from the workspace members:
+  inside the workspace's directory cargo derives the crate's -C metadata from its
+  relative path, outside it from its absolute path, which made the wasm depend on
+  where the checkout was (Integrate phase, PORT-NOTES Decision 19).
 - wasm-bindgen 0.2.129 (js-sys/web-sys 0.3.106, wasm-bindgen-futures 0.4.79,
   wasm-bindgen-test 0.3.79) instead of ChainSafe's 0.2.100 pin, and
   tonic-web-wasm-client 0.9.2: 0.8.0 never hands the gRPC-web grpc-status trailer to
@@ -71,10 +75,21 @@ index 4feb031..63dab81 100644
 +  "--cfg", "getrandom_backend=\"wasm_js\"",
 +]
 diff --git a/Cargo.toml b/Cargo.toml
-index a278326..886fc84 100644
+index a278326..605d9d7 100644
 --- a/Cargo.toml
 +++ b/Cargo.toml
-@@ -16,10 +16,13 @@ codegen-units = 1
+@@ -7,6 +7,10 @@ members = [
+     "crates/webzjs-requests",
+     "crates/webzjs-wallet",
+ ]
++# Celari: zcash_client_memory (through celari-engine/, see [workspace.dependencies]) stays a
++# path dependency, not a member: no workspace lints, and its dev-dependencies stay out of the
++# lockfile.
++exclude = ["celari-engine"]
+ 
+ [profile.release]
+ # Tell `rustc` to optimize for small code size.
+@@ -16,10 +20,13 @@ codegen-units = 1
  
  [workspace.dependencies]
  ## Web dependencies
@@ -92,7 +107,7 @@ index a278326..886fc84 100644
      "console",
  ] }
  wasm-bindgen-rayon = { version = "1.3" } # Update to higher version cause playwright test in chtomium fail
-@@ -27,32 +30,57 @@ wasm-bindgen-rayon = { version = "1.3" } # Update to higher version cause playwr
+@@ -27,32 +34,60 @@ wasm-bindgen-rayon = { version = "1.3" } # Update to higher version cause playwr
  # WASM specific dependencies
  tracing-web = { version = "0.1.3" }
  console_error_panic_hook = { version = "0.1.7" }
@@ -120,8 +135,11 @@ index a278326..886fc84 100644
 +zcash_keys = { version = "0.17.0", features = ["transparent-inputs", "orchard", "sapling", "unstable"] }
 +zcash_client_backend = { version = "0.25.0", default-features = false, features = ["sync", "lightwalletd-tonic", "orchard"] }
 +# Celari: the ported wallet backend ships as readable source in the Celari repository
-+# (engine/zcash_client_memory), next to the WebZjs checkout (.webzjs/).
-+zcash_client_memory = { path = "../engine/zcash_client_memory", features = ["orchard", "transparent-inputs"] }
++# (engine/zcash_client_memory), next to the WebZjs checkout (.webzjs/). It is reached through
++# the symlink celari-engine -> ../engine, inside this workspace's directory: cargo derives a
++# path package's -C metadata from its path relative to the workspace root, but from the
++# absolute path for one outside it, which made the wasm depend on where the checkout was.
++zcash_client_memory = { path = "celari-engine/zcash_client_memory", features = ["orchard", "transparent-inputs"] }
 +zcash_primitives = { version = "0.31.0" }
 +zcash_transparent = { version = "0.11.0", default-features = false }
 +zcash_address = { version = "0.14.0" }
@@ -166,7 +184,7 @@ index a278326..886fc84 100644
  thiserror = "1.0.63"
  indexed_db_futures = "0.5.0"
  sha2 = "0.10"
-@@ -74,7 +102,7 @@ serde = { version = "1", features = ["derive"], default-features = false }
+@@ -74,7 +109,7 @@ serde = { version = "1", features = ["derive"], default-features = false }
  postcard = { version = "1.0.10", features = ["alloc"] }
  serde-wasm-bindgen = "0.6.5"
  
@@ -175,6 +193,14 @@ index a278326..886fc84 100644
  tempfile = "3.12"
  # Used in Native tests
  tokio = { version = "1.0", features = ["rt", "macros"] }
+diff --git a/celari-engine b/celari-engine
+new file mode 120000
+index 0000000..a19e810
+--- /dev/null
++++ b/celari-engine
+@@ -0,0 +1 @@
++../engine
+\ No newline at end of file
 diff --git a/crates/webzjs-common/Cargo.toml b/crates/webzjs-common/Cargo.toml
 index bf9a370..3529b0d 100644
 --- a/crates/webzjs-common/Cargo.toml

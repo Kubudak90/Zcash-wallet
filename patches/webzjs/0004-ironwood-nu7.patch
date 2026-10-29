@@ -1,7 +1,7 @@
 WebZjs against the 2026-10 cohort: Ironwood (NU6.3) and NU7
 
 Applies on top of 0003-librustzcash-2026-10.patch. Generated from the engine-port
-working tree at a59b211 (make-celari-files.sh).
+working tree at 88ccb43 (make-celari-files.sh).
 
 - webzjs-common: Pczt (de)serialisation returns errors instead of panicking; byte
   arrays deserialise from a Uint8Array too.

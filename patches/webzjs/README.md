@@ -15,8 +15,12 @@ commit; `--locked` fails the build if the two disagree. (0001 still carries a
 replaces the result.)
 
 The wallet backend, `zcash_client_memory`, is source in `engine/zcash_client_memory`
-(see its `UPSTREAM.md`); 0003 points the WebZjs workspace at it by path
-(`../engine/zcash_client_memory`, with `.webzjs/` and `engine/` side by side).
+(see its `UPSTREAM.md`); 0003 points the WebZjs workspace at it by path, through
+the symlink `celari-engine` -> `../engine` that 0003 adds (`.webzjs/` and `engine/`
+side by side). The symlink keeps the crate inside the workspace's directory: cargo
+derives a path package's `-C metadata` from its path relative to the workspace
+root, but from its absolute path when it lies outside, and the wasm then depended
+on where the checkout was.
 
 Each file starts with a description; the diff follows.
 
