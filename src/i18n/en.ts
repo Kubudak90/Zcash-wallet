@@ -73,6 +73,8 @@ export const en: Record<MessageKey, string> = {
     'We will first look for the earliest transaction on your transparent address. If none is found we scan from Sapling activation in 2018, which can take hours.',
   'restore.birthdayDetecting': 'Looking for the first transaction…',
   'restore.birthdayHeight': 'Sync will start at block {height}.',
+  'restore.historyEnhancementHelp':
+    'On: once restored, Celari asks the server for each of your past transactions in full (memos, recipients and fees), so the server learns which transactions are yours. Off: History shows no memos and past payments by their net amount only. You can change this later under Settings > Privacy.',
 
   'unlock.title': 'Your wallet is locked',
   'unlock.button': 'Unlock',

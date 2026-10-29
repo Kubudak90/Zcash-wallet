@@ -13,7 +13,7 @@ import {
 } from '../lib/birthday';
 import { isValidSeedPhrase, normalizeSeedPhrase } from '../lib/seed';
 import type { Secret } from '../lib/vault';
-import { useController } from '../state/wallet';
+import { useController, useWallet } from '../state/wallet';
 import { PasswordSetup } from './PasswordSetup';
 
 type Step = 'secret' | 'birthday' | 'password';
@@ -22,6 +22,7 @@ type Mode = 'seed' | 'view';
 export function RestoreWallet({ onCancel }: { onCancel: () => void }) {
   const { t, lang } = useI18n();
   const controller = useController();
+  const { settings } = useWallet();
   const [step, setStep] = useState<Step>('secret');
   const [mode, setMode] = useState<Mode>('seed');
   const [input, setInput] = useState('');
@@ -38,6 +39,15 @@ export function RestoreWallet({ onCancel }: { onCancel: () => void }) {
   const [tip, setTip] = useState<number | null>(null);
   const monthErrorId = useId();
   const longScanId = useId();
+  const historyHelpId = useId();
+  /**
+   * "Fetch full transactions for History" for this restore (final review V2-4): the first pass
+   * would otherwise ask the server for the wallet's past transactions before Settings could be
+   * reached. Null until changed here; saved with the browser's settings when the wallet is
+   * created, before its first pass.
+   */
+  const [historyChoice, setHistoryChoice] = useState<boolean | null>(null);
+  const historyEnhancement = historyChoice ?? settings.historyEnhancement;
 
   useEffect(() => {
     if (step !== 'birthday' || tip !== null) return;
@@ -194,6 +204,19 @@ export function RestoreWallet({ onCancel }: { onCancel: () => void }) {
             {t('restore.birthdayUnknown')}
           </label>
           {unknown && <Notice tone="warn">{t('restore.birthdayUnknownHelp')}</Notice>}
+          <label className="check">
+            <input
+              type="checkbox"
+              name="history-enhancement"
+              checked={historyEnhancement}
+              aria-describedby={historyHelpId}
+              onChange={(e) => setHistoryChoice(e.target.checked)}
+            />
+            {t('settings.historyEnhancement')}
+          </label>
+          <p id={historyHelpId} className="muted small">
+            {t('restore.historyEnhancementHelp')}
+          </p>
           {error != null && (
             <Notice tone="error">
               {t('common.genericError')}
@@ -226,6 +249,10 @@ export function RestoreWallet({ onCancel }: { onCancel: () => void }) {
       onBack={() => setStep('birthday')}
       onSubmit={async (password) => {
         if (!secret || birthday === null) return;
+        // The engine is told at once and applies it to the wallet it opens next.
+        if (historyEnhancement !== settings.historyEnhancement) {
+          await controller.saveSettings({ ...settings, historyEnhancement });
+        }
         await controller.createWallet(secret, birthday, password);
       }}
       viewOnly={secret?.kind === 'ufvk'}

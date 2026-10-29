@@ -4,7 +4,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 import { currentMonth } from '../../src/lib/birthday';
 import { CLEAR_AFTER_MS } from '../../src/lib/clipboard';
-import { PASSWORD, UA, createWallet } from './helpers';
+import { PASSWORD, UA, createWallet, fakeEngine, setKnobs } from './helpers';
 
 // Hiding balances on screen, and clearing a copied viewing key from the
 // clipboard. The fake wallet holds 1.25 ZEC shielded and 0.50 ZEC
@@ -207,6 +207,53 @@ test('fetching full transactions for History can be turned off, and stays off ac
   const kutu = page.getByRole('checkbox', { name: 'Geçmiş için işlemlerin tamamını getir' });
   await expect(kutu).toBeChecked();
   await expect(kutu).toHaveAccessibleDescription(/Sunucu böylece hangi işlemlerin senin olduğunu öğrenir\./);
+});
+
+test('a restore can start with full transactions for History off, before its first pass', async ({ page }) => {
+  // Final review V2-4: the switch was only in Settings, so a restore began with it on and the
+  // first pass could ask for the wallet's past transactions before anyone reached Settings.
+  await fakeEngine(page, { holdPass: true });
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Restore an existing wallet' }).click();
+  await page.getByRole('textbox').fill(generateMnemonic(wordlist, 256));
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await page.getByLabel('Month', { exact: true }).fill(currentMonth());
+  const box = page.getByRole('checkbox', { name: 'Fetch full transactions for History' });
+  // The browser's setting (on unless turned off), and what it costs.
+  await expect(box).toBeChecked();
+  await expect(box).toHaveAccessibleDescription(/so the server learns which transactions are yours/);
+  await expect(box).toHaveAccessibleDescription(/You can change this later under Settings > Privacy\./);
+  await box.uncheck();
+  await page.getByRole('button', { name: 'Continue' }).click();
+  // Going back keeps the choice; nothing is saved before the wallet is created.
+  await page.getByRole('button', { name: 'Back' }).click();
+  await expect(box).not.toBeChecked();
+  expect(await enhancement(page)).toBe(true);
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
+  await page.getByLabel('Password (again)').fill(PASSWORD);
+  await page.getByRole('button', { name: 'Create wallet' }).click();
+  // Off before the first pass has scanned a block (it waits at its start).
+  await expect(page.getByTestId('sync-status')).toHaveText(/Syncing|Connecting/);
+  expect(await enhancement(page)).toBe(false);
+  await page.getByRole('button', { name: 'Settings' }).click();
+  await expect(page.getByRole('checkbox', { name: 'Fetch full transactions for History' })).not.toBeChecked();
+  await setKnobs(page, { holdPass: false });
+  // Saved with the browser's settings: still off after a lock.
+  await page.getByRole('button', { name: 'Lock' }).click();
+  await expect(page.getByRole('heading', { name: 'Your wallet is locked' })).toBeVisible();
+  expect(await enhancement(page)).toBe(false);
+});
+
+test('the restore switch in Turkish', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Türkçe' }).click();
+  await page.getByRole('button', { name: 'Var olan cüzdanı geri yükle' }).click();
+  await page.getByRole('textbox').fill(generateMnemonic(wordlist, 256));
+  await page.getByRole('button', { name: 'Devam' }).click();
+  const kutu = page.getByRole('checkbox', { name: 'Geçmiş için işlemlerin tamamını getir' });
+  await expect(kutu).toBeChecked();
+  await expect(kutu).toHaveAccessibleDescription(/Bunu daha sonra Ayarlar > Gizlilik’ten değiştirebilirsin\./);
 });
 
 test('a restore from an old month says the first scan takes hours, without stopping it', async ({ page }) => {
