@@ -24,8 +24,10 @@ export function refusalText(refusal: SpendRefusal, t: Translate, lang: Lang): st
       const seconds = UPGRADE_PAUSE_BLOCKS * (height !== null && height > NU7_ACTIVATION_HEIGHT ? 25 : 75);
       const vars = { minutes: Math.round(seconds / 60), upgrade: refusal.upgrade ?? t('send.refused.theUpgrade') };
       if (height === null || blocks === null) return t('send.refused.upgradeSoon', vars);
+      // blocksLeft counts from the height the refused transaction targeted, the wallet's tip + 1:
+      // the activation block is blocksLeft + 1 blocks from now (0: the next block).
       if (blocks === 0) return t('send.refused.upgradeNext', { ...vars, height: n(height) });
-      return t('send.refused.upgrade', { ...vars, height: n(height), blocks: n(blocks) });
+      return t('send.refused.upgrade', { ...vars, height: n(height), blocks: n(blocks + 1) });
     }
     case 'wrongBranch':
       return t('send.refused.wrongBranch');

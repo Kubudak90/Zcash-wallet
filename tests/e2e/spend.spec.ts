@@ -181,7 +181,7 @@ test('a send the engine refuses around a network upgrade says that nothing was s
   await review(page, UA, '0.1');
   await sendButton(page).click();
   await expect(page.getByTestId('spend-failure')).toHaveText(
-    'Nothing was sent. Sending pauses for about 14 minutes around a network upgrade: NU7 activates at block 3,543,405, 9,604 blocks from now. Try again once it is active.',
+    'Nothing was sent. Sending pauses for about 14 minutes around a network upgrade: NU7 activates at block 3,543,405, 9,605 blocks from now. Try again once it is active.',
     { timeout: 10_000 },
   );
   await expect(sendButton(page)).toBeVisible();

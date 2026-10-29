@@ -180,8 +180,10 @@ export type SpendRefusal =
   /** The spendable balance does not cover the payment: `requiredZats` (fee included) against `availableZats`. */
   | { reason: 'insufficientFunds'; requiredZats: bigint; availableZats: bigint }
   /**
-   * A network upgrade (`upgrade`, e.g. 'NU7') activates at `activationHeight`, `blocksLeft`
-   * blocks from the tip (null where the engine did not say): no
+   * A network upgrade (`upgrade`, e.g. 'NU7') activates at `activationHeight` (null where the
+   * engine did not say). `blocksLeft` is the engine's `activation_height - target`, where the
+   * target is the height the refused transaction was for, the wallet's tip + 1: the activation
+   * block is `blocksLeft + 1` blocks above the tip (0: it is the next block). No
    * transaction is built or sent from 10 blocks before it until its first block is mined
    * (11 blocks, about 14 minutes), so that none is made for rules that end before it is mined.
    */
