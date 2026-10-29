@@ -18,7 +18,7 @@
 //! `marks_removed` set, and the retained (ZIP 318 anchor) checkpoints. Nothing is
 //! recomputed on load, and decoding re-checks the tables' unique indices.
 //!
-//! There is no migration from the old format (Decision 2 in PORT-NOTES.md): an old blob
+//! There is no migration from the old format (Decision 2 in docs/engine-port.md): an old blob
 //! fails with [`Error::UnsupportedFormat`], and the application rebuilds the wallet from the
 //! seed or viewing key and rescans from the birthday.
 

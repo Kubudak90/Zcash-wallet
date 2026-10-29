@@ -7,6 +7,7 @@
 //! module only stores rows.
 
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use shardtree::{ShardTree, store::memory::MemoryShardStore};
 use zcash_client_backend::data_api::{
@@ -84,6 +85,35 @@ impl<T, H> PoolTree<T, H> {
     }
 }
 
+/// What the scan queue holds for scanning ([`MemoryWalletDb::scan_queue_size`]).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ScanQueueSize {
+    /// Blocks still to scan: the lengths of the ranges `WalletRead::suggest_scan_ranges`
+    /// returns, summed, up to `chain_tip` (no range ends above it: the chain tip is the end of
+    /// the highest queued range).
+    pub unscanned_blocks: u32,
+    /// The wallet's view of the chain tip (`WalletRead::chain_height`), which bounds
+    /// `unscanned_blocks`: the tip the last `update_chain_tip` set; for an account no sync has
+    /// reached yet, its birthday - 1 (the end of the ignored range below it). `None` while no
+    /// range is queued (no account).
+    pub chain_tip: Option<BlockHeight>,
+}
+
+/// Told [`ScanQueueSize`] after every write that may change the scan queue
+/// ([`MemoryWalletDb::set_scan_queue_observer`]).
+pub type ScanQueueObserver = Arc<dyn Fn(ScanQueueSize) + Send + Sync>;
+
+/// The wallet's [`ScanQueueObserver`], if any. Not wallet data: neither encoded nor copied
+/// into a decoded wallet.
+#[derive(Clone, Default)]
+pub(crate) struct ObserverSlot(pub(crate) Option<ScanQueueObserver>);
+
+impl std::fmt::Debug for ObserverSlot {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(if self.0.is_some() { "ScanQueueObserver(set)" } else { "ScanQueueObserver(none)" })
+    }
+}
+
 /// The main in-memory wallet database. Implements all the traits needed to be used as a
 /// zcash_client_backend wallet backend.
 #[derive(Debug)]
@@ -130,6 +160,8 @@ pub struct MemoryWalletDb<P: consensus::Parameters> {
     pub(crate) gap_limits: GapLimits,
     /// The grid of anchor checkpoints retained from NU6.3 activation (ZIP 318).
     pub(crate) anchor_retention_interval: AnchorRetentionInterval,
+    /// Told the scan queue's size after each write ([`Self::set_scan_queue_observer`]).
+    pub(crate) scan_queue_observer: ObserverSlot,
 }
 
 impl<P: consensus::Parameters> MemoryWalletDb<P> {
@@ -160,6 +192,7 @@ impl<P: consensus::Parameters> MemoryWalletDb<P> {
             #[cfg(feature = "transparent-inputs")]
             gap_limits: GapLimits::default(),
             anchor_retention_interval: AnchorRetentionInterval::ZIP_318,
+            scan_queue_observer: ObserverSlot::default(),
         }
     }
 
@@ -181,6 +214,38 @@ impl<P: consensus::Parameters> MemoryWalletDb<P> {
 
     pub fn params(&self) -> &P {
         &self.params
+    }
+
+    /// What the scan queue holds for scanning, up to the wallet's chain tip: what
+    /// `WalletRead::suggest_scan_ranges` would hand to a sync pass, in blocks.
+    pub fn scan_queue_size(&self) -> ScanQueueSize {
+        let chain_tip = self.chain_tip_height();
+        ScanQueueSize {
+            unscanned_blocks: chain_tip.map_or(0, |tip| self.scan_queue.unscanned_blocks(tip)),
+            chain_tip,
+        }
+    }
+
+    /// Has `observer` told [`Self::scan_queue_size`] now, and again after every write that
+    /// may change the scan queue: each write that runs through `transactionally` (among them
+    /// `update_chain_tip`, the `put_blocks` of every batch a sync pass scans, truncations and
+    /// account imports), whether it succeeds or is rolled back, and `rewind_to_chain_state`.
+    ///
+    /// A sync pass (`zcash_client_backend::sync::run`) holds the wallet for its whole length,
+    /// behind whatever lock its caller keeps it in; the observer lets a reader follow what is
+    /// left to scan at every batch boundary without that lock (Celari's progress counters).
+    /// It runs while the wallet is borrowed mutably: it must not block or reach the wallet.
+    /// Not persisted: a decoded wallet has none. `None` removes it.
+    pub fn set_scan_queue_observer(&mut self, observer: Option<ScanQueueObserver>) {
+        self.scan_queue_observer = ObserverSlot(observer);
+        self.publish_scan_queue();
+    }
+
+    /// Tells the observer (if any) the scan queue's size.
+    pub(crate) fn publish_scan_queue(&self) {
+        if let Some(observer) = &self.scan_queue_observer.0 {
+            observer(self.scan_queue_size());
+        }
     }
 
     /// The wallet's view of the chain tip: the end of the highest scan range, minus one
@@ -255,5 +320,48 @@ impl<P: consensus::Parameters> MemoryWalletDb<P> {
         {
             &[ShieldedPool::Sapling]
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use secrecy::SecretVec;
+    use zcash_client_backend::data_api::{AccountBirthday, WalletRead, WalletWrite, chain::ChainState};
+    use zcash_primitives::block::BlockHash;
+    use zcash_protocol::consensus::{BlockHeight, Network};
+
+    use super::{MemoryWalletDb, ScanQueueSize};
+
+    /// The scan queue observer is told the queue's size when it is set and after the writes
+    /// that change the queue (an account import, a chain tip update), and the size is the one
+    /// `suggest_scan_ranges` describes; a decoded copy of the wallet has no observer.
+    #[test]
+    fn scan_queue_observer_follows_the_writes() {
+        let h = BlockHeight::from_u32;
+        let mut db = MemoryWalletDb::new(Network::MainNetwork, 100);
+        let seen = Arc::new(Mutex::new(vec![]));
+        let s = seen.clone();
+        db.set_scan_queue_observer(Some(Arc::new(move |q| s.lock().unwrap().push(q))));
+        let birthday = AccountBirthday::from_parts(ChainState::empty(h(2_999_999), BlockHash([0; 32])), None);
+        db.create_account("a", &SecretVec::new(vec![7; 32]), &birthday, None).unwrap();
+        let after_import = *seen.lock().unwrap().last().unwrap();
+        db.update_chain_tip(h(3_000_099)).unwrap();
+        let seen = seen.lock().unwrap().clone();
+        assert_eq!(seen[0], ScanQueueSize { unscanned_blocks: 0, chain_tip: None }, "{seen:?}");
+        // Only the ignored range below the birthday: the tip is the birthday - 1.
+        assert_eq!(after_import, ScanQueueSize { unscanned_blocks: 0, chain_tip: Some(h(2_999_999)) }, "{seen:?}");
+        let last = *seen.last().unwrap();
+        assert_eq!(last, ScanQueueSize { unscanned_blocks: 100, chain_tip: Some(h(3_000_099)) }, "{seen:?}");
+        assert_eq!(db.scan_queue_size(), last);
+        let suggested: usize = db.suggest_scan_ranges().unwrap().iter().map(|r| r.len()).sum();
+        assert_eq!(suggested, 100);
+
+        let mut bytes = vec![];
+        db.encode(&mut bytes).unwrap();
+        let copy = MemoryWalletDb::decode_new(&bytes, Network::MainNetwork, 100).unwrap();
+        assert!(copy.scan_queue_observer.0.is_none());
+        assert_eq!(copy.scan_queue_size(), last);
     }
 }

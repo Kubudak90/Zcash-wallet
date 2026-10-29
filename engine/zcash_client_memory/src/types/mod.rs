@@ -13,7 +13,7 @@ pub mod transparent;
 pub use account::{Account, AccountId};
 pub(crate) use account::Accounts;
 pub(crate) use block::MemoryWalletBlock;
-pub use memory_wallet::MemoryWalletDb;
+pub use memory_wallet::{MemoryWalletDb, ScanQueueObserver, ScanQueueSize};
 pub(crate) use nullifier::Nullifier;
 
 pub use notes::{ReceivedNote, ReceivedNoteTable, SentNoteTable, SentOutput, SentOutputId};

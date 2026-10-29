@@ -1,8 +1,9 @@
 # Mainnet test vectors, blocks 3,533,400 to 3,533,508
 
-Used by `src/testing/mainnet_blocks.rs` and by webzjs-wallet's native tests
-(`webzjs/crates/webzjs-wallet/src/tests/`, which read this directory as
-`../../../engine/zcash_client_memory/testdata/`, the same relative path in Celari's layout). Every file is a raw gRPC-web response body
+Used by `src/testing/mainnet_blocks.rs` and by webzjs-wallet's native tests (in Celari
+`.webzjs/crates/webzjs-wallet/src/tests/`, after `scripts/build-webzjs.sh` applied the
+patches; they read this directory as `../../../engine/zcash_client_memory/testdata/`).
+Every file is a raw gRPC-web response body
 (5-byte frames: flag byte, big-endian u32 length, payload; the last frame is the
 `grpc-status` trailer) from the lightwalletd proxy `https://zcash-mainnet.chainsafe.dev`,
 `cash.z.wallet.sdk.rpc.CompactTxStreamer`:
@@ -21,10 +22,10 @@ Used by `src/testing/mainnet_blocks.rs` and by webzjs-wallet's native tests
 | `subtree-roots-ironwood.grpcweb` | `GetSubtreeRoots` | `{ start_index: 0, shielded_protocol: Ironwood, max_entries: 0 }` (14 roots) |
 
 The blocks are past NU6.3 (Ironwood, mainnet 3,428,143) and carry 382 Ironwood actions,
-29 Orchard actions and 50 Sapling outputs. The block range was captured on 2026-10-28 by
-the engine investigation (`scratchpad/ironwood/net/range-tip.bin`); the tree states were
-fetched the same day for this test, and the subtree roots (all completed subtrees, at a tip
-of about 3,533,810) later that day for `subtree_roots_put_again_change_nothing`.
+29 Orchard actions and 50 Sapling outputs. The block range was captured from that
+endpoint on 2026-10-28, during the investigation before the engine port; the tree states
+were fetched the same day for this test, and the subtree roots (all completed subtrees, at a
+tip of about 3,533,810) later that day for `subtree_roots_put_again_change_nothing`.
 
 The data is not trusted by the test: it checks that the block hashes chain onto the tree
 states, and that the note commitment tree roots the wallet computes from the blocks equal
@@ -37,7 +38,11 @@ the server answered "not found" (status 5, "-5: Transaction not found in mempool
 chain") for the reversed order and for an unknown txid. The tests check that each parses
 and that its txid is the one requested.
 
-To regenerate (from a directory holding the investigation's `tools/`):
+To regenerate: each file is the body of a gRPC-web POST to
+`https://zcash-mainnet.chainsafe.dev/cash.z.wallet.sdk.rpc.CompactTxStreamer/<method>`
+(`content-type: application/grpc-web+proto`, `x-grpc-web: 1`) with the request above as a framed protobuf
+message. The investigation used two small helpers for that, `tools/grpcweb.py` (encodes
+the request) and `tools/lwd.sh` (posts it); they are not part of this repository:
 
 ```sh
 python3 -I tools/grpcweb.py blockrange 3533400 3533508 > req.bin

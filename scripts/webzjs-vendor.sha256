@@ -10,7 +10,7 @@ d96470b7d4dfca2679dc14cb91857019b1f7957e9230ba74adb27ed0d0875dc0  ./webzjs-keys/
 ab01d522953252ac38bfebedf17a2049db7aca39804b860e11ecc8b67156235b  ./webzjs-wallet/snippets/wasm_thread-8ee53d0673203880/src/wasm32/js/module_worker_start.js
 8a1b206907df127c5477d4ae4d78799a5bae18ca31b6b386fe835a0bb7fe55e7  ./webzjs-wallet/snippets/wasm_thread-8ee53d0673203880/src/wasm32/js/module_workers_polyfill.min.js
 8734a73a2e907697cafea5b69ab331c494de999f19497aeed5b5dca4cb36fa81  ./webzjs-wallet/snippets/wasm_thread-8ee53d0673203880/src/wasm32/js/web_worker_module.bundler.js
-f0fa1e1d89b1f7cb4e62a3282d106104cea69a359fd2876c1a1c770ce53e8d4e  ./webzjs-wallet/webzjs_wallet.d.ts
-96b9b3ba18e1afda1ce2ca946e5daf1350aa39e0322ebc9ee8c4ff99f5074809  ./webzjs-wallet/webzjs_wallet.js
-99dfc1b5c715fdc0ec0eb58302ae04d3db6634b9dcaceb1d85e81b8104513847  ./webzjs-wallet/webzjs_wallet_bg.wasm
-8ad1e6fad9d12c9b36b3b1069f66c53865e6d9120b814619fe3184df1b8bffb6  ./webzjs-wallet/webzjs_wallet_bg.wasm.d.ts
+7069b5d2682f9d46dc65c408b496916248f5c405722e181b723d51d57eafee5a  ./webzjs-wallet/webzjs_wallet.d.ts
+cd55a4f115c99d5488341af412da17b1db124789f9c17305e7c6a88d4c4d473c  ./webzjs-wallet/webzjs_wallet.js
+c8fa165364448c4f9502d88ea577badeb8a3c1b69c2bb8b229712b9db95f82cf  ./webzjs-wallet/webzjs_wallet_bg.wasm
+0819abf83da8848c94f8b799cbeb0d67359d93d69239e9d26bc11f70922f080e  ./webzjs-wallet/webzjs_wallet_bg.wasm.d.ts

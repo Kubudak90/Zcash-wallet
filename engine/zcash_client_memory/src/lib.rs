@@ -30,7 +30,8 @@ pub use serialization::FORMAT_VERSION;
 pub use error::Error;
 pub use types::{
     Account, AccountId, MemoryWalletDb, ReceivedNote, ReceivedNoteTable, ReceivedTransparentOutput,
-    SentNoteTable, SentOutput, SentOutputId, TransactionEntry, TransactionTable, TransparentOutputs,
+    ScanQueueObserver, ScanQueueSize, SentNoteTable, SentOutput, SentOutputId, TransactionEntry,
+    TransactionTable, TransparentOutputs,
 };
 pub(crate) use types::*;
 
