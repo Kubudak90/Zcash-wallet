@@ -24,8 +24,10 @@ import initKeysWasm, {
 
 import { seedBytes } from '../lib/seed';
 import { fetchLightdInfo } from './lightd';
+import { CrashWatch } from './webzjs-crash';
 import type {
   Addresses,
+  EngineStoppedError,
   HistoryItem,
   NetworkStatus,
   SpendAuthority,
@@ -93,6 +95,8 @@ export class WebzjsEngine implements ZcashEngine {
   // not report it (see ./webzjs-upgrades.ts for the network upgrades it knows).
   readonly ironwood = true;
   private serverUrl = '';
+  /** Notices a trap of the engine's WebAssembly (./webzjs-crash.ts); every call fails from then on. */
+  private crash = new CrashWatch(typeof window === 'undefined' ? null : window);
   private wallet: WebWallet | null = null;
   // A throwaway wallet for chain queries before the real one is unlocked.
   private probe: WebWallet | null = null;
@@ -116,18 +120,33 @@ export class WebzjsEngine implements ZcashEngine {
   }
 
   private get chain(): WebWallet {
+    this.crash.check();
     const wallet = this.wallet ?? this.probe;
     if (!wallet) throw new Error('engine not initialized');
     return wallet;
   }
 
   private get open_(): WebWallet {
+    this.crash.check();
     if (!this.wallet) throw new Error('wallet not open');
     return this.wallet;
   }
 
+  /** `call()`, failing with EngineStoppedError instead of never settling if the engine traps meanwhile. */
+  private guarded<T>(call: () => Promise<T>): Promise<T> {
+    try {
+      return this.crash.guard(call());
+    } catch (e) {
+      return Promise.reject(e);
+    }
+  }
+
+  onStopped(listener: (error: EngineStoppedError) => void): void {
+    this.crash.onStopped(listener);
+  }
+
   async latestHeight(): Promise<number> {
-    return Number(await this.chain.get_latest_block());
+    return Number(await this.guarded(() => this.chain.get_latest_block()));
   }
 
   /** WebZjs has no call for this, so it goes to the server directly (./lightd.ts). */
@@ -199,11 +218,11 @@ export class WebzjsEngine implements ZcashEngine {
   }
 
   async exportDb(): Promise<Uint8Array> {
-    return new Uint8Array(await this.open_.db_to_bytes());
+    return new Uint8Array(await this.guarded(() => this.open_.db_to_bytes()));
   }
 
   sync(): Promise<void> {
-    return this.open_.sync();
+    return this.guarded(() => this.open_.sync());
   }
 
   /**
@@ -217,13 +236,13 @@ export class WebzjsEngine implements ZcashEngine {
     const wallet: { sync_progress?: WebWallet['sync_progress'] } = this.open_;
     if (typeof wallet.sync_progress !== 'function') return null;
     const p = wallet.sync_progress();
-    const progress = { running: p.running, visited: p.visited, scanned: p.scanned };
+    const progress = { running: p.running, visited: p.visited, scanned: p.scanned, downloaded: p.downloaded };
     p.free();
     return progress;
   }
 
   async summary(account: number): Promise<Summary | null> {
-    const summary: WalletSummary | undefined = await this.open_.get_wallet_summary();
+    const summary: WalletSummary | undefined = await this.guarded(() => this.open_.get_wallet_summary());
     if (!summary) return null;
     const entry = (summary.account_balances as [number, RawBalance][]).find(([id]) => id === account);
     const b = entry?.[1];
@@ -233,10 +252,10 @@ export class WebzjsEngine implements ZcashEngine {
   }
 
   async addresses(account: number): Promise<Addresses> {
-    const unified = await this.open_.get_current_address(account);
+    const unified = await this.guarded(() => this.open_.get_current_address(account));
     let transparent: string | null = null;
     try {
-      transparent = await this.open_.get_current_address_transparent(account);
+      transparent = await this.guarded(() => this.open_.get_current_address_transparent(account));
     } catch {
       // Viewing keys without a transparent component have no t-address.
     }
@@ -245,11 +264,11 @@ export class WebzjsEngine implements ZcashEngine {
 
   nextShieldedAddress(account: number): Promise<string> {
     // Waits for the database write lock, which a sync pass holds until it ends.
-    return this.open_.get_next_shielded_address(account);
+    return this.guarded(() => this.open_.get_next_shielded_address(account));
   }
 
   async history(account: number, limit: number): Promise<HistoryItem[]> {
-    const response = await this.open_.get_transaction_history(account, limit, 0);
+    const response = await this.guarded(() => this.open_.get_transaction_history(account, limit, 0));
     const entries = (response.transactions ?? []) as RawHistoryEntry[];
     response.free();
     return historyFrom(entries);
@@ -264,13 +283,13 @@ export class WebzjsEngine implements ZcashEngine {
     if (memo?.includes('\u0000')) throw new Error('a memo cannot contain NUL characters');
     // WebZjs encodes the memo and rejects one that is too long or goes to a
     // transparent or TEX address, before it touches the network.
-    const pczt = await this.open_.pczt_create(account, to.trim(), zats, memo || undefined);
+    const pczt = await this.guarded(() => this.open_.pczt_create(account, to.trim(), zats, memo || undefined));
     await this.signProveSend(pczt, auth);
   }
 
   async shield(account: number, auth: SpendAuthority): Promise<void> {
     auth.onStage?.('building');
-    const pczt = await this.open_.pczt_shield(account);
+    const pczt = await this.guarded(() => this.open_.pczt_shield(account));
     await this.signProveSend(pczt, auth);
   }
 
@@ -278,13 +297,12 @@ export class WebzjsEngine implements ZcashEngine {
     auth.onStage?.('signing');
     const { usk, fingerprint } = spendingKeys(auth.phrase);
     // pczt_sign takes ownership of the key objects and frees them.
-    const signed = await pczt_sign(NETWORK, KeysPczt.from_bytes(pczt.serialize()), usk, fingerprint);
+    const signed = await this.guarded(() => pczt_sign(NETWORK, KeysPczt.from_bytes(pczt.serialize()), usk, fingerprint));
     pczt.free();
 
     auth.onStage?.('proving');
-    const proved = await this.open_.pczt_prove(
-      WalletPczt.from_bytes(signed.serialize()),
-      saplingProofKey(auth.phrase),
+    const proved = await this.guarded(() =>
+      this.open_.pczt_prove(WalletPczt.from_bytes(signed.serialize()), saplingProofKey(auth.phrase)),
     );
     signed.free();
 
@@ -295,6 +313,6 @@ export class WebzjsEngine implements ZcashEngine {
       throw e;
     }
     auth.onStage?.('broadcasting');
-    await this.open_.pczt_send(proved);
+    await this.guarded(() => this.open_.pczt_send(proved));
   }
 }

@@ -187,3 +187,10 @@ describe('syncView', () => {
     expect(syncView(sync({ error: 'offline', catchUp }), PRE_SYNC, BIRTHDAY)).toEqual({ kind: 'error' });
   });
 });
+
+describe('a stopped engine', () => {
+  it('shows as stopped, not as a connection problem that will retry', () => {
+    expect(syncView(sync({ status: 'stopped', error: 'the wallet engine stopped' }), SYNCED, BIRTHDAY)).toEqual({ kind: 'stopped' });
+    expect(syncView(sync({ status: 'error', error: 'x' }), SYNCED, BIRTHDAY)).toEqual({ kind: 'error' });
+  });
+});

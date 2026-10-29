@@ -105,6 +105,8 @@ export interface SyncProgress {
   visited: number;
   /** Blocks whose batch is scanned and committed to the wallet database. */
   scanned: number;
+  /** Blocks downloaded so far (a batch counts once it has arrived in full); optional. */
+  downloaded?: number;
 }
 
 /** A memo holds at most this many bytes of UTF-8 text (ZIP 302). */
@@ -130,6 +132,19 @@ export class NewerDatabaseFormatError extends Error {
   constructor(options?: { cause?: unknown }) {
     super('the wallet database was written by a newer engine than this one', options);
     this.name = 'NewerDatabaseFormatError';
+  }
+}
+
+/**
+ * The engine stopped and cannot be used in this page any more: its WebAssembly trapped (it ran
+ * out of memory, or hit an internal error such as a Rust panic). Calls fail with this error,
+ * including one that was waiting when it happened; nothing more is saved. Reloading the page
+ * starts a fresh engine from what was saved last.
+ */
+export class EngineStoppedError extends Error {
+  constructor(options?: { cause?: unknown }) {
+    super('the wallet engine stopped (out of memory or an internal error); reload the page', options);
+    this.name = 'EngineStoppedError';
   }
 }
 
@@ -168,6 +183,11 @@ export interface ZcashEngine {
   exportDb(): Promise<Uint8Array>;
 
   sync(): Promise<void>;
+  /**
+   * Calls `listener` once if the engine stops (EngineStoppedError), whether or not a call was
+   * running then. Optional: engines that cannot stop leave it out.
+   */
+  onStopped?(listener: (error: EngineStoppedError) => void): void;
   /** Progress of the running pass, readable while sync() runs. Optional: engines that cannot tell leave it out. */
   syncProgress?(): Promise<SyncProgress | null>;
   summary(account: number): Promise<Summary | null>;

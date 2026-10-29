@@ -101,6 +101,8 @@ test('settings: reveal recovery phrase and viewing key, then wipe', async ({ pag
   const server = page.getByLabel('Server (lightwalletd gRPC-web proxy)');
   await expect(server).toHaveValue(/^https:/);
   await expect(server).toHaveAccessibleDescription(/can see your IP address/);
+  // Verifier finding V-6: fetching the wallet's own transactions tells the server which are its.
+  await expect(server).toHaveAccessibleDescription(/so it can tell which transactions are yours/);
   await server.fill('http://insecure.example');
   await expect(server).toHaveAttribute('aria-invalid', 'true');
   await expect(server).toHaveAccessibleDescription(/valid address starting with https/);

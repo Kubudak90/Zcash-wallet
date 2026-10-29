@@ -7,8 +7,10 @@ import { OLD_ENGINE, PASSWORD, TIP, createWallet, en, fakeEngine, restoreFromThi
 // under db-legacy until a pass that reaches the tip has been saved; any other error, and a
 // database from a newer Celari, leave everything as it is.
 
-const UPGRADE_APP =
-  'Celari was updated for the new Zcash network rules and is rescanning this wallet from its starting block. This can take a while. Your funds are safe; the balance and history fill in as the scan goes on.';
+// Verifier finding M2: the in-app notice says that the rescan pauses whenever Celari locks.
+const upgradeApp = (minutes: number) =>
+  `Celari was updated for the new Zcash network rules and is rescanning this wallet from its starting block. This can take a while, an hour or more for an older wallet, and it runs only while Celari is unlocked: it pauses whenever the wallet locks (after ${minutes} minutes without activity, or 1 minute in a background tab) and goes on when you unlock. Keep this tab open and in front, or raise the auto-lock time in Settings until it is done. Your funds are safe; the balance and history fill in as the scan goes on.`;
+const UPGRADE_APP = upgradeApp(15);
 const UPGRADE_LOCK =
   'Celari was updated for the new Zcash network rules and is rescanning this wallet from its starting block. This can take a while, and it goes on while the wallet is unlocked. Your funds are safe.';
 const UNREADABLE =
@@ -105,6 +107,10 @@ test('an old-format database is kept as db-legacy, the wallet is rebuilt and res
   await expect(status(page)).toHaveText(`Syncing · ${en(TIP - (birthday - 1))} blocks left`);
   await page.getByRole('button', { name: 'History', exact: true }).click();
   await expect(page.getByTestId('upgrade-rescan')).toHaveText(UPGRADE_APP);
+  // It names the auto-lock time in force: raised to 60 minutes, it says so.
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await page.locator('select[name="auto-lock"]').selectOption('60');
+  await expect(page.getByTestId('upgrade-rescan')).toHaveText(upgradeApp(60));
 
   // Locked meanwhile: the lock screen says so too.
   await page.getByRole('button', { name: 'Lock' }).click();
@@ -147,7 +153,7 @@ test('the rescan notices in Turkish', async ({ page }) => {
   await page.getByRole('button', { name: 'Settings' }).click();
   await page.getByRole('button', { name: 'Türkçe' }).click();
   await expect(page.getByTestId('upgrade-rescan')).toHaveText(
-    'Celari yeni Zcash ağ kuralları için güncellendi ve bu cüzdanı başlangıç bloğundan itibaren yeniden tarıyor. Bu biraz sürebilir. Paran güvende; bakiye ve geçmiş tarama ilerledikçe tamamlanır.',
+    'Celari yeni Zcash ağ kuralları için güncellendi ve bu cüzdanı başlangıç bloğundan itibaren yeniden tarıyor. Bu biraz sürebilir, eski bir cüzdanda bir saati aşabilir; tarama yalnızca Celari’nin kilidi açıkken ilerler: cüzdan kilitlendiğinde (15 dakika işlem yapılmayınca ya da sekme 1 dakika arka planda kalınca) durur, kilidi açınca devam eder. Bitene kadar bu sekmeyi açık ve önde tut ya da Ayarlar’dan otomatik kilit süresini uzat. Paran güvende; bakiye ve geçmiş tarama ilerledikçe tamamlanır.',
   );
   // A pass is held, but a new wallet is not catching up: the lock reloads at once.
   await page.getByRole('button', { name: 'Kilitle' }).click();
