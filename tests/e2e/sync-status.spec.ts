@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 
+import type { FakeKnobs } from '../../src/engine/fake';
 import { PASSWORD, TIP, UA, createWallet, en, fakeEngine, restoreFromThisMonth, setKnobs } from './helpers';
 
 test('a restore shows how many blocks are left, then up to date', async ({ page }) => {
@@ -135,6 +136,59 @@ test('pass counters move the bar while the summary waits for the pass', async ({
     expect(Math.floor(((gap - c.left) / gap) * 100)).toBe(c.pct);
   }
   await expect(page.getByRole('progressbar')).toHaveCount(0);
+});
+
+test('a restore over several budgeted passes counts down without jumping back, and goes on at once', async ({ page }) => {
+  test.slow();
+  // Like the ported WebZjs (final review E2E-1): the newest blocks are scanned first, so the
+  // fully scanned height stays at the birthday - 1 until the last batch, and a pass ends at
+  // its time budget with blocks left. The count must come from the engine's scan queue.
+  const batch = 1_250;
+  await fakeEngine(page, { budgetedPasses: { passBlocks: 4 * batch, batchBlocks: batch } });
+  const birthday = await restoreFromThisMonth(page);
+  const gap = TIP - (birthday - 1);
+  const status = page.getByTestId('sync-status');
+  await expect(status).toHaveText(`Syncing · ${en(gap)} blocks left`);
+  // Every state the pill takes, however briefly, until the wallet is up to date.
+  await page.evaluate(() => {
+    const el = document.querySelector('[data-testid="sync-status"]')!;
+    const seen: string[] = [];
+    (window as unknown as { seen: string[] }).seen = seen;
+    const record = () => {
+      const entry = `${el.getAttribute('data-sync')}|${el.textContent}`;
+      if (seen.at(-1) !== entry) seen.push(entry);
+    };
+    record();
+    new MutationObserver(record).observe(el, { subtree: true, childList: true, characterData: true, attributes: true });
+  });
+  const passesRun = () =>
+    page.evaluate(() => (window as unknown as { __fakeEngine: FakeKnobs }).__fakeEngine.budgetedPasses?.passesRun ?? 0);
+  // Seven blocks are mined once the first pass is over: the count may rise by that much.
+  await expect.poll(passesRun).toBeGreaterThanOrEqual(1);
+  const growth = 7;
+  await setKnobs(page, { chainGrowth: growth });
+  await expect(status).toHaveText(`Up to date · block ${en(TIP + growth)}`, { timeout: 120_000 });
+  expect(await passesRun()).toBeGreaterThanOrEqual(3);
+
+  const seen = await page.evaluate(() => (window as unknown as { seen: string[] }).seen);
+  const syncing = seen.filter((s) => !s.includes('|Up to date'));
+  const counts = syncing.map((s) => {
+    const m = /^syncing\|Syncing · ([\d,]+) blocks left$/.exec(s);
+    expect(m, `a syncing label while the restore runs: ${s}`).not.toBeNull();
+    return Number(m![1]!.replace(/,/g, ''));
+  });
+  expect(counts[0]).toBe(gap);
+  let rises = 0;
+  for (let i = 1; i < counts.length; i++) {
+    const rise = counts[i]! - counts[i - 1]!;
+    expect(rise, `${counts[i - 1]} -> ${counts[i]}`).toBeLessThanOrEqual(growth);
+    if (rise > 0) rises += rise;
+  }
+  expect(rises).toBeLessThanOrEqual(growth);
+  // It ends below one batch, not with most of the range still "left".
+  expect(counts.at(-1)!).toBeLessThanOrEqual(batch);
+  // And the count did move down in steps across the passes.
+  expect(new Set(counts).size).toBeGreaterThanOrEqual(6);
 });
 
 test('"Up to date" shows the network tip, not the scanned height', async ({ page }) => {

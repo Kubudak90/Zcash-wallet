@@ -111,6 +111,15 @@ export interface FakeKnobs {
    * fake notices the same way WebzjsEngine does (./webzjs-crash.ts).
    */
   trapDuringPass?: boolean;
+  /**
+   * Passes like the ported WebZjs's during a restore (round 6, docs/engine-port.md Decisions 8
+   * and 21): the scan goes top-down, newest blocks first, so the fully scanned height stays at
+   * the birthday - 1 until the last batch; a pass ends at its time budget, after `passBlocks`
+   * blocks in batches of `batchBlocks` (default a quarter of that), with `endedEarly` while
+   * blocks are left; and syncProgress() reports the pass counters and the scan queue (what is
+   * left, also between passes and right after a reload). Set by the fake: `passesRun`.
+   */
+  budgetedPasses?: { passBlocks: number; batchBlocks?: number; passesRun?: number };
 }
 const knobs = (): FakeKnobs => (globalThis as { __fakeEngine?: FakeKnobs }).__fakeEngine ?? {};
 const chainTip = () => TIP + (knobs().chainGrowth ?? 0);
@@ -126,6 +135,8 @@ interface FakeAccount {
   funded: boolean;
   /** Shielded-only addresses handed out by nextShieldedAddress(), oldest first. */
   shieldedAddresses?: string[];
+  /** Ranges of heights still to scan, [from, to] inclusive (FakeKnobs.budgetedPasses only). */
+  unscanned?: [number, number][];
   balances: Record<keyof Balances, string>;
   history: (Omit<HistoryItem, 'valueZats' | 'feeZats'> & { valueZats: string; feeZats: string | null })[];
 }
@@ -202,6 +213,9 @@ export class FakeEngine implements ZcashEngine {
   private pass: Promise<void> | null = null;
   /** Counters of the running (or last) pass, for syncProgress(). */
   private counters: SyncProgress = { running: false, visited: 0, scanned: 0 };
+  /** FakeKnobs.budgetedPasses: the pass's `visited` when the queue was last reported, and how the last pass ended. */
+  private reportedAt = 0;
+  private endedEarly = false;
   /** Notices a trap (knob trapDuringPass) as WebzjsEngine does. */
   private crash = new CrashWatch(typeof window === 'undefined' ? null : window);
 
@@ -342,10 +356,80 @@ export class FakeEngine implements ZcashEngine {
   }
 
   async syncProgress(): Promise<SyncProgress | null> {
+    if (knobs().budgetedPasses) {
+      // Like WebZjs's database, which reports its queue when opened and after every write.
+      const a = this.accounts[0];
+      const unscanned = (a?.unscanned ?? []).reduce((n, [from, to]) => n + to - from + 1, 0);
+      const queue = { unscanned, walletTip: a?.tip ?? 0, visitedAtReport: this.reportedAt };
+      return { ...this.counters, queue, endedEarly: this.endedEarly };
+    }
     return knobs().passCounters ? { ...this.counters } : null;
   }
 
+  /** FakeKnobs.budgetedPasses: top-down batches until the budget, newest blocks first. */
+  private async runBudgetedPass(budget: NonNullable<FakeKnobs['budgetedPasses']>): Promise<void> {
+    const tip = chainTip();
+    const batchBlocks = Math.max(1, budget.batchBlocks ?? Math.ceil(budget.passBlocks / 4));
+    this.counters = { running: true, visited: 0, scanned: 0, downloaded: 0 };
+    this.reportedAt = 0;
+    this.endedEarly = false;
+    // The chain tip update: the blocks mined since the last pass join the queue.
+    for (const a of this.accounts) {
+      a.unscanned ??= [];
+      if (tip > a.tip) a.unscanned.push([a.tip + 1, tip]);
+      a.tip = tip;
+    }
+    while (knobs().holdPass) await sleep(50);
+    let done = 0;
+    for (;;) {
+      const left = (a: FakeAccount) => (a.unscanned ?? []).reduce((n, [from, to]) => n + to - from + 1, 0);
+      const most = Math.max(0, ...this.accounts.map(left));
+      if (most === 0) break;
+      if (done >= budget.passBlocks) {
+        this.endedEarly = true;
+        break;
+      }
+      const n = Math.min(batchBlocks, most);
+      // The scanner reaches the batch (trial decryption), then the batch is committed.
+      await sleep(250);
+      this.counters = { ...this.counters, visited: this.counters.visited + n, downloaded: (this.counters.downloaded ?? 0) + n };
+      await sleep(250);
+      for (const a of this.accounts) {
+        // Take the `n` highest heights still to scan.
+        let take = n;
+        const ranges = [...(a.unscanned ?? [])].sort((x, y) => y[1] - x[1]);
+        const kept: [number, number][] = [];
+        for (const [from, to] of ranges) {
+          if (take === 0) {
+            kept.push([from, to]);
+            continue;
+          }
+          const size = to - from + 1;
+          if (size <= take) take -= size;
+          else {
+            kept.push([from, to - take]);
+            take = 0;
+          }
+        }
+        a.unscanned = kept;
+        // Fully scanned: up to the lowest height still to scan.
+        a.scanned = kept.length ? Math.min(...kept.map(([from]) => from)) - 1 : tip;
+      }
+      this.counters = { ...this.counters, scanned: this.counters.scanned + n };
+      this.reportedAt = this.counters.visited;
+      done += n;
+    }
+    budget.passesRun = (budget.passesRun ?? 0) + 1;
+  }
+
   private async runPass(): Promise<void> {
+    const budget = knobs().budgetedPasses;
+    if (budget) {
+      await this.runBudgetedPass(budget);
+      this.afterPass(chainTip());
+      this.counters = { ...this.counters, running: false };
+      return;
+    }
     const start = new Map(this.accounts.map((a) => [a, a.scanned]));
     const tip = chainTip();
     const behind = Math.max(0, ...this.accounts.map((a) => tip - a.scanned));
@@ -359,6 +443,12 @@ export class FakeEngine implements ZcashEngine {
       // Like WebZjs, the scanner reaches a batch before that batch is committed.
       this.counters = { running: true, visited: Math.round(behind * step), scanned: Math.round(behind * (step - 0.25)) };
     }
+    this.afterPass(tip);
+    this.counters = { ...this.counters, running: false };
+  }
+
+  /** What every pass finds: the welcome payment of a new wallet, and the knob's incoming ones. */
+  private afterPass(tip: number): void {
     for (const a of this.accounts) {
       if (a.funded) continue;
       a.funded = true;
@@ -407,7 +497,6 @@ export class FakeEngine implements ZcashEngine {
       });
     }
     if (k.incoming) k.incoming = [];
-    this.counters = { ...this.counters, running: false };
   }
 
   private account(id: number): FakeAccount {

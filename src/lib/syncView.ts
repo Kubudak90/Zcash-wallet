@@ -2,6 +2,7 @@
 // the wallet summary. Kept pure so its rules (and the "no flicker" guarantee)
 // can be unit-tested.
 
+import type { ScanQueue } from '../engine/types';
 import { syncProgress } from './birthday';
 
 /**
@@ -44,6 +45,29 @@ export interface SyncInfo {
    * stalled download, for one). Cleared when they move again or the pass ends.
    */
   stalled?: boolean;
+  /**
+   * The last reading of the engine's scan queue (SyncProgress.queue), kept across passes:
+   * read before and after every pass and while a catch-up pass runs. Null for an engine
+   * without one, which is then counted from the fully scanned height and the pass counters.
+   */
+  queue?: QueueReading | null;
+}
+
+/** A reading of the engine's scan queue, with the pass's `visited` count in the same reading. */
+export interface QueueReading extends ScanQueue {
+  visited: number;
+}
+
+/**
+ * Blocks left to scan by the engine's scan queue, up to the network tip: the queued blocks
+ * less those the running batch has reached since the queue was reported (they leave the
+ * queue when that batch commits, and the next report starts from them), plus the blocks
+ * mined above the wallet's chain tip. Each block counts once, so the number only rises
+ * with the tip, wherever in the range the engine scans.
+ */
+export function queueBlocksLeft(q: QueueReading, networkTip: number): number {
+  const reached = Math.max(0, q.visited - q.visitedAtReport);
+  return Math.max(0, q.unscanned - reached) + Math.max(0, networkTip - q.walletTip);
 }
 
 /** A catch-up pass whose counters do not move for this long counts as stalled (SyncInfo.stalled). */
@@ -84,6 +108,16 @@ export function passBlocksDone(progress: PassProgress, total: number): number {
   return Math.max(0, Math.min(total - 1, done));
 }
 
+/**
+ * "Syncing" by the scan queue: `left` blocks, at least 1 (only the end of the pass says it is
+ * over), and the share of the range from the birthday to the tip that is done, below 100%.
+ */
+function syncingByQueue(left: number, tip: number, birthday: number | null): SyncView {
+  const total = birthday === null ? 0 : tip - (birthday - 1);
+  const pct = total > 0 ? Math.min(99, Math.max(0, Math.floor(((total - left) / total) * 100))) : null;
+  return { kind: 'syncing', blocksLeft: Math.max(1, left), pct };
+}
+
 export function syncView(
   sync: SyncInfo,
   summary: { scannedHeight: number; tipHeight: number } | null,
@@ -98,6 +132,12 @@ export function syncView(
     // Within reach of the target the pass is done scanning, even while the
     // wallet is still being saved; lightwalletd servers can be a block apart.
     if (scanned <= from || to - scanned > CATCH_UP_BLOCKS) {
+      // The engine scans the newest blocks first and the fully scanned height stays near the
+      // birthday until the last batch, across passes: its scan queue says what is left.
+      if (sync.queue) {
+        const tip = Math.max(to, sync.networkTip ?? 0);
+        return syncingByQueue(queueBlocksLeft(sync.queue, tip), tip, birthday);
+      }
       // WebZjs answers no summary until the pass ends, so its summary stays
       // at `from`; its pass counters move instead.
       const counted = sync.progress ? passBlocksDone(sync.progress, to - from) : null;
@@ -114,6 +154,8 @@ export function syncView(
   const tip = Math.max(summary.tipHeight, sync.networkTip ?? 0);
   const behind = tip - summary.scannedHeight;
   if (behind > CATCH_UP_BLOCKS) {
+    // The queue never counts more than lies above the fully scanned height; an older reading can.
+    if (sync.queue) return syncingByQueue(Math.min(behind, queueBlocksLeft(sync.queue, tip)), tip, birthday);
     const pct = birthday === null ? null : percent(birthday, summary.scannedHeight, tip);
     return { kind: 'syncing', blocksLeft: behind, pct };
   }

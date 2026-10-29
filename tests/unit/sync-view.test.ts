@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
-import { CATCH_UP_BLOCKS, catchUpFor, passBlocksDone, syncView, type SyncInfo } from '../../src/lib/syncView';
+import {
+  CATCH_UP_BLOCKS,
+  catchUpFor,
+  passBlocksDone,
+  queueBlocksLeft,
+  syncView,
+  type QueueReading,
+  type SyncInfo,
+} from '../../src/lib/syncView';
 
 // Values observed with the real engine: restore with this month as the start date.
 const BIRTHDAY = 3_485_725;
@@ -185,6 +193,100 @@ describe('syncView', () => {
   it('reports errors over everything else, also through a retry that cannot reach the server', () => {
     expect(syncView(sync({ status: 'error', error: 'offline' }), SYNCED, BIRTHDAY)).toEqual({ kind: 'error' });
     expect(syncView(sync({ error: 'offline', catchUp }), PRE_SYNC, BIRTHDAY)).toEqual({ kind: 'error' });
+  });
+});
+
+describe("with the engine's scan queue (WebZjs round 6: unscanned_blocks, wallet_tip, unscanned_visited)", () => {
+  // The final review's mainnet restore (E2E-1): the engine scans the newest ranges first, so
+  // the fully scanned height stays at the birthday - 1 for most of the restore, across passes.
+  const catchUp = { from: BIRTHDAY - 1, to: TIP };
+  const queue = (unscanned: number, visited = 0, visitedAtReport = visited, walletTip = TIP): QueueReading => ({
+    unscanned,
+    walletTip,
+    visitedAtReport,
+    visited,
+  });
+  const view = (q: QueueReading, patch: Partial<SyncInfo> = {}) =>
+    syncView(sync({ catchUp, queue: q, ...patch }), PRE_SYNC, BIRTHDAY);
+
+  it('counts the queued blocks, the blocks the running batch reached, and those above the wallet tip once each', () => {
+    expect(queueBlocksLeft(queue(30_000), TIP)).toBe(30_000);
+    // 4,000 blocks of the running batch reached since the queue was reported.
+    expect(queueBlocksLeft(queue(30_000, 14_000, 10_000), TIP)).toBe(26_000);
+    // The batch committed: the queue shrank by it and the report caught up with `visited`.
+    expect(queueBlocksLeft(queue(20_000, 20_000, 20_000), TIP)).toBe(20_000);
+    // 5 blocks mined above the tip the wallet knows.
+    expect(queueBlocksLeft(queue(20_000, 0, 0, TIP - 5), TIP)).toBe(20_005);
+    // A new pass's counters start at 0 while the last report is from the pass before.
+    expect(queueBlocksLeft(queue(20_000, 0, 20_000), TIP)).toBe(20_000);
+    // Before a restored account's first pass: nothing queued, the wallet knows only birthday - 1.
+    expect(queueBlocksLeft(queue(0, 0, 0, BIRTHDAY - 1), TIP)).toBe(GAP);
+  });
+
+  it('counts down across top-down passes while the fully scanned height stays put', () => {
+    // A restore in passes of 4 batches of 2,500 blocks; the controller reads the counters every
+    // 500 blocks of scanning and keeps the last reading between passes (catchUp set, progress null).
+    const batch = 2_500;
+    const labels: number[] = [];
+    const left = (v: ReturnType<typeof view>) => {
+      if (v.kind !== 'syncing') throw new Error(`unexpected ${JSON.stringify(v)}`);
+      return v.blocksLeft;
+    };
+    let unscanned = GAP;
+    while (unscanned > batch) {
+      let visited = 0;
+      let reported = 0;
+      for (let b = 0; b < 4 && unscanned > batch; b++) {
+        for (let step = 500; step <= batch; step += 500) labels.push(left(view(queue(unscanned, visited + step, reported))));
+        visited += batch;
+        reported = visited;
+        unscanned -= batch;
+        labels.push(left(view(queue(unscanned, visited, reported))));
+      }
+      // Between this pass and the next one.
+      labels.push(left(view(queue(unscanned, visited, reported))));
+      labels.push(left(view(queue(unscanned, 0, reported))));
+    }
+    expect(labels[0]).toBe(GAP - 500);
+    for (let i = 1; i < labels.length; i++) expect(labels[i]!).toBeLessThanOrEqual(labels[i - 1]!);
+    expect(labels.at(-1)!).toBeLessThanOrEqual(batch);
+  });
+
+  it('never rises by more than the tip grows, and ends near zero, not at the fully scanned gap', () => {
+    // The before: from the fully scanned height every pass showed the whole range again.
+    const old = syncView(sync({ catchUp }), PRE_SYNC, BIRTHDAY);
+    expect(old).toEqual({ kind: 'syncing', blocksLeft: GAP, pct: null });
+    // The queue: one batch of 1,250 left, 3 blocks mined since the pass started.
+    const late = syncView(sync({ catchUp: { from: BIRTHDAY - 1, to: TIP + 3 }, networkTip: TIP + 3, queue: queue(1_250) }), PRE_SYNC, BIRTHDAY);
+    expect(late).toEqual({ kind: 'syncing', blocksLeft: 1_253, pct: Math.floor(((GAP + 3 - 1_253) / (GAP + 3)) * 100) });
+    // The running batch reached every block: still at least 1 until the pass says it is over.
+    expect(view(queue(1_250, 5_000, 3_750))).toEqual({ kind: 'syncing', blocksLeft: 1, pct: 99 });
+  });
+
+  it('shows the share of the range from the birthday that is done', () => {
+    expect(view(queue(GAP))).toEqual({ kind: 'syncing', blocksLeft: GAP, pct: 0 });
+    expect(view(queue(Math.floor(GAP / 4)))).toEqual({ kind: 'syncing', blocksLeft: Math.floor(GAP / 4), pct: 75 });
+    expect(syncView(sync({ catchUp, queue: queue(Math.round(GAP / 4)) }), PRE_SYNC, null)).toEqual({
+      kind: 'syncing',
+      blocksLeft: Math.round(GAP / 4),
+      pct: null,
+    });
+  });
+
+  it('is up to date once the summary reaches the target, whatever the last queue reading said', () => {
+    expect(syncView(sync({ catchUp, queue: queue(10_000) }), SYNCED, BIRTHDAY)).toEqual({ kind: 'upToDate', height: TIP });
+  });
+
+  it('counts by the queue when the summary says the wallet is behind outside a catch-up pass', () => {
+    // E.g. a pass that ended early and the next has not set its catch-up yet: the fully
+    // scanned height lags far behind, the queue knows better (never more than that gap).
+    const behind = { scannedHeight: BIRTHDAY - 1, tipHeight: TIP };
+    expect(syncView(sync({ queue: queue(5_000) }), behind, BIRTHDAY)).toEqual({
+      kind: 'syncing',
+      blocksLeft: 5_000,
+      pct: Math.floor(((GAP - 5_000) / GAP) * 100),
+    });
+    expect(syncView(sync({ queue: queue(GAP + 10_000) }), behind, BIRTHDAY)).toMatchObject({ blocksLeft: GAP });
   });
 });
 
