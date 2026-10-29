@@ -18,7 +18,7 @@ import type {
   SyncProgress,
   ZcashEngine,
 } from './types';
-import { MEMO_MAX_BYTES, TYPICAL_FEE_ZATS } from './types';
+import { MEMO_MAX_BYTES, NewerDatabaseFormatError, OldDatabaseFormatError, TYPICAL_FEE_ZATS } from './types';
 
 // A mainnet height under NU6.3 (Ironwood) rules, before NU7 (3,543,405).
 const TIP = 3_533_800;
@@ -30,6 +30,9 @@ const FAIL_AT = new Map<bigint, SendStage>([
   [6_660_000n, 'broadcasting'], // 0.0666 ZEC
 ]);
 const encoder = new TextEncoder();
+/** Tags in front of a fake database written by another engine version (FakeKnobs.oldDbFormat, newerDbFormat). */
+const OLD_FORMAT = 'old-engine:';
+const NEWER_FORMAT = 'newer-engine:';
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
@@ -83,6 +86,15 @@ export interface FakeKnobs {
   holdNetworkCheck?: boolean;
   /** An upgrade the server announces, as networkStatus() reports it. */
   upcomingUpgrade?: NetworkStatus['upcoming'];
+  /**
+   * exportDb() writes the format of the engine before the port, which a fake without this
+   * knob refuses with OldDatabaseFormatError, as the ported WebZjs refuses the old protobuf.
+   */
+  oldDbFormat?: boolean;
+  /** exportDb() writes a format a newer Celari would; a fake without this knob refuses it with NewerDatabaseFormatError. */
+  newerDbFormat?: boolean;
+  /** open() of a stored database throws this, like a corrupted database or a wasm trap while decoding it. */
+  openFails?: string;
 }
 const knobs = (): FakeKnobs => (globalThis as { __fakeEngine?: FakeKnobs }).__fakeEngine ?? {};
 const chainTip = () => TIP + (knobs().chainGrowth ?? 0);
@@ -184,20 +196,39 @@ export class FakeEngine implements ZcashEngine {
   }
 
   async open(db: Uint8Array | null): Promise<number | null> {
-    this.accounts = db ? (JSON.parse(new TextDecoder().decode(db)) as FakeAccount[]) : [];
+    const k = knobs();
+    let text = db ? new TextDecoder().decode(db) : '[]';
+    if (db && k.openFails) throw new Error(k.openFails);
+    for (const [tag, ours, Refused] of [
+      [OLD_FORMAT, k.oldDbFormat, OldDatabaseFormatError],
+      [NEWER_FORMAT, k.newerDbFormat, NewerDatabaseFormatError],
+    ] as const) {
+      if (!text.startsWith(tag)) continue;
+      if (!ours) throw new Refused({ cause: new Error(`fake: a database in the format "${tag}"`) });
+      text = text.slice(tag.length);
+    }
+    this.accounts = JSON.parse(text) as FakeAccount[];
     // Fake databases saved before the Ironwood balance existed.
     for (const a of this.accounts) a.balances.ironwood ??= '0';
     this.opened = true;
-    return this.accounts[0]?.id ?? null;
+    // Like the WebZjs adapter, which reads the account from the summary: none before a pass
+    // has set the chain tip (summaryBeforePass: the engine before the port had one).
+    const first = this.accounts[0];
+    if (!first) return null;
+    return !k.summaryBeforePass && first.tip < first.birthday ? null : first.id;
   }
 
   private add(kind: FakeAccount['kind'], key: string, birthday: number): number {
     if (!this.opened) throw new Error('wallet not open');
+    const keyHash = hex(hash(kind === 'seed' ? key : fakeKeyFromUfvk(key)));
+    // The error the ported WebZjs gives for the same key added twice (logs/round4/errors.json).
+    const twin = this.accounts.find((a) => a.keyHash === keyHash);
+    if (twin) throw new Error(`Memory client error: Other error: the key collides with existing account AccountId(${twin.id})`);
     const id = this.accounts.length;
     this.accounts.push({
       id,
       kind,
-      keyHash: hex(hash(kind === 'seed' ? key : fakeKeyFromUfvk(key))),
+      keyHash,
       birthday,
       // Like WebZjs before its first pass: only the birthday is known.
       tip: birthday - 1,
@@ -218,7 +249,9 @@ export class FakeEngine implements ZcashEngine {
   }
 
   async exportDb(): Promise<Uint8Array> {
-    return encoder.encode(JSON.stringify(this.accounts));
+    const k = knobs();
+    const tag = k.oldDbFormat ? OLD_FORMAT : k.newerDbFormat ? NEWER_FORMAT : '';
+    return encoder.encode(tag + JSON.stringify(this.accounts));
   }
 
   async sync(): Promise<void> {

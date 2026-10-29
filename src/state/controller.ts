@@ -10,6 +10,8 @@
 // saved (see lock()).
 
 import {
+  NewerDatabaseFormatError,
+  OldDatabaseFormatError,
   loadEngine,
   type Addresses,
   type HistoryItem,
@@ -19,7 +21,7 @@ import {
 } from '../engine';
 import { canSpend, nextCheck, type NetworkCheck } from '../lib/network';
 import { storage, type Settings, type WalletMeta } from '../lib/storage';
-import { catchUpFor, type SyncInfo } from '../lib/syncView';
+import { CATCH_UP_BLOCKS, catchUpFor, type SyncInfo } from '../lib/syncView';
 import { createVault, decryptDb, encryptDb, unlockVault, type Secret, type VaultRecord } from '../lib/vault';
 
 export type Phase = 'booting' | 'bootError' | 'welcome' | 'locked' | 'ready';
@@ -42,6 +44,11 @@ export interface WalletState {
   spending: boolean;
   /** The lock screen shows while a catch-up pass finishes and is saved (see lock()). */
   softLocked: boolean;
+  /**
+   * The database an older engine wrote was rebuilt from the secret and the wallet is being
+   * rescanned from its birthday; the old database is kept until a pass reaches the tip (see unlock()).
+   */
+  upgradeRescan: boolean;
 }
 
 const SYNC_INTERVAL_MS = 30_000;
@@ -55,6 +62,18 @@ export class NotASeedWalletError extends Error {
   constructor() {
     super('this wallet has no spending key');
     this.name = 'NotASeedWalletError';
+  }
+}
+
+/**
+ * Unlocking found a stored wallet database it could not read for another reason than an
+ * older engine's format (corrupted data, a wasm trap, running out of memory). Nothing
+ * stored was changed.
+ */
+export class WalletDataError extends Error {
+  constructor(cause: unknown) {
+    super(`the wallet database could not be read: ${cause instanceof Error ? cause.message : String(cause)}`, { cause });
+    this.name = 'WalletDataError';
   }
 }
 
@@ -86,6 +105,8 @@ export class WalletController {
   private syncing = false;
   private summaryInFlight = false;
   private networkCheck: Promise<void> | null = null;
+  /** The last persist(); each waits for the one before, so an older export never lands last. */
+  private persisting: Promise<unknown> = Promise.resolve();
   private state: WalletState;
 
   constructor(settings: Settings) {
@@ -103,6 +124,7 @@ export class WalletController {
       ironwood: false,
       spending: false,
       softLocked: false,
+      upgradeRescan: false,
     };
   }
 
@@ -141,7 +163,9 @@ export class WalletController {
       void this.checkNetwork();
       const meta = (await storage.getMeta()) ?? null;
       const vault = await storage.getVault();
-      this.set({ phase: vault && meta ? 'locked' : 'welcome', meta });
+      // A rescan after an upgrade that has not reached the tip yet: the lock screen says so.
+      const upgradeRescan = !!(vault && meta) && (await storage.hasLegacyDb());
+      this.set({ phase: vault && meta ? 'locked' : 'welcome', meta, upgradeRescan });
     } catch (e) {
       this.set({ phase: 'bootError', bootError: e instanceof Error ? e.message : String(e) });
     }
@@ -163,18 +187,31 @@ export class WalletController {
 
   async createWallet(secret: Secret, birthday: number, password: string): Promise<void> {
     const { record, key } = await createVault(password, secret);
-    const meta: WalletMeta = { kind: secret.kind === 'seed' ? 'seed' : 'view', birthday, createdAt: Date.now() };
 
     await this.eng.open(null);
     const accountId = await this.addAccount(secret, birthday);
+    const meta: WalletMeta = {
+      kind: secret.kind === 'seed' ? 'seed' : 'view',
+      birthday,
+      createdAt: Date.now(),
+      accountId,
+    };
     const db = await encryptDb(key, await this.eng.exportDb());
     await storage.saveWallet(record, meta, db);
 
     this.key = key;
-    this.set({ meta, accountId });
+    this.set({ meta, accountId, upgradeRescan: false });
     await this.enterReady();
   }
 
+  /**
+   * Opens the stored database. Only two cases rebuild it from the secret: there is
+   * none, or the engine says an older engine wrote it in a format it no longer reads
+   * (the engine before the port). Then the old blob is kept as db-legacy, written in the
+   * same transaction as the new database, and dropped once a pass that reaches the tip
+   * has been saved (syncLoop). Any other error opening it, and a database from a newer
+   * Celari, change nothing stored and are thrown (WalletDataError, NewerDatabaseFormatError).
+   */
   async unlock(password: string): Promise<void> {
     const record = await storage.getVault();
     const meta = await storage.getMeta();
@@ -185,23 +222,60 @@ export class WalletController {
     const { secret, key } = await unlockVault(record, password);
 
     const blob = await storage.getDb();
-    let accountId: number | null;
-    try {
-      accountId = await this.eng.open(blob ? await decryptDb(key, blob) : null);
-    } catch (e) {
-      // e.g. a database written by an older WebZjs version that no longer decodes.
-      console.warn('wallet database unreadable', e);
-      accountId = await this.eng.open(null);
+    let accountId: number | null = null;
+    let oldFormat = false;
+    if (blob) {
+      let bytes: Uint8Array;
+      try {
+        bytes = await decryptDb(key, blob);
+      } catch (e) {
+        // The password opened the vault, so the database blob itself is damaged.
+        throw new WalletDataError(e);
+      }
+      try {
+        accountId = await this.eng.open(bytes);
+      } catch (e) {
+        if (e instanceof NewerDatabaseFormatError) throw e;
+        if (!(e instanceof OldDatabaseFormatError)) throw new WalletDataError(e);
+        console.warn('wallet database in an older engine format', e);
+        oldFormat = true;
+      }
+      if (!oldFormat && accountId === null) {
+        // Read, but the engine names no account (WebZjs before a pass has set the chain
+        // tip): the one Celari recorded with the database, if it is there.
+        accountId = meta.accountId ?? null;
+        if (accountId === null) throw new WalletDataError(new Error('the wallet database names no account'));
+        try {
+          this.set({ addresses: await this.eng.addresses(accountId) });
+        } catch (e) {
+          throw new WalletDataError(e);
+        }
+      }
     }
+
+    let upgradeRescan = await storage.hasLegacyDb();
     if (accountId === null) {
-      // The database was missing, empty or unreadable: rebuild it from the secret.
+      // Missing, or in an older engine's format: rebuild it from the secret.
       console.warn('rebuilding the wallet database from the secret');
+      await this.eng.open(null);
       accountId = await this.addAccount(secret, meta.birthday);
-      await storage.setDb(await encryptDb(key, await this.eng.exportDb()));
+      const db = await encryptDb(key, await this.eng.exportDb());
+      // The old blob becomes db-legacy, unless a copy of this wallet's old database is
+      // there already (an earlier attempt of the same upgrade): that one is the original.
+      // A copy this key cannot open belongs to a wallet removed by a Celari that did not
+      // know about db-legacy, and gives way.
+      const existing = oldFormat ? await storage.getLegacyDb() : undefined;
+      const ours = existing ? await decryptDb(key, existing).then(() => true, () => false) : false;
+      const legacy = oldFormat && !ours ? blob! : null;
+      const next: WalletMeta = { ...meta, accountId };
+      await storage.replaceDb(db, next, legacy);
+      upgradeRescan ||= oldFormat;
+      this.set({ meta: next, accountId, upgradeRescan });
+    } else {
+      this.set({ meta, accountId, upgradeRescan });
     }
 
     this.key = key;
-    this.set({ meta, accountId });
     await this.enterReady();
   }
 
@@ -325,7 +399,14 @@ export class WalletController {
       const tip = await this.readTip();
       if (tip !== null) this.setSync({ networkTip: tip });
       await this.refresh();
-      await this.persist();
+      const saved = await this.persist();
+      // After an upgrade's rebuild: the old database goes once a pass that reached the
+      // network's tip is saved (the tip read after the pass, so a server that does not
+      // answer never counts as reached).
+      const scanned = this.state.summary?.scannedHeight;
+      if (saved && this.state.upgradeRescan && tip !== null && scanned !== undefined && tip - scanned <= CATCH_UP_BLOCKS) {
+        await this.finishUpgradeRescan();
+      }
       const gap = this.gapTo(tip);
       // Still behind after moving forward: catch up again at once. A pass
       // that made no progress (e.g. a lagging server) waits as usual.
@@ -442,14 +523,31 @@ export class WalletController {
     this.set({ summary, addresses, history });
   }
 
-  private async persist() {
-    const key = this.key;
-    if (!key) return;
-    const blob = await encryptDb(key, await this.eng.exportDb());
-    // Wiped meanwhile (a soft lock leaves the wipe button on screen while a
-    // pass runs): writing now would bring the removed database back.
-    if (this.key !== key) return;
-    await storage.setDb(blob);
+  /** Saves the database; true once it is written. Calls run one after another, in order. */
+  private persist(): Promise<boolean> {
+    const run = this.persisting.then(async () => {
+      const key = this.key;
+      if (!key) return false;
+      const blob = await encryptDb(key, await this.eng.exportDb());
+      // Wiped meanwhile (a soft lock leaves the wipe button on screen while a
+      // pass runs): writing now would bring the removed database back.
+      if (this.key !== key) return false;
+      await storage.setDb(blob);
+      return true;
+    });
+    this.persisting = run.catch(() => undefined);
+    return run;
+  }
+
+  /** The rescan after an upgrade reached the tip and is saved: the old database is not needed any more. */
+  private async finishUpgradeRescan() {
+    try {
+      await storage.dropLegacyDb();
+      this.set({ upgradeRescan: false });
+    } catch (e) {
+      // Kept for now; the next pass tries again.
+      console.warn('could not remove the old wallet database', e);
+    }
   }
 
   // --- network rules ----------------------------------------------------------

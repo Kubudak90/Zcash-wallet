@@ -85,6 +85,17 @@ export const tr = {
   'unlock.autoLockedHidden': 'Bu sekme 1 dakika arka planda kaldığı için otomatik olarak kilitlendi.',
   'unlock.softLocked':
     'Eşitleme, ilerlemesi kaydedilene kadar arka planda sürüyor; böylece uzun bir geri yükleme boşa gitmez.',
+  'unlock.upgradeRescan':
+    'Celari yeni Zcash ağ kuralları için güncellendi ve bu cüzdanı başlangıç bloğundan itibaren yeniden tarıyor. Bu biraz sürebilir; tarama cüzdan açıkken sürer. Paran güvende.',
+  'unlock.dbUnreadable':
+    'Celari bu cüzdanın kayıtlı verilerini okuyamadı, bu yüzden hiçbir şeyi değiştirmedi; paran güvende. Sayfayı yenileyip tekrar dene. Sorun sürerse cüzdanı bu tarayıcıdan silip kurtarma kelimelerinle yeniden yükleyebilirsin.',
+  'unlock.dbUnreadableView':
+    'Celari bu cüzdanın kayıtlı verilerini okuyamadı, bu yüzden hiçbir şeyi değiştirmedi. Sayfayı yenileyip tekrar dene. Sorun sürerse cüzdanı bu tarayıcıdan silip görüntüleme anahtarınla (uview1…) yeniden ekleyebilirsin.',
+  'unlock.dbNewer':
+    'Bu cüzdan, şu an çalışan sürümden daha yeni bir Celari sürümüyle kaydedilmiş; bu sürüm onu açamıyor. Hiçbir şey değiştirilmedi, paran güvende. Yeni sürümü almak için sayfayı yenile.',
+
+  'upgrade.rescanning':
+    'Celari yeni Zcash ağ kuralları için güncellendi ve bu cüzdanı başlangıç bloğundan itibaren yeniden tarıyor. Bu biraz sürebilir. Paran güvende; bakiye ve geçmiş tarama ilerledikçe tamamlanır.',
 
   'nav.home': 'Bakiye',
   'nav.receive': 'Al',

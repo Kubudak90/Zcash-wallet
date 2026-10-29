@@ -84,6 +84,17 @@ export const en: Record<MessageKey, string> = {
   'unlock.autoLocked': 'Locked automatically after {n} minutes of inactivity.',
   'unlock.autoLockedHidden': 'Locked automatically because this tab was in the background for 1 minute.',
   'unlock.softLocked': 'The sync keeps running in the background until its progress is saved, so a long restore is not lost.',
+  'unlock.upgradeRescan':
+    'Celari was updated for the new Zcash network rules and is rescanning this wallet from its starting block. This can take a while, and it goes on while the wallet is unlocked. Your funds are safe.',
+  'unlock.dbUnreadable':
+    'Celari could not read this wallet’s saved data, so it changed nothing; your funds are safe. Reload the page and try again. If it keeps failing, you can remove the wallet from this browser and restore it from your recovery phrase.',
+  'unlock.dbUnreadableView':
+    'Celari could not read this wallet’s saved data, so it changed nothing. Reload the page and try again. If it keeps failing, you can remove the wallet from this browser and add it again with your viewing key (uview1…).',
+  'unlock.dbNewer':
+    'This wallet was saved by a newer version of Celari than the one running now, which cannot open it. Nothing was changed and your funds are safe. Reload the page to get the newer version.',
+
+  'upgrade.rescanning':
+    'Celari was updated for the new Zcash network rules and is rescanning this wallet from its starting block. This can take a while. Your funds are safe; the balance and history fill in as the scan goes on.',
 
   'nav.home': 'Balance',
   'nav.receive': 'Receive',
