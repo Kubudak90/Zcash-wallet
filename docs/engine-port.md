@@ -385,13 +385,31 @@ patches and `engine/` (uncommitted changes stop the build), the lockfile
 (binaryen 123, checksums), wasm-pack 0.15.0 (CI: checksum), and the C compiler
 (CI: Ubuntu 24.04 `clang-18` `1:18.1.3-1ubuntu1`, checked).
 
-What it refuses (`scripts/test-build-webzjs-guards.sh` checks each): a
-`RUSTUP_TOOLCHAIN` or rustup override other than the pinned toolchain, `RUSTC`,
-rustc wrappers, extra rustflags and other `CARGO_BUILD_*`/`CARGO_TARGET_*`/
-`CARGO_PROFILE_*` settings in the environment, cargo configuration from anywhere
-but the patched `.webzjs/.cargo/config.toml`, and a `.cargo/` at the repository
-root. At the end it compares `vendor/` with the list: on x86_64 Linux a mismatch
-is an error and the new list is written to `.webzjs/target/webzjs-vendor.sha256`.
+What reaches the build: wasm-pack (and with it cargo, rustc, the C compiler,
+wasm-bindgen and wasm-opt) runs under `env -i` with only `PATH`, `HOME`, `USER`,
+`TMPDIR`, `TERM`, `CARGO_HOME`, `RUSTUP_HOME`, the pinned `RUSTUP_TOOLCHAIN`, the
+target directory and job count, proxy and certificate variables, `RUST_BACKTRACE`,
+`CARGO_HTTP_*`/`CARGO_NET_*`/`CARGO_TERM_*`/`CARGO_REGISTRIES_*`,
+`CC_wasm32_unknown_unknown` and the trim-paths setting; every other variable
+(`CC`, `CFLAGS`, clang's `CCC_OVERRIDE_OPTIONS` or `CPATH`, ...) is dropped.
+
+What it refuses (`scripts/test-build-webzjs-guards.sh` checks each, 23 cases): a
+`RUSTUP_TOOLCHAIN` or rustup override other than the pinned toolchain; `RUSTC`,
+rustc wrappers, extra rustflags, `CARGO_INCREMENTAL` and the other
+`CARGO_BUILD_*`/`CARGO_TARGET_*`/`CARGO_PROFILE_*`/`CARGO_UNSTABLE_*`/`CARGO_ENV_*`
+variables; the cc crate's settings for the wasm target in either spelling
+(`CC_wasm32-unknown-unknown`, which cc reads before the underscore form,
+`CFLAGS_wasm32_unknown_unknown`, `TARGET_CFLAGS`, `CRATE_CC_NO_DEFAULTS`, ...) and
+wasm-bindgen's `WASM_BINDGEN_*`; cargo configuration from anywhere but the patched
+`.webzjs/.cargo/config.toml` whatever the key (a `paths` override swaps a locked
+crate's source under `--locked` without touching `Cargo.lock`), except
+`build.target-dir`, `build.jobs`, `net`, `http`, `registries`, `registry`, `term`
+and `alias`; and a `.cargo/` at the repository root. `WEBZJS_PREPARE_ONLY=1` (the
+audit and licence scripts, CI's `engine-audit` job) stops before any tool is looked
+for, wasm-pack included. At the end it compares `vendor/` with the list: on x86_64
+Linux a mismatch is an error and the new list is written to
+`.webzjs/target/webzjs-vendor.sha256`. MEASURED: a cold build with the `env -i`
+script and the previous engine gave the committed list byte for byte.
 
 MEASURED (2026-10-29, this repository's build of the round-7 engine): two cold
 builds from a removed `.webzjs/` on x86_64 Ubuntu 24.04 with clang-18 gave
@@ -415,7 +433,7 @@ from `.webzjs/target/webzjs-vendor.sha256`, and let CI's from-source run confirm
 | Mainnet smoke test (real engine, production build) | `npm run test:e2e:real` | passed in 14.2 s, network supported |
 | Mainnet restore from 2026-10 (production build, through a proxy; a reviewer's spec outside the repository) | - | 622 s; "blocks left" 49,148 -> 39,148 -> 29,148 -> 19,142 -> 9,142 -> 2,277 -> 1 -> Up to date, one rise of 4 blocks (the chain's growth); before Decision 21 it went back to ~48,800 at the second pass and ended at ~21,100 |
 | Upgrade from main's build to this one, mainnet (outside the repository) | - | 13/13 checks: rebuilt once, `db-legacy` kept until the tip, notices; after the soft-lock reload the count went on at 29,161 (before: back to ~48,800) and reached the tip at 707 s |
-| Build guards | `scripts/test-build-webzjs-guards.sh` | 11 of 11 |
+| Build guards | `scripts/test-build-webzjs-guards.sh` | 23 of 23 (12 new cases; the 10 new checks failed against the previous script) |
 
 The backend's lockfile (`engine/zcash_client_memory/Cargo.lock`) is the shipped
 lockfile pruned to the crate; the script checks that every crate the tests compile

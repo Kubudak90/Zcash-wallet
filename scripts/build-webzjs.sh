@@ -26,7 +26,8 @@
 # for at the end.
 #
 # Environment (optional): WEBZJS_PREPARE_ONLY=1 stops once .webzjs/ holds the patched sources
-# and the lockfile, before any tool is installed (scripts/audit-engine.sh uses that);
+# and the lockfile, before any tool is installed or looked for, wasm-pack included
+# (scripts/audit-engine.sh and scripts/gen-licenses.sh use that);
 # WEBZJS_OUT, the output directory (default vendor/);
 # CC_wasm32_unknown_unknown, the C compiler (default clang);
 # WEBZJS_RUST_TOOLCHAIN and WEBZJS_WASM_BINDGEN_VERSION, the toolchain the
@@ -34,13 +35,28 @@
 # name (CI sets both); CARGO_TARGET_DIR as cargo reads it;
 # WEBZJS_LIST_MISMATCH=warn, see below.
 #
-# Anything else that would change what rustc builds stops the script, since the
-# log would then name tools and inputs the output does not come from: a
-# RUSTUP_TOOLCHAIN or rustup override other than the pinned toolchain, a rustc
-# wrapper, extra rustflags, another rustc (environment variables), and cargo
-# configuration from anywhere but the patched .webzjs/.cargo/config.toml (a
-# .cargo/ in this checkout or above it, or build/target/profile settings in
-# CARGO_HOME's config.toml).
+# The build sees only an environment of its own: wasm-pack, and with it cargo,
+# rustc, the C compiler, wasm-bindgen and wasm-opt, run under `env -i` with the
+# variables in BUILD_ENV below (where the tools, CARGO_HOME and RUSTUP_HOME are,
+# the target directory and job count, proxy and certificate settings, and cargo's
+# CARGO_HTTP_/NET_/TERM_/REGISTRIES_ settings), CC_wasm32_unknown_unknown and the
+# trim-paths setting this script exports. Every other variable of the caller is
+# dropped (CC, CFLAGS, clang's CCC_OVERRIDE_OPTIONS or CPATH, ...).
+#
+# Settings someone would set to change the build stop the script instead, since
+# the log would then name tools and inputs the output does not come from: a
+# RUSTUP_TOOLCHAIN or rustup override other than the pinned toolchain; RUSTC, a
+# rustc wrapper, extra rustflags, CARGO_INCREMENTAL and the other CARGO_BUILD_,
+# CARGO_TARGET_, CARGO_PROFILE_, CARGO_UNSTABLE_ and CARGO_ENV_ variables; the cc
+# crate's settings for the wasm target (CC_, CXX_, AR_, RANLIB_, CFLAGS_, CXXFLAGS_,
+# ARFLAGS_ with either spelling of wasm32-unknown-unknown, other than
+# CC_wasm32_unknown_unknown; TARGET_CC, TARGET_CFLAGS, ...; CRATE_CC_NO_DEFAULTS);
+# wasm-bindgen's (WASM_BINDGEN_*); and cargo configuration from anywhere but the
+# patched .webzjs/.cargo/config.toml (a .cargo/ in this checkout or above it, or
+# CARGO_HOME's config.toml), whatever the key (`paths` overrides included), except
+# the keys that only say where to build, how many jobs, how to download and how to
+# print: build.target-dir, build.jobs, net.*, http.*, registries.*, registry.*,
+# term.* and alias.*. scripts/test-build-webzjs-guards.sh checks each of these.
 #
 # At the end the script compares the output with scripts/webzjs-vendor.sha256
 # the way CI does. On x86_64 Linux a mismatch is an error (exit 1, vendor/ is
@@ -66,20 +82,26 @@ SRC="$ROOT/.webzjs"
 OUT="${WEBZJS_OUT:-$ROOT/vendor}"
 LOCKFILE="$ROOT/engine/webzjs.Cargo.lock"
 
-command -v wasm-pack >/dev/null || { echo "wasm-pack not found: cargo install wasm-pack" >&2; exit 1; }
-
-# Environment variables that change what cargo and rustc build. CARGO_TARGET_DIR
-# and CARGO_BUILD_JOBS only change where and how fast.
+# Environment variables meant to change what cargo, rustc, the C compiler or
+# wasm-bindgen build (see the header): refused, not just dropped, so that nobody
+# takes the output for a build with them. CARGO_TARGET_DIR and CARGO_BUILD_JOBS
+# only change where and how fast; CC_wasm32_unknown_unknown is the C compiler
+# this script documents; WASM_BINDGEN_VERSION is CI's, and wasm-bindgen does not
+# read it. The names come from `env`: the cc crate also reads names that bash
+# cannot hold as variables (CC_wasm32-unknown-unknown, before the underscore form).
 refused=()
-for var in RUSTC RUSTC_WRAPPER RUSTC_WORKSPACE_WRAPPER RUSTFLAGS CARGO_ENCODED_RUSTFLAGS RUSTDOCFLAGS CARGO_ENCODED_RUSTDOCFLAGS; do
-  [ -z "${!var+set}" ] || refused+=("$var")
-done
 while IFS= read -r var; do
   case "$var" in
-    CARGO_TARGET_DIR | CARGO_BUILD_TARGET_DIR | CARGO_BUILD_JOBS) ;;
+    CARGO_TARGET_DIR | CARGO_BUILD_TARGET_DIR | CARGO_BUILD_JOBS | CC_wasm32_unknown_unknown | WASM_BINDGEN_VERSION) ;;
     *) refused+=("$var") ;;
   esac
-done < <(compgen -e | grep -E '^CARGO_(BUILD|TARGET|PROFILE|UNSTABLE|ENV)_' || true)
+done < <(env | sed -n 's/^\([^=]*\)=.*/\1/p' | LC_ALL=C sort -u | grep -E \
+  -e '^(RUSTC|RUSTC_WRAPPER|RUSTC_WORKSPACE_WRAPPER|RUSTFLAGS|CARGO_ENCODED_RUSTFLAGS|RUSTDOCFLAGS|CARGO_ENCODED_RUSTDOCFLAGS)$' \
+  -e '^(CARGO_INCREMENTAL|CRATE_CC_NO_DEFAULTS)$' \
+  -e '^CARGO_(BUILD|TARGET|PROFILE|UNSTABLE|ENV)_' \
+  -e '^(CC|CXX|AR|RANLIB|CFLAGS|CXXFLAGS|ARFLAGS)_wasm32[-_]unknown[-_]unknown$' \
+  -e '^TARGET_(CC|CXX|AR|RANLIB|CFLAGS|CXXFLAGS|ARFLAGS)$' \
+  -e '^WASM_BINDGEN_' || true)
 if [ "${#refused[@]}" -gt 0 ]; then
   echo "error: these environment variables would change the build: ${refused[*]}; unset them (the output would not be the pinned one)" >&2
   exit 1
@@ -127,6 +149,26 @@ if [ "${WEBZJS_PREPARE_ONLY:-}" = 1 ]; then
   exit 0
 fi
 
+command -v wasm-pack >/dev/null || { echo "wasm-pack not found: cargo install wasm-pack" >&2; exit 1; }
+
+# The only variables of the caller the build sees (see the header), with the values
+# they have when a command starts (PATH gains the pinned tools below); every other
+# variable is dropped.
+BUILD_ENV=(PATH HOME USER TMPDIR TERM CARGO_HOME RUSTUP_HOME RUSTUP_TOOLCHAIN
+  CARGO_TARGET_DIR CARGO_BUILD_TARGET_DIR CARGO_BUILD_JOBS
+  HTTP_PROXY HTTPS_PROXY NO_PROXY ALL_PROXY http_proxy https_proxy no_proxy all_proxy SSL_CERT_FILE SSL_CERT_DIR
+  RUST_BACKTRACE CC_wasm32_unknown_unknown CARGO_PROFILE_RELEASE_TRIM_PATHS)
+in_build_env() {
+  local vars=() var
+  for var in "${BUILD_ENV[@]}"; do
+    [ -z "${!var+set}" ] || vars+=("$var=${!var}")
+  done
+  while IFS= read -r var; do
+    vars+=("$var=${!var}")
+  done < <(compgen -e | grep -E '^CARGO_(HTTP|NET|TERM|REGISTRIES)_' || true)
+  env -i "${vars[@]}" "$@"
+}
+
 channel="$(sed -n 's/^channel *= *"\(.*\)"/\1/p' "$SRC/rust-toolchain.toml")"
 [ -n "$channel" ] || { echo "error: no channel in $SRC/rust-toolchain.toml" >&2; exit 1; }
 if [ -n "${WEBZJS_RUST_TOOLCHAIN:-}" ] && [ "$channel" != "$WEBZJS_RUST_TOOLCHAIN" ]; then
@@ -141,11 +183,11 @@ rustup toolchain install "$channel" --profile minimal --component rust-src --tar
 
 # The toolchain rustup actually picks where wasm-pack runs cargo: RUSTUP_TOOLCHAIN
 # and a `rustup override` for one of these directories win over rust-toolchain.toml.
-pinned_rustc="$(rustc "+$channel" --version)"
-pinned_cargo="$(cargo "+$channel" --version)"
+pinned_rustc="$(in_build_env rustc "+$channel" --version)"
+pinned_cargo="$(in_build_env cargo "+$channel" --version)"
 for crate in webzjs-wallet webzjs-keys; do
-  used_rustc="$(cd "$SRC/crates/$crate" && rustc --version)"
-  used_cargo="$(cd "$SRC/crates/$crate" && cargo --version)"
+  used_rustc="$(cd "$SRC/crates/$crate" && in_build_env rustc --version)"
+  used_cargo="$(cd "$SRC/crates/$crate" && in_build_env cargo --version)"
   if [ "$used_rustc" != "$pinned_rustc" ] || [ "$used_cargo" != "$pinned_cargo" ]; then
     echo "error: in .webzjs/crates/$crate rustup picks $used_rustc / $used_cargo, not the pinned $channel ($pinned_rustc);" \
       "see \`rustup show active-toolchain\` there (a rustup override?)" >&2
@@ -154,9 +196,12 @@ for crate in webzjs-wallet webzjs-keys; do
 done
 
 # Cargo reads configuration from every .cargo/ directory above the crate and from
-# CARGO_HOME. Only the patched .webzjs/.cargo/config.toml may shape the build.
+# CARGO_HOME. Only the patched .webzjs/.cargo/config.toml may shape the build:
+# from anywhere else, any key but the few that say where, how fast, how to
+# download and how to print stops it (deny by default: cargo has keys such as
+# `paths` that swap a locked crate's source under --locked without touching Cargo.lock).
 for crate in webzjs-wallet webzjs-keys; do
-  config="$(cd "$SRC/crates/$crate" && cargo "+$channel" -Zunstable-options config get --show-origin 2>&1)" || {
+  config="$(cd "$SRC/crates/$crate" && in_build_env cargo "+$channel" -Zunstable-options config get --show-origin 2>&1)" || {
     echo "error: cargo config get failed in .webzjs/crates/$crate:" >&2
     echo "$config" >&2
     exit 1
@@ -167,11 +212,12 @@ for crate in webzjs-wallet webzjs-keys; do
       origin = substr($0, index($0, " # ") + 3)
       if (origin == ours || origin == ours_real || origin == "--config cli option") next
       if (key == "build.target-dir" || key == "build.jobs") next
-      split(key, part, ".")
-      if (part[1] ~ /^(build|target|profile|env|unstable|patch|source|host)$/) print key " from " origin
+      if (key ~ /^(net|http|registries|registry|term|alias)\./) next
+      print key " from " origin
     }' <<<"$config" | sort -u)"
   if [ -n "$foreign" ]; then
-    echo "error: cargo configuration outside .webzjs/.cargo/config.toml would change the build of $crate:" >&2
+    echo "error: cargo configuration outside .webzjs/.cargo/config.toml would apply to the build of $crate" \
+      "(from elsewhere only build.target-dir, build.jobs, net, http, registries, registry, term and alias may be set):" >&2
     echo "$foreign" >&2
     exit 1
   fi
@@ -195,7 +241,7 @@ fi
 tools="$SRC/target/celari-tools/wasm-bindgen-$bindgen"
 if [ "$("$tools/bin/wasm-bindgen" --version 2>/dev/null || true)" != "wasm-bindgen $bindgen" ]; then
   echo "Installing wasm-bindgen-cli $bindgen into $tools"
-  (cd "$SRC" && cargo install --quiet --locked --force --root "$tools" wasm-bindgen-cli --version "$bindgen")
+  (cd "$SRC" && in_build_env cargo install --quiet --locked --force --root "$tools" wasm-bindgen-cli --version "$bindgen")
 fi
 export PATH="$tools/bin:$PATH"
 [ "$(wasm-bindgen --version)" = "wasm-bindgen $bindgen" ] || { echo "error: wasm-bindgen $bindgen not on PATH" >&2; exit 1; }
@@ -244,12 +290,13 @@ command -v "$CC_wasm32_unknown_unknown" >/dev/null || { echo "error: $CC_wasm32_
 # the symlink 0003 adds inside the workspace.
 export CARGO_PROFILE_RELEASE_TRIM_PATHS=all
 
-echo "Tools: $(cd "$SRC/crates/webzjs-wallet" && rustc --version) ($(cd "$SRC/crates/webzjs-wallet" && rustup show active-toolchain));" \
-  "$(wasm-bindgen --version); $(wasm-opt --version); $(wasm-pack --version); $("$CC_wasm32_unknown_unknown" --version | head -n 1)"
+echo "Tools: $(cd "$SRC/crates/webzjs-wallet" && in_build_env rustc --version) ($(cd "$SRC/crates/webzjs-wallet" && in_build_env rustup show active-toolchain));" \
+  "$(in_build_env wasm-bindgen --version); $(in_build_env wasm-opt --version); $(in_build_env wasm-pack --version);" \
+  "$(in_build_env "$CC_wasm32_unknown_unknown" --version | head -n 1)"
 
 build() {
   local crate="$1" features="$2"
-  (cd "$SRC/crates/$crate" && wasm-pack build -t web --release --scope chainsafe \
+  (cd "$SRC/crates/$crate" && in_build_env wasm-pack build -t web --release --scope chainsafe \
     --out-dir "$OUT/$crate" --no-default-features --features="$features" \
     -Z build-std="panic_abort,std" --locked)
 }
