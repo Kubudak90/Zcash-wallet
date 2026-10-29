@@ -236,7 +236,17 @@ export class WebzjsEngine implements ZcashEngine {
     const wallet: { sync_progress?: WebWallet['sync_progress'] } = this.open_;
     if (typeof wallet.sync_progress !== 'function') return null;
     const p = wallet.sync_progress();
-    const progress = { running: p.running, visited: p.visited, scanned: p.scanned, downloaded: p.downloaded };
+    const progress: SyncProgress = {
+      running: p.running,
+      visited: p.visited,
+      scanned: p.scanned,
+      downloaded: p.downloaded,
+      // patches/webzjs/0004 (round 6): the scan queue as the wallet database reported it at
+      // its last write, also between passes and right after opening, and whether the last
+      // pass ended at its time budget with blocks left (docs/engine-port.md, Decision 21).
+      queue: { unscanned: p.unscanned_blocks, walletTip: p.wallet_tip, visitedAtReport: p.unscanned_visited },
+      endedEarly: p.ended_early,
+    };
     p.free();
     return progress;
   }

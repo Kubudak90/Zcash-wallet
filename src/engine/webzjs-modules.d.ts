@@ -24,7 +24,7 @@ declare module '@chainsafe/webzjs-wallet' {
     fully_scanned_height: number;
   }
 
-  /** From patches/webzjs/0001-sync-progress.patch; the per-pool counts from 0004. */
+  /** From patches/webzjs/0001-sync-progress.patch; the per-pool counts and the rest from 0004. */
   export class SyncProgress {
     free(): void;
     running: boolean;
@@ -38,6 +38,19 @@ declare module '@chainsafe/webzjs-wallet' {
     ironwood_actions: number;
     ironwood_tree_start: number;
     ironwood_tree_end: number;
+    /** The pass ended at its time budget with blocks left (round 3; exactly then since round 6). */
+    ended_early: boolean;
+    /** Round 6: blocks of the scan queue up to `wallet_tip`, at the database's last write. */
+    unscanned_blocks: number;
+    /** Round 6: the wallet's chain tip; birthday - 1 before a new account's first pass. */
+    wallet_tip: number;
+    /** Round 6: the pass's `visited` when `unscanned_blocks` was reported. */
+    unscanned_visited: number;
+    data_requests: number;
+    data_requests_served: number;
+    data_requests_failed: number;
+    data_requests_skipped: number;
+    batch_blocks: number;
   }
 
   export class TransactionHistoryResponse {

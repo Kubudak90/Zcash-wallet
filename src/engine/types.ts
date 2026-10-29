@@ -107,6 +107,33 @@ export interface SyncProgress {
   scanned: number;
   /** Blocks downloaded so far (a batch counts once it has arrived in full); optional. */
   downloaded?: number;
+  /**
+   * What is left to scan, from the engine's scan queue: valid at any time, between passes and
+   * before the first one too (unlike the counts above, which describe one pass). Optional:
+   * engines that cannot tell leave it out. See ScanQueue.
+   */
+  queue?: ScanQueue;
+  /**
+   * The last pass ended at its time budget with blocks still to scan (WebZjs `ended_early`);
+   * the next one can start at once.
+   */
+  endedEarly?: boolean;
+}
+
+/**
+ * The engine's scan queue as its database reported it at its last write (WebZjs
+ * sync_progress(): `unscanned_blocks`, `wallet_tip`, `unscanned_visited`, patches/webzjs/0004).
+ * The engine does not scan from the birthday upwards: it scans the newest blocks first, so
+ * the fully scanned height (Summary.scannedHeight) stays near the birthday until the last
+ * batch, and only the queue says how much is left.
+ */
+export interface ScanQueue {
+  /** Blocks of the ranges still to scan, up to `walletTip`. */
+  unscanned: number;
+  /** The chain tip the wallet knows (set at the start of each pass); blocks above it are not in `unscanned`. */
+  walletTip: number;
+  /** The running pass's `visited` count when `unscanned` was reported, so blocks reached since can count. */
+  visitedAtReport: number;
 }
 
 /** A memo holds at most this many bytes of UTF-8 text (ZIP 302). */
@@ -188,7 +215,11 @@ export interface ZcashEngine {
    * running then. Optional: engines that cannot stop leave it out.
    */
   onStopped?(listener: (error: EngineStoppedError) => void): void;
-  /** Progress of the running pass, readable while sync() runs. Optional: engines that cannot tell leave it out. */
+  /**
+   * Progress of the running pass, readable while sync() runs, and of the last one after it
+   * ended (`running` false); the scan queue (SyncProgress.queue) at any time. Optional:
+   * engines that cannot tell leave it out.
+   */
   syncProgress?(): Promise<SyncProgress | null>;
   summary(account: number): Promise<Summary | null>;
   addresses(account: number): Promise<Addresses>;

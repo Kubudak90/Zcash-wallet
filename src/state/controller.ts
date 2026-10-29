@@ -18,12 +18,13 @@ import {
   type HistoryItem,
   type SendStage,
   type Summary,
+  type SyncProgress,
   type ZcashEngine,
 } from '../engine';
 import { isShieldedOnlyUnified } from '../lib/address';
 import { canSpend, nextCheck, type NetworkCheck } from '../lib/network';
 import { storage, type Settings, type WalletMeta } from '../lib/storage';
-import { CATCH_UP_BLOCKS, STALL_MS, catchUpFor, type SyncInfo } from '../lib/syncView';
+import { CATCH_UP_BLOCKS, STALL_MS, catchUpFor, type QueueReading, type SyncInfo } from '../lib/syncView';
 import { createVault, decryptDb, encryptDb, unlockVault, type Secret, type VaultRecord } from '../lib/vault';
 
 export type Phase = 'booting' | 'bootError' | 'welcome' | 'locked' | 'ready';
@@ -73,6 +74,9 @@ export interface ReceiveAddress {
 }
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+/** The scan queue in a reading of the engine's pass counters, with that reading's `visited`. */
+const queueOf = (p: SyncProgress | null): QueueReading | null => (p?.queue ? { ...p.queue, visited: p.visited } : null);
 
 export class NotASeedWalletError extends Error {
   constructor() {
@@ -143,7 +147,7 @@ export class WalletController {
       summary: null,
       addresses: null,
       history: [],
-      sync: { status: 'starting', error: null, catchUp: null, networkTip: null, progress: null },
+      sync: { status: 'starting', error: null, catchUp: null, networkTip: null, progress: null, queue: null },
       network: { status: null, error: null },
       ironwood: false,
       spending: false,
@@ -332,7 +336,7 @@ export class WalletController {
   private async enterReady() {
     this.set({
       phase: 'ready',
-      sync: { ...this.state.sync, status: 'starting', error: null, catchUp: null, progress: null },
+      sync: { ...this.state.sync, status: 'starting', error: null, catchUp: null, progress: null, queue: null },
     });
     await this.refresh();
     // Asked for before the first pass takes the database, so Receive has one at once.
@@ -498,7 +502,10 @@ export class WalletController {
     if (this.state.phase !== 'ready' || this.syncing || this.stopped) return;
     this.syncing = true;
     void this.checkNetwork();
-    this.setSync({ status: 'syncing', progress: null, ...this.gapTo(await this.readTip()) });
+    const tipBefore = await this.readTip();
+    // What is left, from the engine's scan queue: also right after a reload, mid-restore.
+    const before = queueOf(await this.readProgress());
+    this.setSync({ status: 'syncing', progress: null, ...(before && { queue: before }), ...this.gapTo(tipBefore) });
 
     // Engines that can report progress mid-pass move the bar; WebZjs answers
     // only when the pass ends, so at most one summary call waits at a time.
@@ -510,6 +517,10 @@ export class WalletController {
     let delay = SYNC_INTERVAL_MS;
     try {
       await this.eng.sync();
+      // How the pass ended and what is left; lock-free, valid once the pass is over.
+      const after = await this.readProgress();
+      const queue = queueOf(after);
+      if (queue) this.setSync({ queue });
       // WebZjs reads the tip once per scan iteration, so a long pass ends
       // behind blocks mined while it ran. On the tip read before the pass the
       // wallet would count as up to date and spends would start (and run that
@@ -527,10 +538,12 @@ export class WalletController {
         await this.finishUpgradeRescan();
       }
       const gap = this.gapTo(tip);
-      // Still behind after moving forward: catch up again at once. A pass
-      // that made no progress (e.g. a lagging server) waits as usual.
+      // A pass that ended at its time budget with blocks left goes on at once. The engine
+      // scans the newest blocks first, so such a pass need not move the fully scanned height.
+      // Otherwise: still behind after moving forward, catch up again at once; a pass that
+      // made no progress (e.g. a lagging server) waits as usual.
       const moved = scannedBefore === undefined || (this.state.summary?.scannedHeight ?? 0) > scannedBefore;
-      if (gap.catchUp && moved) {
+      if (after?.endedEarly || (gap.catchUp && moved)) {
         this.setSync({ ...gap, progress: null, stalled: false });
         delay = 0;
       } else {
@@ -575,6 +588,19 @@ export class WalletController {
     }
   }
 
+  /**
+   * The engine's pass counters and scan queue; null if it has none or cannot answer (a
+   * stopped engine says so through the calls around this one).
+   */
+  private async readProgress(): Promise<SyncProgress | null> {
+    try {
+      return (await this.eng.syncProgress?.()) ?? null;
+    } catch (e) {
+      console.warn('sync progress failed', e);
+      return null;
+    }
+  }
+
   /** Compares the network tip with the wallet's scanned height. */
   private gapTo(networkTip: number | null): Partial<SyncInfo> {
     // The pass itself reports connection problems; until then the last error stands.
@@ -603,7 +629,13 @@ export class WalletController {
       inFlight = true;
       try {
         const p = await this.eng.syncProgress?.();
-        if (stopped || !p?.running) return;
+        if (stopped || !p) return;
+        // The scan queue is valid in every reading; the counts only in one of the running pass.
+        const queue = queueOf(p);
+        if (!p.running) {
+          if (queue) this.setSync({ queue });
+          return;
+        }
         const now = Date.now();
         const counters = `${p.downloaded ?? ''}/${p.visited}/${p.scanned}`;
         if (counters !== last) {
@@ -611,7 +643,7 @@ export class WalletController {
           movedAt = now;
         }
         const stalled = now - movedAt >= STALL_MS;
-        this.setSync({ progress: { visited: p.visited, scanned: p.scanned }, stalled });
+        this.setSync({ progress: { visited: p.visited, scanned: p.scanned }, stalled, ...(queue && { queue }) });
       } catch (e) {
         console.warn('sync progress failed', e);
       } finally {
