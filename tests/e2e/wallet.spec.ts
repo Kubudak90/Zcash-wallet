@@ -140,6 +140,23 @@ test('settings: reveal recovery phrase and viewing key, then wipe', async ({ pag
   await expect(page.getByRole('button', { name: 'Create a new wallet' })).toBeVisible();
 });
 
+test('Settings links the licence notices of the engine, and the app serves them', async ({ page }) => {
+  // Final review F6: the wasm carries ~270 crates under MIT / Apache-2.0 and others, whose
+  // copyright and permission notices must go with the copies Celari distributes.
+  await createWallet(page);
+  await page.getByRole('button', { name: 'Settings' }).click();
+  const link = page.getByRole('link', { name: 'Third-party licences (wallet engine)' });
+  await expect(link).toHaveAttribute('href', '/THIRD_PARTY_LICENSES.txt');
+  const res = await page.request.get('/THIRD_PARTY_LICENSES.txt');
+  expect(res.status()).toBe(200);
+  const text = await res.text();
+  for (const s of ['webzjs-wallet 0.1.0 (MIT OR Apache-2.0)', 'zcash_client_backend 0.25.0', 'orchard 0.16.', 'Copyright (c) 2024 ChainSafe Systems', 'Copyright (c) 2013 Pieter Wuille']) {
+    expect(text).toContain(s);
+  }
+  await page.getByRole('button', { name: 'Türkçe' }).click();
+  await expect(page.getByRole('link', { name: 'Üçüncü taraf lisansları (cüzdan motoru)' })).toBeVisible();
+});
+
 test('restore view-only wallet from a viewing key', async ({ page }) => {
   const ufvk = bech32m.encode('uview', bech32m.toWords(new Uint8Array(120).fill(9)), false);
   await page.goto('/');

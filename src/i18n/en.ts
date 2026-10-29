@@ -309,5 +309,6 @@ export const en: Record<MessageKey, string> = {
   'settings.aboutText':
     'Celari is open source (MIT / Apache-2.0) and built on ChainSafe’s WebZjs library. No token, no points, no airdrop promises.',
   'settings.source': 'Source code',
+  'settings.licenses': 'Third-party licences (wallet engine)',
   'settings.version': 'Version {v}',
 };

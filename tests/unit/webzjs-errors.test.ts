@@ -6,7 +6,7 @@ import { NewerDatabaseFormatError, OldDatabaseFormatError } from '../../src/engi
 import { openError } from '../../src/engine/webzjs-errors';
 
 // What `new WebWallet('main', …, db)` of the vendored build threw in Chromium for each kind of
-// blob (engine-port smoke/errors-run.mjs, logs/round4/errors.json): plain Errors, message only.
+// blob (measured in the engine port's working repository, see docs/engine-port.md): plain Errors, message only.
 const MEASURED = {
   oldProtobuf:
     'Memory client error: Unsupported wallet data format (version None); the wallet must be rebuilt and rescanned',
@@ -51,7 +51,7 @@ describe('openError', () => {
 });
 
 // The matcher depends on the engine's wording; the engine source ships in this repository
-// (engine/zcash_client_memory, PORT-NOTES Decision 1), so a change there fails here first.
+// (engine/zcash_client_memory, docs/engine-port.md Decision 1), so a change there fails here first.
 describe('the engine source still says what openError matches', () => {
   const src = (file: string) =>
     readFileSync(new URL(`../../engine/zcash_client_memory/src/${file}`, import.meta.url), 'utf8');

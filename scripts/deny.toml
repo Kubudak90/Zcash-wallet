@@ -1,0 +1,48 @@
+# cargo-deny configuration for the patched WebZjs workspace that scripts/build-webzjs.sh
+# leaves in .webzjs/, whose lockfile is engine/webzjs.Cargo.lock. Run it with
+# scripts/audit-engine.sh, which pins cargo-deny and fetches the RustSec advisory database.
+# What it found last is in docs/engine-port.md ("Dependency audit and licences").
+
+[graph]
+# Every feature of every workspace crate, all targets: the wasm build, the host build of the
+# native tests and the build scripts; nothing that could reach a build is left out.
+all-features = true
+
+[advisories]
+db-urls = ["https://github.com/rustsec/advisory-db"]
+# A version yanked from crates.io is refused too.
+yanked = "deny"
+# Advisories accepted after review, each with its reason (docs/engine-port.md, "Dependency
+# audit and licences"). Neither is a vulnerability; both are notices that a crate is no longer
+# maintained, with no maintained release to move to. Any other advisory fails the check.
+ignore = [
+  { id = "RUSTSEC-2025-0052", reason = "async-std is discontinued; it reaches the wallet wasm only through wasm_thread, which WebZjs pins by commit (ec2/wasm_thread 9e432077) for its Web Worker threads. Replacing it means replacing wasm_thread." },
+  { id = "RUSTSEC-2023-0089", reason = "atomic-polyfill is unmaintained; pulled in by heapless 0.7 <- postcard <- pczt (librustzcash), and compiled into neither wasm package (cargo tree for wasm32 does not reach it)." },
+]
+
+[licenses]
+# Licences of the crates Celari builds (MIT OR Apache-2.0 for most). A crate whose licence
+# expression allows none of these fails the check.
+allow = [
+  "0BSD",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "CC0-1.0",
+  "CDLA-Permissive-2.0",
+  "ISC",
+  "MIT",
+  "MIT-0",
+  "Unicode-3.0",
+  "Unlicense",
+  "Zlib",
+]
+confidence-threshold = 0.93
+
+[sources]
+# crates.io, and one git dependency that WebZjs pins by full commit in the lockfile.
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = ["https://github.com/ec2/wasm_thread"]

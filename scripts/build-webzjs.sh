@@ -25,7 +25,9 @@
 # machine (the checkout, CARGO_HOME, the toolchain) are trimmed, and checked
 # for at the end.
 #
-# Environment (optional): WEBZJS_OUT, the output directory (default vendor/);
+# Environment (optional): WEBZJS_PREPARE_ONLY=1 stops once .webzjs/ holds the patched sources
+# and the lockfile, before any tool is installed (scripts/audit-engine.sh uses that);
+# WEBZJS_OUT, the output directory (default vendor/);
 # CC_wasm32_unknown_unknown, the C compiler (default clang);
 # WEBZJS_RUST_TOOLCHAIN and WEBZJS_WASM_BINDGEN_VERSION, the toolchain the
 # patched rust-toolchain.toml and the wasm-bindgen version the lockfile must
@@ -120,6 +122,10 @@ done
 # Cargo.lock hunk that counts). --locked below fails if it does not match the
 # manifests.
 cp "$LOCKFILE" "$SRC/Cargo.lock"
+if [ "${WEBZJS_PREPARE_ONLY:-}" = 1 ]; then
+  echo "Prepared $SRC (WebZjs, patches, lockfile); nothing built (WEBZJS_PREPARE_ONLY=1)"
+  exit 0
+fi
 
 channel="$(sed -n 's/^channel *= *"\(.*\)"/\1/p' "$SRC/rust-toolchain.toml")"
 [ -n "$channel" ] || { echo "error: no channel in $SRC/rust-toolchain.toml" >&2; exit 1; }

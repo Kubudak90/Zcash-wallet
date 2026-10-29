@@ -312,6 +312,12 @@ export function Settings() {
           </a>{' '}
           · {t('settings.version', { v: __APP_VERSION__ })}
         </p>
+        <p className="small">
+          {/* The licence notices of the Rust crates in the wasm engine (scripts/gen-licenses.sh). */}
+          <a href={`${import.meta.env.BASE_URL}THIRD_PARTY_LICENSES.txt`} target="_blank" rel="noreferrer noopener">
+            {t('settings.licenses')}
+          </a>
+        </p>
       </section>
     </Screen>
   );
