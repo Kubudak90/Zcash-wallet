@@ -1309,6 +1309,9 @@ impl<P: consensus::Parameters> WalletWrite for MemoryWalletDb<P> {
         self.transactionally(|db| db.update_chain_tip_internal(tip_height))
     }
 
+    // These two change only the scan queue, on a copy that replaces it once the change
+    // succeeded, so they need no `transactionally` (and its snapshot of the whole wallet);
+    // the scan queue observer is told the new size, as after every other write.
     fn prune_scan_queue_below(
         &mut self,
         height: BlockHeight,
@@ -1317,6 +1320,7 @@ impl<P: consensus::Parameters> WalletWrite for MemoryWalletDb<P> {
         let mut queue = self.scan_queue.clone();
         let n = queue.prune_below(height, retain_with_priority)?;
         self.scan_queue = queue;
+        self.publish_scan_queue();
         Ok(n)
     }
 
@@ -1324,6 +1328,7 @@ impl<P: consensus::Parameters> WalletWrite for MemoryWalletDb<P> {
         let mut queue = self.scan_queue.clone();
         queue.queue_rescan(range)?;
         self.scan_queue = queue;
+        self.publish_scan_queue();
         Ok(())
     }
 

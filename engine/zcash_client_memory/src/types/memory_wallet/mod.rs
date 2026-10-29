@@ -229,7 +229,8 @@ impl<P: consensus::Parameters> MemoryWalletDb<P> {
     /// Has `observer` told [`Self::scan_queue_size`] now, and again after every write that
     /// may change the scan queue: each write that runs through `transactionally` (among them
     /// `update_chain_tip`, the `put_blocks` of every batch a sync pass scans, truncations and
-    /// account imports), whether it succeeds or is rolled back, and `rewind_to_chain_state`.
+    /// account imports), whether it succeeds or is rolled back, `rewind_to_chain_state`,
+    /// `queue_rescan` and `prune_scan_queue_below`.
     ///
     /// A sync pass (`zcash_client_backend::sync::run`) holds the wallet for its whole length,
     /// behind whatever lock its caller keeps it in; the observer lets a reader follow what is
@@ -335,8 +336,9 @@ mod tests {
     use super::{MemoryWalletDb, ScanQueueSize};
 
     /// The scan queue observer is told the queue's size when it is set and after the writes
-    /// that change the queue (an account import, a chain tip update), and the size is the one
-    /// `suggest_scan_ranges` describes; a decoded copy of the wallet has no observer.
+    /// that change the queue (an account import, a chain tip update, a rescan, a prune), and
+    /// the size is the one `suggest_scan_ranges` describes; a decoded copy of the wallet has
+    /// no observer.
     #[test]
     fn scan_queue_observer_follows_the_writes() {
         let h = BlockHeight::from_u32;
@@ -357,6 +359,25 @@ mod tests {
         assert_eq!(db.scan_queue_size(), last);
         let suggested: usize = db.suggest_scan_ranges().unwrap().iter().map(|r| r.len()).sum();
         assert_eq!(suggested, 100);
+
+        // queue_rescan and prune_scan_queue_below change the queue outside `transactionally`:
+        // the observer hears of both. A rescan of 50 blocks of the ignored range below the
+        // birthday queues them (150 left); pruning below 3_000_050 ignores 3_000_000..3_000_050
+        // again, among them, as no range is retained (50 left).
+        let seen = Arc::new(Mutex::new(vec![]));
+        let s = seen.clone();
+        db.set_scan_queue_observer(Some(Arc::new(move |q| s.lock().unwrap().push(q))));
+        db.queue_rescan(h(2_999_950)..h(3_000_000)).unwrap();
+        let after_rescan = ScanQueueSize { unscanned_blocks: 150, chain_tip: Some(h(3_000_099)) };
+        assert_eq!(db.scan_queue_size(), after_rescan);
+        let told = seen.lock().unwrap().clone();
+        assert_eq!(told.last(), Some(&after_rescan), "queue_rescan: {told:?}");
+        assert!(db.prune_scan_queue_below(h(3_000_050), None).unwrap() > 0);
+        let after_prune = ScanQueueSize { unscanned_blocks: 50, chain_tip: Some(h(3_000_099)) };
+        assert_eq!(db.scan_queue_size(), after_prune);
+        let told = seen.lock().unwrap().clone();
+        assert_eq!(told.last(), Some(&after_prune), "prune_scan_queue_below: {told:?}");
+        let last = after_prune;
 
         let mut bytes = vec![];
         db.encode(&mut bytes).unwrap();
