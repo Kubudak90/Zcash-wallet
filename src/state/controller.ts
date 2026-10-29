@@ -10,6 +10,7 @@
 // saved (see lock()).
 
 import {
+  EngineStoppedError,
   NewerDatabaseFormatError,
   OldDatabaseFormatError,
   loadEngine,
@@ -22,7 +23,7 @@ import {
 import { isShieldedOnlyUnified } from '../lib/address';
 import { canSpend, nextCheck, type NetworkCheck } from '../lib/network';
 import { storage, type Settings, type WalletMeta } from '../lib/storage';
-import { CATCH_UP_BLOCKS, catchUpFor, type SyncInfo } from '../lib/syncView';
+import { CATCH_UP_BLOCKS, STALL_MS, catchUpFor, type SyncInfo } from '../lib/syncView';
 import { createVault, decryptDb, encryptDb, unlockVault, type Secret, type VaultRecord } from '../lib/vault';
 
 export type Phase = 'booting' | 'bootError' | 'welcome' | 'locked' | 'ready';
@@ -118,6 +119,8 @@ export class WalletController {
   /** A password is being checked during a soft lock; the reload waits for it. */
   private unlocking = false;
   private syncing = false;
+  /** The engine stopped (EngineStoppedError): nothing runs until the page is reloaded. */
+  private stopped = false;
   private summaryInFlight = false;
   private networkCheck: Promise<void> | null = null;
   /** The last persist(); each waits for the one before, so an older export never lands last. */
@@ -177,6 +180,7 @@ export class WalletController {
       const engine = await loadEngine();
       await engine.init(this.state.settings.serverUrl);
       this.engine = engine;
+      engine.onStopped?.((e) => this.engineStopped(e));
       // What the engine knows without a server stands until a server says more.
       const local = engine.localNetworkStatus?.() ?? null;
       this.set({ ironwood: engine.ironwood, ...(local && { network: nextCheck(this.state.network, local, 0) }) });
@@ -446,6 +450,28 @@ export class WalletController {
     window.location.reload();
   }
 
+  /**
+   * After the engine stopped (or while a pass stalls): reloads the page, which locks the wallet
+   * and starts a fresh engine from what was saved last.
+   */
+  restartEngine(): void {
+    this.reloadLocked();
+  }
+
+  /**
+   * The engine stopped (a WebAssembly trap: out of memory, or an internal error). Its memory may
+   * be inconsistent, so nothing more is synced or saved; the app says so and offers a reload.
+   * A soft lock waiting for the pass reloads now (the pass is gone).
+   */
+  private engineStopped(e: EngineStoppedError) {
+    if (this.stopped) return;
+    this.stopped = true;
+    console.error('the wallet engine stopped', e);
+    if (this.syncTimer) clearTimeout(this.syncTimer);
+    this.setSync({ status: 'stopped', error: e.message, catchUp: null, progress: null, stalled: false });
+    if (this.lockAfterPass && !this.unlocking) this.reloadLocked();
+  }
+
   async wipe(): Promise<void> {
     // First, so a pass that ends meanwhile cannot write the database back (see persist).
     this.key = null;
@@ -469,7 +495,7 @@ export class WalletController {
   }
 
   private async syncLoop(): Promise<void> {
-    if (this.state.phase !== 'ready' || this.syncing) return;
+    if (this.state.phase !== 'ready' || this.syncing || this.stopped) return;
     this.syncing = true;
     void this.checkNetwork();
     this.setSync({ status: 'syncing', progress: null, ...this.gapTo(await this.readTip()) });
@@ -505,14 +531,19 @@ export class WalletController {
       // that made no progress (e.g. a lagging server) waits as usual.
       const moved = scannedBefore === undefined || (this.state.summary?.scannedHeight ?? 0) > scannedBefore;
       if (gap.catchUp && moved) {
-        this.setSync({ ...gap, progress: null });
+        this.setSync({ ...gap, progress: null, stalled: false });
         delay = 0;
       } else {
-        this.setSync({ status: 'idle', error: null, catchUp: null, progress: null });
+        this.setSync({ status: 'idle', error: null, catchUp: null, progress: null, stalled: false });
       }
     } catch (e) {
-      console.warn('sync failed', e);
-      this.setSync({ status: 'error', error: e instanceof Error ? e.message : String(e), catchUp: null, progress: null });
+      if (e instanceof EngineStoppedError || this.stopped) {
+        // engineStopped() has said so; nothing is retried.
+        if (e instanceof EngineStoppedError) this.engineStopped(e);
+      } else {
+        console.warn('sync failed', e);
+        this.setSync({ status: 'error', error: e instanceof Error ? e.message : String(e), catchUp: null, progress: null, stalled: false });
+      }
       delay = SYNC_RETRY_MS;
     } finally {
       clearInterval(poll);
@@ -527,6 +558,7 @@ export class WalletController {
       if (!this.unlocking) this.reloadLocked();
       return;
     }
+    if (this.stopped) return;
     this.syncTimer = setTimeout(() => void this.syncLoop(), delay);
   }
 
@@ -562,12 +594,24 @@ export class WalletController {
   private watchPass(): { stop(): void } {
     let stopped = false;
     let inFlight = false;
+    // When the pass's counters last moved: a catch-up pass whose counters stand still for
+    // STALL_MS is flagged as stalled (SyncInfo.stalled), so the app can say so.
+    let last = '';
+    let movedAt = Date.now();
     const read = async () => {
       if (stopped || inFlight) return;
       inFlight = true;
       try {
         const p = await this.eng.syncProgress?.();
-        if (!stopped && p?.running) this.setSync({ progress: { visited: p.visited, scanned: p.scanned } });
+        if (stopped || !p?.running) return;
+        const now = Date.now();
+        const counters = `${p.downloaded ?? ''}/${p.visited}/${p.scanned}`;
+        if (counters !== last) {
+          last = counters;
+          movedAt = now;
+        }
+        const stalled = now - movedAt >= STALL_MS;
+        this.setSync({ progress: { visited: p.visited, scanned: p.scanned }, stalled });
       } catch (e) {
         console.warn('sync progress failed', e);
       } finally {

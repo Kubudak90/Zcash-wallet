@@ -33,6 +33,8 @@ export function syncLabel(view: SyncView, t: Translate, lang: Lang): string {
   switch (view.kind) {
     case 'error':
       return t('sync.error');
+    case 'stopped':
+      return t('sync.stopped');
     case 'syncing':
       return t('sync.syncing', { blocks: n(view.blocksLeft) });
     case 'upToDate':
@@ -45,6 +47,7 @@ export function syncLabel(view: SyncView, t: Translate, lang: Lang): string {
 const SYNC_TONE: Record<SyncView['kind'], string> = {
   connecting: 'busy',
   error: 'error',
+  stopped: 'error',
   syncing: 'busy',
   upToDate: 'ok',
 };
@@ -75,7 +78,7 @@ export function Main() {
   const { t } = useI18n();
   const controller = useController();
   // Leaving the screen mid-spend would hide its outcome, so navigation waits for it.
-  const { spending, upgradeRescan } = useWallet();
+  const { spending, upgradeRescan, sync, settings } = useWallet();
   const network = useNetworkView();
   const [tab, setTab] = useState<Tab>('home');
   // Shield opens from Balance or from Send: that tab stays marked, and Back and Close return to it.
@@ -132,9 +135,25 @@ export function Main() {
       <main className="content">
         <NetworkBanner />
         {/* On every screen: the balance starts at 0 and History is empty until the rescan gets there. */}
+        {sync.status === 'stopped' && (
+          <Notice tone="error">
+            <p data-testid="engine-stopped">{t('engine.stopped')}</p>
+            <button type="button" className="primary" onClick={() => controller.restartEngine()}>
+              {t('engine.reload')}
+            </button>
+          </Notice>
+        )}
+        {sync.status !== 'stopped' && sync.stalled && (
+          <Notice tone="warn">
+            <p data-testid="sync-stalled">{t('sync.stalled')}</p>
+            <button type="button" onClick={() => controller.restartEngine()}>
+              {t('engine.reload')}
+            </button>
+          </Notice>
+        )}
         {upgradeRescan && (
           <Notice tone="info">
-            <p data-testid="upgrade-rescan">{t('upgrade.rescanning')}</p>
+            <p data-testid="upgrade-rescan">{t('upgrade.rescanning', { minutes: settings.autoLockMinutes })}</p>
           </Notice>
         )}
         {tab === 'home' && <Home onNavigate={navigate} />}

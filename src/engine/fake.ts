@@ -8,9 +8,11 @@ import { blake2b } from '@noble/hashes/blake2';
 import { sha256 } from '@noble/hashes/sha256';
 
 import { acceptsMemo, checkAddress } from '../lib/address';
+import { CrashWatch } from './webzjs-crash';
 import type {
   Addresses,
   Balances,
+  EngineStoppedError,
   HistoryItem,
   NetworkStatus,
   SendStage,
@@ -102,6 +104,13 @@ export interface FakeKnobs {
    * (they all keep working); others are someone else's and are ignored.
    */
   incoming?: string[];
+  /**
+   * The engine's WebAssembly traps during the next pass, as the WebZjs build before round 5 did
+   * once a spam-era batch filled its memory: the pass never ends on its own, and the trap reaches
+   * the page as an uncaught `RuntimeError: unreachable` from a worker (an `error` event), which the
+   * fake notices the same way WebzjsEngine does (./webzjs-crash.ts).
+   */
+  trapDuringPass?: boolean;
 }
 const knobs = (): FakeKnobs => (globalThis as { __fakeEngine?: FakeKnobs }).__fakeEngine ?? {};
 const chainTip = () => TIP + (knobs().chainGrowth ?? 0);
@@ -193,9 +202,15 @@ export class FakeEngine implements ZcashEngine {
   private pass: Promise<void> | null = null;
   /** Counters of the running (or last) pass, for syncProgress(). */
   private counters: SyncProgress = { running: false, visited: 0, scanned: 0 };
+  /** Notices a trap (knob trapDuringPass) as WebzjsEngine does. */
+  private crash = new CrashWatch(typeof window === 'undefined' ? null : window);
 
   async init(): Promise<void> {
     await sleep(50);
+  }
+
+  onStopped(listener: (error: EngineStoppedError) => void): void {
+    this.crash.onStopped(listener);
   }
 
   async latestHeight(): Promise<number> {
@@ -296,12 +311,22 @@ export class FakeEngine implements ZcashEngine {
   }
 
   async exportDb(): Promise<Uint8Array> {
+    this.crash.check();
     const k = knobs();
     const tag = k.oldDbFormat ? OLD_FORMAT : k.newerDbFormat ? NEWER_FORMAT : '';
     return encoder.encode(tag + JSON.stringify(this.accounts));
   }
 
   async sync(): Promise<void> {
+    this.crash.check();
+    if (knobs().trapDuringPass) {
+      this.counters = { running: true, visited: 0, scanned: 0 };
+      // The pass's worker dies: nothing settles this pass, the error event reaches the page.
+      setTimeout(() => {
+        window.dispatchEvent(new ErrorEvent('error', { message: 'Uncaught RuntimeError: unreachable' }));
+      }, 300);
+      return this.crash.guard(new Promise<void>(() => {}));
+    }
     if (knobs().failPass) {
       await sleep(100);
       throw new Error('fake pass failure');
@@ -392,6 +417,7 @@ export class FakeEngine implements ZcashEngine {
   }
 
   async summary(id: number): Promise<Summary | null> {
+    this.crash.check();
     await this.pass;
     const a = this.accounts.find((x) => x.id === id);
     if (!a) return null;
@@ -410,11 +436,13 @@ export class FakeEngine implements ZcashEngine {
   }
 
   async addresses(id: number): Promise<Addresses> {
+    this.crash.check();
     const a = this.account(id);
     return { unified: fakeUa(a.keyHash, [0x00, 0x02, 0x03]), transparent: fakeTransparent(a.keyHash) };
   }
 
   async nextShieldedAddress(id: number): Promise<string> {
+    this.crash.check();
     // WebZjs takes the database's write lock, which a running pass holds until it ends.
     await this.pass;
     const a = this.account(id);
@@ -425,6 +453,7 @@ export class FakeEngine implements ZcashEngine {
   }
 
   async history(id: number, limit: number): Promise<HistoryItem[]> {
+    this.crash.check();
     return this.account(id)
       .history.slice(0, limit)
       .map((h) => ({ ...h, valueZats: BigInt(h.valueZats), feeZats: h.feeZats == null ? null : BigInt(h.feeZats) }));
@@ -457,6 +486,7 @@ export class FakeEngine implements ZcashEngine {
   }
 
   async send(id: number, to: string, zats: bigint, auth: SpendAuthority, memo?: string): Promise<void> {
+    this.crash.check();
     const a = this.account(id);
     this.authorize(a, auth);
     const ironwood = this.ironwood;
@@ -497,6 +527,7 @@ export class FakeEngine implements ZcashEngine {
   }
 
   async shield(id: number, auth: SpendAuthority): Promise<void> {
+    this.crash.check();
     const a = this.account(id);
     this.authorize(a, auth);
     const transparent = BigInt(a.balances.transparent);

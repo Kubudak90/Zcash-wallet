@@ -95,7 +95,7 @@ export const tr = {
     'Bu cüzdan, şu an çalışan sürümden daha yeni bir Celari sürümüyle kaydedilmiş; bu sürüm onu açamıyor. Hiçbir şey değiştirilmedi, paran güvende. Yeni sürümü almak için sayfayı yenile.',
 
   'upgrade.rescanning':
-    'Celari yeni Zcash ağ kuralları için güncellendi ve bu cüzdanı başlangıç bloğundan itibaren yeniden tarıyor. Bu biraz sürebilir. Paran güvende; bakiye ve geçmiş tarama ilerledikçe tamamlanır.',
+    'Celari yeni Zcash ağ kuralları için güncellendi ve bu cüzdanı başlangıç bloğundan itibaren yeniden tarıyor. Bu biraz sürebilir, eski bir cüzdanda bir saati aşabilir; tarama yalnızca Celari’nin kilidi açıkken ilerler: cüzdan kilitlendiğinde ({minutes} dakika işlem yapılmayınca ya da sekme 1 dakika arka planda kalınca) durur, kilidi açınca devam eder. Bitene kadar bu sekmeyi açık ve önde tut ya da Ayarlar’dan otomatik kilit süresini uzat. Paran güvende; bakiye ve geçmiş tarama ilerledikçe tamamlanır.',
 
   'nav.home': 'Bakiye',
   'nav.receive': 'Al',
@@ -109,6 +109,12 @@ export const tr = {
   'sync.upToDate': 'Güncel · blok {height}',
   'sync.behindNetwork': '{height}. bloğa kadar tarandı · ağın gerisinde',
   'sync.error': 'Bağlantı sorunu, yeniden denenecek',
+  'sync.stopped': 'Durdu · yeniden yüklemek gerekiyor',
+  'sync.stalled':
+    'Eşitleme 10 dakikadır ilerlemiyor. Yavaş bir bağlantı buna yol açabilir; böyle sürerse Celari’yi yeniden yükle. Şimdiye kadar kaydedilen her şey duruyor.',
+  'engine.stopped':
+    'Celari’nin cüzdan motoru durdu (belleği yetmedi ya da iç bir hata oluştu) ve bu sekmede devam edemiyor. Paran güvende; şimdiye kadar kaydedilen her şey duruyor. Kaldığı yerden sürmesi için Celari’yi yeniden yükle.',
+  'engine.reload': 'Celari’yi yeniden yükle',
   'sync.firstSyncNote': 'Eşitleme sürüyor. Bitene kadar bakiye eksik görünebilir.',
 
   'network.outdatedTitle': 'Celari Zcash ağının gerisinde kaldı',
@@ -258,7 +264,7 @@ export const tr = {
   'settings.language': 'Dil',
   'settings.server': 'Sunucu (lightwalletd gRPC-web proxy)',
   'settings.serverHelp':
-    'Sunucu IP adresini ve gönderdiğin işlemleri görebilir; gizli bakiyeni ve kimden para aldığını göremez. Kendi sunucunu da çalıştırabilirsin.',
+    'Sunucu IP adresini ve gönderdiğin işlemleri görebilir. Celari kendi işlemlerinin tamamını da ondan ister (geri yüklemeden sonra not, ücret ve alıcılar için ve gönderdiğin ödemeleri izlemek için); bu yüzden sunucu hangi işlemlerin senin olduğunu anlayabilir. Gizli bakiyeni ve kimden para aldığını göremez. Kendi sunucunu da çalıştırabilirsin.',
   'settings.serverSave': 'Kaydet ve yeniden başlat',
   'settings.serverReset': 'Varsayılana dön',
   'settings.serverInvalid': 'https:// ile başlayan geçerli bir adres gir.',

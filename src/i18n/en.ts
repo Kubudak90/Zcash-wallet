@@ -94,7 +94,7 @@ export const en: Record<MessageKey, string> = {
     'This wallet was saved by a newer version of Celari than the one running now, which cannot open it. Nothing was changed and your funds are safe. Reload the page to get the newer version.',
 
   'upgrade.rescanning':
-    'Celari was updated for the new Zcash network rules and is rescanning this wallet from its starting block. This can take a while. Your funds are safe; the balance and history fill in as the scan goes on.',
+    'Celari was updated for the new Zcash network rules and is rescanning this wallet from its starting block. This can take a while, an hour or more for an older wallet, and it runs only while Celari is unlocked: it pauses whenever the wallet locks (after {minutes} minutes without activity, or 1 minute in a background tab) and goes on when you unlock. Keep this tab open and in front, or raise the auto-lock time in Settings until it is done. Your funds are safe; the balance and history fill in as the scan goes on.',
 
   'nav.home': 'Balance',
   'nav.receive': 'Receive',
@@ -108,6 +108,12 @@ export const en: Record<MessageKey, string> = {
   'sync.upToDate': 'Up to date · block {height}',
   'sync.behindNetwork': 'Scanned to block {height} · behind the network',
   'sync.error': 'Connection problem, will retry',
+  'sync.stopped': 'Stopped · reload needed',
+  'sync.stalled':
+    'Syncing has not moved for 10 minutes. A slow connection can do this; if it stays like this, reload Celari. Everything saved so far is kept.',
+  'engine.stopped':
+    'Celari’s wallet engine stopped (it ran out of memory or hit an internal error) and cannot go on in this tab. Your funds are safe, and everything saved so far is kept. Reload Celari to continue from there.',
+  'engine.reload': 'Reload Celari',
   'sync.firstSyncNote': 'Sync in progress. Your balance may be incomplete until it finishes.',
 
   'network.outdatedTitle': 'Celari is behind the Zcash network',
@@ -258,7 +264,7 @@ export const en: Record<MessageKey, string> = {
   'settings.language': 'Language',
   'settings.server': 'Server (lightwalletd gRPC-web proxy)',
   'settings.serverHelp':
-    'The server can see your IP address and the transactions you broadcast; it cannot see your shielded balance or who paid you. You can run your own.',
+    'The server can see your IP address and the transactions you broadcast. Celari also asks it for your own transactions in full (for memos, fees and recipients after a restore, and to follow payments you sent), so it can tell which transactions are yours. It cannot see your shielded balance or who paid you. You can run your own.',
   'settings.serverSave': 'Save and restart',
   'settings.serverReset': 'Reset to default',
   'settings.serverInvalid': 'Enter a valid address starting with https://.',

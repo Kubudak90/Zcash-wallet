@@ -11,7 +11,8 @@ import { syncProgress } from './birthday';
  */
 export const CATCH_UP_BLOCKS = 10;
 
-export type SyncStatus = 'starting' | 'syncing' | 'idle' | 'error';
+/** 'stopped': the engine stopped (EngineStoppedError) and nothing runs until the page is reloaded. */
+export type SyncStatus = 'starting' | 'syncing' | 'idle' | 'error' | 'stopped';
 
 /** Heights read just before a pass, while the engine could still answer. */
 export interface CatchUp {
@@ -38,7 +39,15 @@ export interface SyncInfo {
    * in blocks of that pass; null when the engine has none or no pass is watched.
    */
   progress: PassProgress | null;
+  /**
+   * The running catch-up pass's counters have not moved for STALL_MS: the engine may hang (a
+   * stalled download, for one). Cleared when they move again or the pass ends.
+   */
+  stalled?: boolean;
 }
+
+/** A catch-up pass whose counters do not move for this long counts as stalled (SyncInfo.stalled). */
+export const STALL_MS = 10 * 60_000;
 
 export interface PassProgress {
   /** Blocks the scanner has reached. */
@@ -50,6 +59,7 @@ export interface PassProgress {
 export type SyncView =
   | { kind: 'connecting' }
   | { kind: 'error' }
+  | { kind: 'stopped' }
   // `pct` is null while the engine reports no progress mid-pass.
   | { kind: 'syncing'; blocksLeft: number; pct: number | null }
   | { kind: 'upToDate'; height: number };
@@ -79,6 +89,7 @@ export function syncView(
   summary: { scannedHeight: number; tipHeight: number } | null,
   birthday: number | null,
 ): SyncView {
+  if (sync.status === 'stopped') return { kind: 'stopped' };
   if (sync.status === 'error' || sync.error !== null) return { kind: 'error' };
 
   if (sync.catchUp) {
