@@ -5,7 +5,7 @@ import { isShieldedOnlyUnified } from '../../src/lib/address';
 import { PASSWORD, createWallet, fakeEngine, setKnobs } from './helpers';
 
 // Receive shows a fresh unified address with shielded receivers only each time it opens
-// (WebZjs get_next_shielded_address, PORT-NOTES Decision 11); the transparent address stays.
+// (WebZjs get_next_shielded_address, docs/engine-port.md Decision 11); the transparent address stays.
 
 const FRESH_NOTE =
   'For your privacy, Celari shows a new address each time you open this screen. Earlier addresses keep working.';

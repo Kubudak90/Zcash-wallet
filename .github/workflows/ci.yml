@@ -42,6 +42,29 @@ jobs:
         env:
           CI: '1'
 
+  # The engine's Rust dependencies (engine/webzjs.Cargo.lock, engine/zcash_client_memory/Cargo.lock):
+  # RustSec advisories, sources and licences (scripts/audit-engine.sh, scripts/deny.toml), and
+  # whether public/THIRD_PARTY_LICENSES.txt still matches the lockfile (scripts/gen-licenses.sh).
+  # cargo-deny and cargo-about are pinned and installed by those scripts with
+  # `cargo install --locked` from crates.io (its checksums, their published lockfiles); no
+  # third-party action. Nothing of the engine is built. The advisory database is fetched
+  # fresh, so a new advisory fails this job without any change here: review it, then update
+  # the dependency or record it in scripts/deny.toml with its reason.
+  engine-audit:
+    name: Engine dependencies (advisories, sources, licences)
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: RustSec advisories, sources and licences (cargo-deny)
+        run: bash scripts/audit-engine.sh
+      - name: public/THIRD_PARTY_LICENSES.txt is up to date (cargo-about)
+        run: bash scripts/gen-licenses.sh --check
+
   # vendor/ (the WebZjs wasm packages) is pinned by scripts/webzjs-vendor.sha256,
   # the sorted SHA-256 of every file in vendor/:
   #   (cd vendor && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum)

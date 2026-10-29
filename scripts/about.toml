@@ -1,0 +1,26 @@
+# cargo-about configuration for public/THIRD_PARTY_LICENSES.txt, the licence notice of the
+# Rust crates compiled into Celari's wasm engine (scripts/gen-licenses.sh writes it).
+# The crate set is webzjs-wallet's for wasm32 with the features the build uses; webzjs-keys
+# is one of its dependencies, so its crates are included.
+
+# Licences a crate may be used under in Celari (as scripts/deny.toml). A crate whose licence
+# expression allows none of them stops the generation.
+accepted = [
+  "MIT",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "CC0-1.0",
+  "ISC",
+  "MIT-0",
+  "0BSD",
+  "Unicode-3.0",
+  "Unlicense",
+  "Zlib",
+  "CDLA-Permissive-2.0",
+]
+targets = ["wasm32-unknown-unknown"]
+# Only what ends up in the wasm: no build scripts, proc macros' own dependencies or test crates.
+ignore-build-dependencies = true
+ignore-dev-dependencies = true

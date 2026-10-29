@@ -212,8 +212,8 @@ describe('acceptsMemo', () => {
 });
 
 describe('isShieldedOnlyUnified', () => {
-  // A throwaway mainnet account of the vendored engine (it owns nothing; engine-port
-  // smoke/errors-run.mjs, logs/round4/errors.json): get_current_address, and two
+  // A throwaway mainnet account of the vendored engine (it owns nothing; measured in the
+  // engine port's working repository, see docs/engine-port.md): get_current_address, and two
   // get_next_shielded_address answers.
   const ENGINE_FULL =
     'u1f7a0d9844ulfk5lhw7c8yym68fcvwy7w4ztswv789xcn7e3strlfvdynq2ra80p75c83df79kcm2e23f4rg5wgxudd35npz5nllt59zmcfwcu5l33a0pz7w2l080xegff06flwzx3ypeeum3fmddlpr0mla7jkwspawdfcapxhtqqnpfzsarar54gup37ysyz55pjf0vzru22qtxxq3';
