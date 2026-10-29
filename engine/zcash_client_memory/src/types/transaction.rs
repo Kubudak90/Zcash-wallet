@@ -1,318 +1,346 @@
-use std::{
-    collections::{BTreeMap, btree_map::Entry},
-    ops::Deref,
+//! The wallet's transactions.
+//!
+//! Mirrors the `transactions` table of zcash_client_sqlite 0.23 (`wallet/db.rs`) and the
+//! rules of its `put_tx_meta`, `put_tx_data`, `set_transaction_status`, `update_tx_fee`
+//! and `put_zip318_classification` (`wallet.rs`). The wallet-internal transaction
+//! reference (`LowLevelWalletRead::TxRef`) is the txid itself.
+
+use std::collections::{BTreeMap, btree_map::Entry};
+
+use time::OffsetDateTime;
+use zcash_client_backend::data_api::wallet::TargetHeight;
+use zcash_primitives::transaction::{Transaction, TxId, builder::default_tx_expiry_delta};
+use zcash_protocol::{
+    consensus::{self, BlockHeight, BranchId},
+    value::Zatoshis,
+    zip318::Zip318Classification,
 };
 
-use zcash_client_backend::{
-    data_api::{TransactionStatus, wallet::TargetHeight},
-    wallet::WalletTx,
-};
-use zcash_primitives::transaction::{Transaction, TxId};
-use zcash_protocol::{consensus::BlockHeight, value::Zatoshis};
-
-use crate::AccountId;
 use crate::error::Error;
 
-/// Maps a block height and transaction index to a transaction ID.
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) struct TxLocatorMap(pub(crate) BTreeMap<(BlockHeight, u32), TxId>);
-
-impl Deref for TxLocatorMap {
-    type Target = BTreeMap<(BlockHeight, u32), TxId>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-/// A table of received notes. Corresponds to sapling_received_notes and orchard_received_notes tables.
+/// A transaction the wallet tracks.
+///
+/// Field names and meanings follow the columns of zcash_client_sqlite's `transactions`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TransactionEntry {
-    // created: String,
-    /// mined_height is rolled into into a txn status
-    tx_status: TransactionStatus,
-    block: Option<BlockHeight>,
-    tx_index: Option<u32>,
-    expiry_height: Option<BlockHeight>,
-    raw: Option<Vec<u8>>,
-    fee: Option<Zatoshis>,
-    /// - `target_height`: stores the target height for which the transaction was constructed, if
-    ///   known. This will ordinarily be null for transactions discovered via chain scanning; it
-    ///   will only be set for transactions created using this wallet specifically, and not any
-    ///   other wallet that uses the same seed (including previous installations of the same
-    ///   wallet application.)
-    _target_height: Option<TargetHeight>,
+    pub(crate) txid: TxId,
+    /// When this wallet created the transaction, if it did.
+    pub(crate) created: Option<OffsetDateTime>,
+    /// The height of the mined block containing the transaction, set only once that block
+    /// is in the wallet's `blocks` (that is, it has been scanned).
+    pub(crate) block: Option<BlockHeight>,
+    /// The height at which the transaction was mined, if known. Equal to `block` whenever
+    /// `block` is set; may be known without the block having been scanned.
+    pub(crate) mined_height: Option<BlockHeight>,
+    /// The index of the transaction within its block, if known.
+    pub(crate) tx_index: Option<u16>,
+    /// The maximum height at which the transaction may be mined, if known (0: no expiry).
+    pub(crate) expiry_height: Option<BlockHeight>,
+    /// The serialized transaction, if retrieved, with the consensus branch ID it was parsed
+    /// with (pre-v5 encodings do not commit to one, so it is stored next to the bytes).
+    pub(crate) raw: Option<(Vec<u8>, BranchId)>,
+    /// The fee paid, if known.
+    pub(crate) fee: Option<Zatoshis>,
+    /// The target height of a transaction this wallet built, if it did.
+    pub(crate) target_height: Option<TargetHeight>,
+    /// The mempool height when the wallet first saw the transaction, or its mined height,
+    /// whichever is less.
+    pub(crate) min_observed_height: BlockHeight,
+    /// The greatest chain tip at which the wallet saw proof that the transaction was not
+    /// mined. Always `None` while `mined_height` is set.
+    pub(crate) confirmed_unmined_at_height: Option<BlockHeight>,
+    /// Whether outputs of this transaction count as trusted for spending.
+    pub(crate) trusted: bool,
+    /// How the transaction classifies against ZIP 318. `Unknown` until classified, and
+    /// never reported as `Nonconforming` unless that was decided.
+    pub(crate) zip318: Zip318Classification,
 }
+
 impl TransactionEntry {
-    pub fn new_from_tx_meta(tx_meta: WalletTx<AccountId>, height: BlockHeight) -> Self {
+    fn new(txid: TxId, min_observed_height: BlockHeight) -> Self {
         Self {
-            tx_status: TransactionStatus::Mined(height),
-            tx_index: Some(tx_meta.block_index() as u32),
-            block: Some(height),
+            txid,
+            created: None,
+            block: None,
+            mined_height: None,
+            tx_index: None,
             expiry_height: None,
             raw: None,
             fee: None,
-            _target_height: None,
+            target_height: None,
+            min_observed_height,
+            confirmed_unmined_at_height: None,
+            trusted: false,
+            zip318: Zip318Classification::Unknown,
         }
+    }
+
+    pub fn txid(&self) -> TxId {
+        self.txid
+    }
+    pub fn mined_height(&self) -> Option<BlockHeight> {
+        self.mined_height
+    }
+    pub fn block(&self) -> Option<BlockHeight> {
+        self.block
+    }
+    pub fn tx_index(&self) -> Option<u16> {
+        self.tx_index
     }
     pub fn expiry_height(&self) -> Option<BlockHeight> {
         self.expiry_height
     }
-    pub fn status(&self) -> TransactionStatus {
-        self.tx_status
-    }
-
-    pub fn mined_height(&self) -> Option<BlockHeight> {
-        match self.tx_status {
-            TransactionStatus::Mined(height) => Some(height),
-            _ => None,
-        }
-    }
-
-    #[cfg(test)]
-    pub(crate) fn fee(&self) -> Option<Zatoshis> {
+    pub fn fee(&self) -> Option<Zatoshis> {
         self.fee
     }
-
-    pub(crate) fn raw(&self) -> Option<&[u8]> {
-        self.raw.as_deref()
+    pub fn created(&self) -> Option<OffsetDateTime> {
+        self.created
+    }
+    pub fn target_height(&self) -> Option<TargetHeight> {
+        self.target_height
+    }
+    pub fn min_observed_height(&self) -> BlockHeight {
+        self.min_observed_height
+    }
+    pub fn confirmed_unmined_at_height(&self) -> Option<BlockHeight> {
+        self.confirmed_unmined_at_height
+    }
+    pub fn is_trusted(&self) -> bool {
+        self.trusted
+    }
+    pub fn zip318_classification(&self) -> Zip318Classification {
+        self.zip318
+    }
+    pub fn raw(&self) -> Option<&[u8]> {
+        self.raw.as_ref().map(|(bytes, _)| &bytes[..])
     }
 
-    #[cfg(feature = "transparent-inputs")]
-    pub(crate) fn is_mined_or_unexpired_at(&self, height: BlockHeight) -> bool {
-        match self.tx_status {
-            TransactionStatus::Mined(tx_height) => tx_height <= height,
-            TransactionStatus::NotInMainChain => self
-                .expiry_height
-                .is_some_and(|expiry_height| expiry_height > height),
-            _ => false,
+    /// Parses the stored transaction, if its data has been retrieved.
+    pub fn parse(&self) -> Result<Option<Transaction>, Error> {
+        self.raw
+            .as_ref()
+            .map(|(bytes, branch_id)| Transaction::read(&bytes[..], *branch_id))
+            .transpose()
+            .map_err(Error::from)
+    }
+
+    /// Whether, for a transaction to be mined at `target_height`, this transaction counts
+    /// as mined or as still minable: zcash_client_sqlite's `tx_unexpired_condition`
+    /// (`wallet/common.rs`), which decides whether a note it spends is spent.
+    ///
+    /// - mined below the target height, or
+    /// - expiry height 0 (never expires), or
+    /// - expiry height at or above the target height, or
+    /// - expiry height unknown, and the target height within the default expiry delta of
+    ///   the height at which the wallet first observed the transaction (guessing that the
+    ///   wallet that created it used the default delta).
+    pub fn is_mined_or_unexpired_for<P: consensus::Parameters>(
+        &self,
+        params: &P,
+        target_height: BlockHeight,
+    ) -> bool {
+        if self.mined_height.is_some_and(|h| h < target_height) {
+            return true;
+        }
+        match self.expiry_height {
+            Some(e) if u32::from(e) == 0 => true,
+            Some(e) => e >= target_height,
+            None => {
+                let delta = default_tx_expiry_delta(BranchId::for_height(
+                    params,
+                    self.min_observed_height,
+                ));
+                self.min_observed_height + delta >= target_height
+            }
         }
     }
 }
 
-#[derive(Debug, PartialEq)]
+/// The wallet's transactions, keyed by txid.
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct TransactionTable(pub(crate) BTreeMap<TxId, TransactionEntry>);
 
 impl TransactionTable {
     pub(crate) fn new() -> Self {
-        Self(BTreeMap::new())
+        Self::default()
     }
 
-    /// Returns transaction status for a given transaction ID. None if the transaction is not known.
-    pub(crate) fn tx_status(&self, txid: &TxId) -> Option<TransactionStatus> {
-        self.0.get(txid).map(|entry| entry.tx_status)
-    }
-
-    pub(crate) fn get_transaction(&self, txid: &TxId) -> Option<&TransactionEntry> {
+    pub fn get(&self, txid: &TxId) -> Option<&TransactionEntry> {
         self.0.get(txid)
     }
 
-    pub(crate) fn get_by_height_and_index(
-        &self,
-        height: BlockHeight,
-        index: u32,
-    ) -> Option<&TransactionEntry> {
-        self.0
-            .values()
-            .find(|entry| entry.block == Some(height) && entry.tx_index == Some(index))
+    /// Test-only: lets a test reproduce sqlite's direct SQL updates of a transaction row.
+    #[cfg(test)]
+    pub(crate) fn get_mut(&mut self, txid: &TxId) -> Option<&mut TransactionEntry> {
+        self.0.get_mut(txid)
     }
 
-    /// Inserts information about a MINED transaction that was observed to
-    /// contain a note related to this wallet
-    pub(crate) fn put_tx_meta(&mut self, tx_meta: WalletTx<AccountId>, height: BlockHeight) {
-        match self.0.entry(tx_meta.txid()) {
-            Entry::Occupied(mut entry) => {
-                entry.get_mut().tx_index = Some(tx_meta.block_index() as u32);
-                entry.get_mut().tx_status = TransactionStatus::Mined(height);
-            }
-            Entry::Vacant(entry) => {
-                entry.insert(TransactionEntry::new_from_tx_meta(tx_meta, height));
-            }
-        }
+    pub fn iter(&self) -> impl Iterator<Item = (&TxId, &TransactionEntry)> {
+        self.0.iter()
     }
 
-    #[cfg(feature = "transparent-inputs")]
-    /// Insert partial transaction data ontained from a received transparent output
-    /// Will update an existing transaction if it already exists with new date (e.g. will replace Nones with newer Some value)
-    pub(crate) fn put_tx_partial(
+    pub(crate) fn contains(&self, txid: &TxId) -> bool {
+        self.0.contains_key(txid)
+    }
+
+    /// `put_tx_meta`: records a transaction observed in a scanned block at `height`.
+    ///
+    /// `block_known` says whether `height` is in the wallet's `blocks` (it is during
+    /// `put_blocks`, which inserts the block first).
+    pub(crate) fn put_tx_meta(
         &mut self,
-        txid: &TxId,
-        block: &Option<BlockHeight>,
-        mined_height: Option<BlockHeight>,
-    ) {
-        match self.0.entry(*txid) {
-            Entry::Occupied(mut entry) => {
-                entry.get_mut().tx_status = mined_height
-                    .map(TransactionStatus::Mined)
-                    .unwrap_or(TransactionStatus::NotInMainChain);
-                // replace the block if it's not already set
-                entry.get_mut().block = (*block).or(entry.get().block);
-            }
-            Entry::Vacant(entry) => {
-                entry.insert(TransactionEntry {
-                    tx_status: mined_height
-                        .map(TransactionStatus::Mined)
-                        .unwrap_or(TransactionStatus::NotInMainChain),
-                    block: *block,
-                    tx_index: None,
-                    expiry_height: None,
-                    raw: None,
-                    fee: None,
-                    _target_height: None,
-                });
-            }
-        }
+        txid: TxId,
+        tx_index: u16,
+        height: BlockHeight,
+        block_known: bool,
+    ) -> TxId {
+        let entry = self
+            .0
+            .entry(txid)
+            .or_insert_with(|| TransactionEntry::new(txid, height));
+        entry.block = block_known.then_some(height);
+        entry.mined_height = Some(height);
+        entry.tx_index = Some(tx_index);
+        entry.min_observed_height = entry.min_observed_height.min(height);
+        entry.confirmed_unmined_at_height = None;
+        txid
     }
 
-    /// Inserts full transaction data
+    /// `put_tx_data`: records the full data of a transaction.
     pub(crate) fn put_tx_data(
         &mut self,
         tx: &Transaction,
         fee: Option<Zatoshis>,
+        created_at: Option<OffsetDateTime>,
         target_height: Option<TargetHeight>,
-    ) {
-        match self.0.entry(tx.txid()) {
-            Entry::Occupied(mut entry) => {
-                entry.get_mut().fee = fee;
-                entry.get_mut().expiry_height = Some(tx.expiry_height());
+        observed_height: BlockHeight,
+    ) -> Result<TxId, Error> {
+        let txid = tx.txid();
+        let mut raw = vec![];
+        tx.write(&mut raw)?;
+        let raw = (raw, tx.consensus_branch_id());
+        // A coinbase transaction is always at index 0 of its block.
+        let coinbase_index = tx
+            .transparent_bundle()
+            .and_then(|b| b.is_coinbase().then_some(0u16));
 
-                let mut raw = Vec::new();
-                tx.write(&mut raw).unwrap();
-                entry.get_mut().raw = Some(raw);
+        match self.0.entry(txid) {
+            Entry::Vacant(e) => {
+                let mut entry = TransactionEntry::new(txid, observed_height);
+                entry.tx_index = coinbase_index;
+                entry.created = created_at;
+                entry.expiry_height = Some(tx.expiry_height());
+                entry.raw = Some(raw);
+                entry.fee = fee;
+                entry.target_height = target_height;
+                e.insert(entry);
             }
-            Entry::Vacant(entry) => {
-                let mut raw = Vec::new();
-                tx.write(&mut raw).unwrap();
-                entry.insert(TransactionEntry {
-                    tx_status: TransactionStatus::NotInMainChain,
-                    tx_index: None,
-                    block: None,
-                    expiry_height: Some(tx.expiry_height()),
-                    raw: Some(raw),
-                    fee,
-                    _target_height: target_height,
-                });
+            Entry::Occupied(mut e) => {
+                // ON CONFLICT: created and target_height are only set on insert.
+                let entry = e.get_mut();
+                entry.expiry_height = Some(tx.expiry_height());
+                entry.raw = Some(raw);
+                entry.fee = fee.or(entry.fee);
+                entry.tx_index = entry.tx_index.or(coinbase_index);
+                entry.min_observed_height = entry.min_observed_height.min(observed_height);
+            }
+        }
+        Ok(txid)
+    }
+
+    /// The transaction row written by `put_transparent_output`: inserted if absent; on
+    /// conflict the block is kept if set, a known mined height replaces the stored one (an
+    /// unknown one does not erase it: un-mining is truncation's job), the minimum observed
+    /// height decreases, and a known mined height clears `confirmed_unmined_at_height`.
+    #[cfg(feature = "transparent-inputs")]
+    pub(crate) fn upsert_for_transparent_output(
+        &mut self,
+        txid: TxId,
+        mined_height: Option<BlockHeight>,
+        block_known: bool,
+        observation_height: BlockHeight,
+    ) {
+        let block = mined_height.filter(|_| block_known);
+        let entry = self
+            .0
+            .entry(txid)
+            .or_insert_with(|| TransactionEntry::new(txid, observation_height));
+        entry.block = entry.block.or(block);
+        entry.mined_height = mined_height.or(entry.mined_height);
+        entry.min_observed_height = entry.min_observed_height.min(observation_height);
+        if mined_height.is_some() {
+            entry.confirmed_unmined_at_height = None;
+        }
+    }
+
+    /// Records a mined height learned from a status query or a decrypted transaction
+    /// (`set_transaction_status(Mined)`). `block_known` as for [`Self::put_tx_meta`].
+    pub(crate) fn set_mined(&mut self, txid: &TxId, height: BlockHeight, block_known: bool) {
+        if let Some(entry) = self.0.get_mut(txid) {
+            entry.min_observed_height = entry
+                .min_observed_height
+                .min(entry.mined_height.unwrap_or(height))
+                .min(height);
+            entry.mined_height = Some(height);
+            entry.confirmed_unmined_at_height = None;
+            if block_known {
+                entry.block = Some(height);
             }
         }
     }
 
-    pub(crate) fn set_transaction_status(
+    /// Records that the transaction was observed as not mined as of `chain_tip`
+    /// (`set_transaction_status(NotInMainChain | TxidNotRecognized)`).
+    pub(crate) fn set_unmined_at(&mut self, txid: &TxId, chain_tip: BlockHeight) {
+        if let Some(entry) = self.0.get_mut(txid) {
+            if entry.mined_height.is_none() {
+                entry.confirmed_unmined_at_height = Some(chain_tip);
+            }
+        }
+    }
+
+    /// `update_tx_fee`.
+    pub(crate) fn update_fee(&mut self, txid: &TxId, fee: Zatoshis) -> Result<(), Error> {
+        self.0
+            .get_mut(txid)
+            .map(|entry| entry.fee = Some(fee))
+            .ok_or(Error::TransactionNotFound(*txid))
+    }
+
+    /// `put_zip318_classification`.
+    pub(crate) fn put_zip318_classification(
         &mut self,
         txid: &TxId,
-        status: TransactionStatus,
+        classification: Zip318Classification,
     ) -> Result<(), Error> {
-        if let Some(entry) = self.0.get_mut(txid) {
-            entry.tx_status = status;
-            Ok(())
-        } else {
-            Err(Error::TransactionNotFound(*txid))
-        }
-    }
-
-    pub(crate) fn unmine_transactions_greater_than(&mut self, height: BlockHeight) {
-        self.0.iter_mut().for_each(|(_, entry)| {
-            if let TransactionStatus::Mined(tx_height) = entry.tx_status {
-                if tx_height > height {
-                    entry.tx_status = TransactionStatus::NotInMainChain;
-                    entry.block = None;
-                    entry.tx_index = None;
-                }
-            }
-        });
-    }
-}
-
-impl TransactionTable {
-    pub(crate) fn get(&self, txid: &TxId) -> Option<&TransactionEntry> {
-        self.0.get(txid)
-    }
-
-    pub(crate) fn _get_mut(&mut self, txid: &TxId) -> Option<&mut TransactionEntry> {
-        self.0.get_mut(txid)
-    }
-
-    pub(crate) fn _remove(&mut self, txid: &TxId) -> Option<TransactionEntry> {
-        self.0.remove(txid)
-    }
-}
-
-impl Deref for TransactionTable {
-    type Target = BTreeMap<TxId, TransactionEntry>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl TxLocatorMap {
-    pub(crate) fn new() -> Self {
-        Self(BTreeMap::new())
-    }
-    pub(crate) fn _insert(&mut self, height: BlockHeight, index: u32, txid: TxId) {
-        self.0.insert((height, index), txid);
-    }
-
-    pub(crate) fn get(&self, height: BlockHeight, index: u32) -> Option<&TxId> {
-        self.0.get(&(height, index))
-    }
-    pub(crate) fn entry(&mut self, k: (BlockHeight, u32)) -> Entry<'_, (BlockHeight, u32), TxId> {
-        self.0.entry(k)
-    }
-}
-
-mod serialization {
-    use super::*;
-    use crate::{proto::memwallet as proto, read_optional};
-
-    impl From<TransactionEntry> for proto::TransactionEntry {
-        fn from(entry: TransactionEntry) -> Self {
-            Self {
-                tx_status: match entry.tx_status {
-                    TransactionStatus::TxidNotRecognized => {
-                        proto::TransactionStatus::TxidNotRecognized.into()
-                    }
-                    TransactionStatus::NotInMainChain => {
-                        proto::TransactionStatus::NotInMainChain.into()
-                    }
-                    TransactionStatus::Mined(_) => proto::TransactionStatus::Mined.into(),
-                },
-                block: entry.block.map(Into::into),
-                tx_index: entry.tx_index,
-                expiry_height: entry.expiry_height.map(Into::into),
-                raw_tx: entry.raw,
-                fee: entry.fee.map(Into::into),
-                target_height: entry._target_height.map(Into::into),
-                mined_height: match entry.tx_status {
-                    TransactionStatus::Mined(height) => Some(height.into()),
-                    _ => None,
-                },
-            }
-        }
-    }
-
-    impl TryFrom<proto::TransactionEntry> for TransactionEntry {
-        type Error = Error;
-
-        fn try_from(entry: proto::TransactionEntry) -> Result<Self, Self::Error> {
-            Ok(Self {
-                tx_status: match entry.tx_status() {
-                    proto::TransactionStatus::TxidNotRecognized => {
-                        TransactionStatus::TxidNotRecognized
-                    }
-                    proto::TransactionStatus::NotInMainChain => TransactionStatus::NotInMainChain,
-                    proto::TransactionStatus::Mined => {
-                        TransactionStatus::Mined(read_optional!(entry, mined_height)?.into())
-                    }
-                },
-                block: entry.block.map(Into::into),
-                tx_index: entry.tx_index,
-                expiry_height: entry.expiry_height.map(Into::into),
-                raw: entry.raw_tx,
-                fee: entry.fee.map(|fee| fee.try_into()).transpose()?,
-                _target_height: entry
-                    .target_height
-                    .map(|h| TargetHeight::from(BlockHeight::from(h))),
+        self.0
+            .get_mut(txid)
+            .map(|entry| entry.zip318 = classification)
+            .ok_or_else(|| {
+                Error::CorruptedData(format!(
+                    "ZIP 318 classification names transaction {txid}, which does not exist"
+                ))
             })
+    }
+
+    /// `set_tx_trust`.
+    pub(crate) fn set_trusted(&mut self, txid: &TxId, trusted: bool) -> Result<(), Error> {
+        self.0
+            .get_mut(txid)
+            .map(|entry| entry.trusted = trusted)
+            .ok_or(Error::TransactionNotFound(*txid))
+    }
+
+    /// Un-mines every transaction mined above `height` (chain truncation): their block,
+    /// mined height and index are cleared, as zcash_client_sqlite's `truncate_to_height`
+    /// does, and the transactions stay in the wallet as unmined.
+    pub(crate) fn unmine_above(&mut self, height: BlockHeight) {
+        for entry in self.0.values_mut() {
+            if entry.mined_height.is_some_and(|h| h > height) {
+                entry.block = None;
+                entry.mined_height = None;
+                entry.tx_index = None;
+            }
         }
     }
 }

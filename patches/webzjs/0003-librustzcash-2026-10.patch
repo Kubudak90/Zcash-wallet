@@ -1,0 +1,294 @@
+librustzcash 2026-10 cohort: manifests, toolchain and cargo configuration
+
+Applies on top of 0002-memo.patch. Generated from the engine-port working tree at
+a59b211 (make-celari-files.sh); the Rust changes that go with it are in
+0004-ironwood-nu7.patch, and the two only build together.
+
+- Zcash crates from crates.io (releases of 2026-10-21, NU6.2/NU6.3/NU7-aware) instead of
+  ChainSafe/librustzcash-nu61 feat/snap-nu61 (NU6.1, yanked pre-NU6.2 orchard 0.12):
+  zcash_client_backend 0.25.0, zcash_primitives 0.31.0, zcash_keys 0.17.0,
+  zcash_protocol 0.11.0, pczt 0.10.0, zip321 0.10.0, zcash_transparent 0.11.0,
+  zcash_address 0.14.0, orchard 0.16, sapling-crypto 0.9, zip32 0.3.
+- zcash_client_memory from ../engine/zcash_client_memory (Celari's ported backend, a
+  sibling of the .webzjs/ checkout) instead of the fork.
+- wasm-bindgen 0.2.129 (js-sys/web-sys 0.3.106, wasm-bindgen-futures 0.4.79,
+  wasm-bindgen-test 0.3.79) instead of ChainSafe's 0.2.100 pin, and
+  tonic-web-wasm-client 0.9.2: 0.8.0 never hands the gRPC-web grpc-status trailer to
+  tonic, and tonic 0.14.8 fails every call without it. The 0.2.100 pin exists for the
+  MetaMask Snap sandbox, which Celari does not use.
+- rust-toolchain.toml: nightly-2026-10-28.
+- .cargo/config.toml: the shared-memory linker flags that rustc no longer derives from
+  +atomics (without them the module gets an unshared memory and threads break), and
+  --cfg getrandom_backend="wasm_js" for getrandom 0.4.
+- getrandom 0.4 (wasm_js) and rand 0.10 (SysRng) as direct dependencies.
+- webzjs-wallet [dev-dependencies] for its native tests (zcash_client_backend and
+  zcash_client_memory with test-dependencies, http-body, tokio, zcash_transparent,
+  incrementalmerkletree with legacy-api); the lockfile gains 23 test-only packages for
+  them, none of which the wasm build compiles.
+- webzjs-wallet depends on http-body 1 directly (already in the tree through tonic): the
+  sync pass counts the bytes of each batch download (review round 5, M1).
+
+No Cargo.lock hunk: the whole lockfile is engine/webzjs.Cargo.lock, which
+scripts/build-webzjs.sh copies into .webzjs/ before building with --locked.
+
+diff --git a/.cargo/config.toml b/.cargo/config.toml
+index 4feb031..63dab81 100644
+--- a/.cargo/config.toml
++++ b/.cargo/config.toml
+@@ -1,11 +1,23 @@
+ [target.wasm32-unknown-unknown]
+-rustflags = ["-C", "target-feature=+atomics,+bulk-memory,+mutable-globals"]
+-
+-# These are commented out and instead set in the justfile because we can't enable per-target unstable
+-# features which are needed for WASM but not compatible with native builds.
+-
+-# [unstable]
+-# build-std = ["panic_abort", "std"]
+-
+-# [build]
+-# target = "wasm32-unknown-unknown"
+\ No newline at end of file
++# Threads (wasm_thread, wasm-bindgen-rayon) need atomics and one shared, imported linear
++# memory. rustc up to the 2025-01 nightly WebZjs pinned derived the linker flags below from
++# `+atomics` by itself; the 2026-10 nightly no longer does, and without them the module gets
++# an ordinary, unshared memory (wasm-bindgen then emits no threaded init, and workers cannot
++# share the heap). They are the flags rustc used to pass, as the wasm-bindgen-rayon README
++# lists them: shared + imported memory, 1 GiB maximum, and the TLS exports wasm-bindgen's
++# thread transform uses.
++rustflags = [
++  "-C", "target-feature=+atomics,+bulk-memory,+mutable-globals",
++  "-C", "link-arg=--shared-memory",
++  "-C", "link-arg=--import-memory",
++  "-C", "link-arg=--max-memory=1073741824",
++  "-C", "link-arg=--export=__wasm_init_tls",
++  "-C", "link-arg=--export=__tls_size",
++  "-C", "link-arg=--export=__tls_align",
++  "-C", "link-arg=--export=__tls_base",
++  # Also no longer exported by default; wasm-bindgen 0.2.100's thread transform needs
++  # `__heap_base` ("failed to find `__heap_base` for injecting thread id").
++  "-C", "link-arg=--export=__heap_base",
++  "-C", "link-arg=--export=__data_end",
++  "--cfg", "getrandom_backend=\"wasm_js\"",
++]
+diff --git a/Cargo.toml b/Cargo.toml
+index a278326..886fc84 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -16,10 +16,13 @@ codegen-units = 1
+ 
+ [workspace.dependencies]
+ ## Web dependencies
+-wasm-bindgen = "=0.2.100" # PINNED: 0.2.108+ has TextEncoder.encodeInto issues with MetaMask Snap sandbox
+-js-sys = "=0.3.77"
+-wasm-bindgen-futures = "=0.4.50"
+-web-sys = { version = "=0.3.77", features = [
++# Celari: off ChainSafe's 0.2.100 pin (kept for the MetaMask Snap sandbox, which Celari does not
++# use). tonic-web-wasm-client 0.9 (gRPC-web trailers for tonic 0.14.8) needs >= 0.2.108; the
++# wasm-bindgen CLI must be the same version. js-sys/web-sys/futures/test pin it exactly.
++wasm-bindgen = "=0.2.129"
++js-sys = "=0.3.106"
++wasm-bindgen-futures = "=0.4.79"
++web-sys = { version = "=0.3.106", features = [
+     "console",
+ ] }
+ wasm-bindgen-rayon = { version = "1.3" } # Update to higher version cause playwright test in chtomium fail
+@@ -27,32 +30,57 @@ wasm-bindgen-rayon = { version = "1.3" } # Update to higher version cause playwr
+ # WASM specific dependencies
+ tracing-web = { version = "0.1.3" }
+ console_error_panic_hook = { version = "0.1.7" }
+-tonic-web-wasm-client = "0.8.0"
++# 0.9 yields the gRPC-web grpc-status trailer to tonic (0.8.0 dropped it; tonic 0.14.8 then
++# fails every call with "missing grpc-status trailer").
++tonic-web-wasm-client = "0.9.2"
+ tokio_with_wasm = { version = "0.7.1", features = ["rt", "rt-multi-thread", "sync", "macros", "time"] }
+ 
+-## Zcash dependencies - Using ChainSafe/librustzcash-nu61 fork with NU6.1 fixes
+-zcash_keys = { git = "https://github.com/ChainSafe/librustzcash-nu61", branch = "feat/snap-nu61", features = ["transparent-inputs", "orchard", "sapling", "unstable"] }
+-zcash_client_backend = { git = "https://github.com/ChainSafe/librustzcash-nu61", branch = "feat/snap-nu61", default-features = false, features = ["sync", "lightwalletd-tonic", "orchard"] }
+-zcash_client_memory = { git = "https://github.com/ChainSafe/librustzcash-nu61", branch = "feat/snap-nu61", features = ["orchard", "transparent-inputs"] }
+-zcash_primitives = { git = "https://github.com/ChainSafe/librustzcash-nu61", branch = "feat/snap-nu61" }
+-zcash_transparent = { git = "https://github.com/ChainSafe/librustzcash-nu61", branch = "feat/snap-nu61", default-features = false }
+-zcash_address = { git = "https://github.com/ChainSafe/librustzcash-nu61", branch = "feat/snap-nu61" }
+-zcash_proofs = { git = "https://github.com/ChainSafe/librustzcash-nu61", branch = "feat/snap-nu61", default-features = false, features = ["bundled-prover", "multicore"] }
+-zip321 = { git = "https://github.com/ChainSafe/librustzcash-nu61", branch = "feat/snap-nu61" }
+-zip32 = { version = "0.2" }
+-zcash_protocol = { git = "https://github.com/ChainSafe/librustzcash-nu61", branch = "feat/snap-nu61", default-features = false }
+-pczt = { git = "https://github.com/ChainSafe/librustzcash-nu61", branch = "feat/snap-nu61", default-features = false, features = ["orchard", "sapling", "transparent"] }
+-sapling = { package = "sapling-crypto", version = "0.6", default-features = false }
+-bip32 = { version = "=0.6.0-pre.1", default-features = false, features = ["alloc"] }
++## Zcash dependencies - upstream crates.io releases of 2026-10-21 (NU6.2/NU6.3/NU7-aware)
++zcash_keys = { version = "0.17.0", features = ["transparent-inputs", "orchard", "sapling", "unstable"] }
++zcash_client_backend = { version = "0.25.0", default-features = false, features = ["sync", "lightwalletd-tonic", "orchard"] }
++# Celari: the ported wallet backend ships as readable source in the Celari repository
++# (engine/zcash_client_memory), next to the WebZjs checkout (.webzjs/).
++zcash_client_memory = { path = "../engine/zcash_client_memory", features = ["orchard", "transparent-inputs"] }
++zcash_primitives = { version = "0.31.0" }
++zcash_transparent = { version = "0.11.0", default-features = false }
++zcash_address = { version = "0.14.0" }
++zcash_proofs = { version = "0.31.0", default-features = false, features = ["bundled-prover", "multicore"] }
++zip321 = { version = "0.10.0" }
++zip32 = { version = "0.3" }
++zcash_protocol = { version = "0.11.0", default-features = false }
++pczt = { version = "0.10.0", default-features = false, features = ["orchard", "sapling", "transparent"] }
++sapling = { package = "sapling-crypto", version = "0.9", default-features = false }
++bip32 = { version = "0.6", default-features = false, features = ["alloc"] }
++orchard = { version = "0.16", default-features = false }
++zcash_encoding = { version = "0.5", default-features = false }
++zcash_script = { version = "0.6", default-features = false }
++incrementalmerkletree = { version = "0.9", default-features = false }
++shardtree = { version = "0.8" }
++group = "0.14"
++jubjub = "0.11"
++secp256k1 = "0.33"
++transparent = { package = "zcash_transparent", version = "0.11.0", default-features = false }
++bs58 = { version = "0.5", default-features = false, features = ["alloc", "check"] }
++byteorder = "1"
++static_assertions = "1"
++async-trait = "0.1"
++prost-build = "0.14"
++which = "7"
++time = { version = "0.3.22", default-features = false }
++proptest = "1"
++serde_json = "1"
+ ## gRPC Web dependencies
+ prost = { version = "0.14", default-features = false }
+ tonic = { version = "0.14", default-features = false }
+ 
+ 
+ # Used in Native tests
+-zcash_client_sqlite = { git = "https://github.com/ChainSafe/librustzcash-nu61", branch = "feat/snap-nu61", default-features = false, features = ["unstable", "orchard"] }
++zcash_client_sqlite = { version = "0.23.0", default-features = false, features = ["unstable", "orchard"] }
+ 
+ getrandom = { version = "0.2", features = ["js"] }
++getrandom04 = { package = "getrandom", version = "0.4", features = ["wasm_js"] }
++# CSPRNG for PCZT spend authorization signatures (pczt 0.10 takes rand_core 0.10 RNGs).
++rand = { version = "0.10", default-features = false, features = ["std_rng", "sys_rng"] }
+ thiserror = "1.0.63"
+ indexed_db_futures = "0.5.0"
+ sha2 = "0.10"
+@@ -74,7 +102,7 @@ serde = { version = "1", features = ["derive"], default-features = false }
+ postcard = { version = "1.0.10", features = ["alloc"] }
+ serde-wasm-bindgen = "0.6.5"
+ 
+-wasm-bindgen-test = "=0.3.50"
++wasm-bindgen-test = "=0.3.79"
+ tempfile = "3.12"
+ # Used in Native tests
+ tokio = { version = "1.0", features = ["rt", "macros"] }
+diff --git a/crates/webzjs-common/Cargo.toml b/crates/webzjs-common/Cargo.toml
+index bf9a370..3529b0d 100644
+--- a/crates/webzjs-common/Cargo.toml
++++ b/crates/webzjs-common/Cargo.toml
+@@ -8,6 +8,7 @@ description = "A browser client-side library for generating and manipulating zca
+ edition = "2021"
+ 
+ [dependencies]
++getrandom04 = { workspace = true }
+ serde.workspace = true
+ zcash_primitives.workspace = true
+ zcash_address.workspace = true
+diff --git a/crates/webzjs-keys/Cargo.toml b/crates/webzjs-keys/Cargo.toml
+index ef7bf30..77b3c9d 100644
+--- a/crates/webzjs-keys/Cargo.toml
++++ b/crates/webzjs-keys/Cargo.toml
+@@ -34,11 +34,13 @@ pczt = { workspace = true, default-features = false, features = [
+     "transparent",
+     "tx-extractor",
+ ] }
+-orchard = { version = "0.12", default-features = false }
+-wasm-bindgen-futures = "0.4.43"
++orchard = { workspace = true }
++wasm-bindgen-futures.workspace = true
+ 
+ # fixes "failed to resolve: use of undeclared crate or module `imp`" error
+ getrandom = { workspace = true, features = ["js"] }
++getrandom04 = { workspace = true }
++rand = { workspace = true }
+ 
+ [lints]
+ workspace = true
+diff --git a/crates/webzjs-requests/Cargo.toml b/crates/webzjs-requests/Cargo.toml
+index 722d51a..fc93c78 100644
+--- a/crates/webzjs-requests/Cargo.toml
++++ b/crates/webzjs-requests/Cargo.toml
+@@ -14,6 +14,7 @@ crate-type = ["cdylib", "rlib"]
+ wasm-opt = ["-O4", "-O4"]
+ 
+ [dependencies]
++getrandom04 = { workspace = true }
+ wasm-bindgen.workspace = true
+ js-sys.workspace = true
+ zcash_protocol.workspace = true
+diff --git a/crates/webzjs-wallet/Cargo.toml b/crates/webzjs-wallet/Cargo.toml
+index 7abc215..4407f6f 100644
+--- a/crates/webzjs-wallet/Cargo.toml
++++ b/crates/webzjs-wallet/Cargo.toml
+@@ -34,13 +34,13 @@ wasm-bindgen.workspace = true
+ js-sys.workspace = true
+ web-sys.workspace = true
+ 
+-wasm-bindgen-futures = "0.4.43"
++wasm-bindgen-futures.workspace = true
+ wasm-bindgen-rayon = { version = "1.3", optional = true }
+ 
+ # WASM specific dependencies
+ tracing-web = { version = "0.1.3", optional = true }
+ console_error_panic_hook = { version = "0.1.7", optional = true }
+-tonic-web-wasm-client = "0.8.0"
++tonic-web-wasm-client.workspace = true
+ tokio_with_wasm = { version = "0.7.1", features = ["rt", "rt-multi-thread", "sync", "macros", "time"] }
+ 
+ ## Time with WASM support (enables JavaScript Date API for time::OffsetDateTime::now_utc())
+@@ -64,7 +64,7 @@ zcash_proofs = { workspace = true, default-features = false, features = ["bundle
+ zip321 = { workspace = true }
+ zip32 = { workspace = true }
+ pczt = { workspace = true, default-features = false, features = ["orchard", "sapling", "transparent"] }
+-orchard = { version = "0.12", default-features = false }
++orchard = { workspace = true }
+ sapling = { workspace = true }
+ bip32.workspace = true
+ ## gRPC Web dependencies
+@@ -76,6 +76,8 @@ tokio.workspace = true
+ zcash_client_sqlite = { workspace = true, optional = true }
+ 
+ getrandom = { workspace = true, features = ["js"] }
++getrandom04 = { workspace = true }
++rand = { workspace = true }
+ thiserror.workspace = true
+ indexed_db_futures = "0.5.0"
+ sha2 = "0.10"
+@@ -97,9 +99,24 @@ wasm_thread = { git = "https://github.com/ec2/wasm_thread", rev = "9e432077948d9
+ 
+ wasm_sync = "0.1.2"
+ http = { version = "1.1.0", default-features = false }
++# The answer bodies `pass_budget` counts (already in the dependency tree through tonic).
++http-body = "1"
+ serde.workspace = true
+ postcard = { version = "1.0.10", features = ["alloc"] }
+ serde-wasm-bindgen.workspace = true
+ 
++# Native (host) tests of the glue over zcash_client_backend's test framework and a mock
++# lightwalletd: `cargo test -p webzjs-wallet --no-default-features --lib`
++# (engine-port/test-wallet-native.sh). Not used by the wasm build.
++[dev-dependencies]
++zcash_client_memory = { workspace = true, features = ["test-dependencies", "orchard", "transparent-inputs"] }
++zcash_client_backend = { workspace = true, default-features = false, features = ["test-dependencies", "sync", "lightwalletd-tonic", "orchard", "pczt", "transparent-inputs"] }
++http-body = "1"
++tokio = { workspace = true, features = ["rt", "macros"] }
++transparent = { workspace = true }
++# Legacy CommitmentTree encoding for the mock lightwalletd's tree states (tests/nu7_pipeline.rs);
++# the feature is already on through zcash_primitives.
++incrementalmerkletree = { workspace = true, features = ["legacy-api"] }
++
+ [lints]
+ workspace = true
+diff --git a/rust-toolchain.toml b/rust-toolchain.toml
+index 78b1782..9747abe 100644
+--- a/rust-toolchain.toml
++++ b/rust-toolchain.toml
+@@ -1,4 +1,4 @@
+ [toolchain]
+-channel = "nightly-2025-01-07"
++channel = "nightly-2026-10-28"
+ components = ["rust-src"]
+ targets = ["wasm32-unknown-unknown"]

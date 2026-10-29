@@ -12,20 +12,6 @@ use zcash_protocol::{consensus::BlockHeight, memo};
 
 use crate::AccountId;
 
-pub type Result<T> = std::result::Result<T, Error>;
-
-/// Helper macro for reading optional fields from a protobuf messages
-/// it will return a Result type with a custom error based on the
-/// field name
-#[macro_export]
-macro_rules! read_optional {
-    ($proto:expr, $field:ident) => {
-        $proto
-            .$field
-            .ok_or(Error::ProtoMissingField(stringify!($field)))
-    };
-}
-
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("Account not found: {0:?}")]
@@ -76,12 +62,6 @@ pub enum Error {
     OrchardNotEnabled,
     #[error("Other error: {0}")]
     Other(String),
-    #[error("Proto Decoding Error: {0}")]
-    ProtoDecodingError(#[from] prost::DecodeError),
-    #[error("Proto Encoding Error: {0}")]
-    ProtoEncodingError(#[from] prost::EncodeError),
-    #[error("Missing proto field: {0}")]
-    ProtoMissingField(&'static str),
     #[error("Requested rewind to invalid block height. Safe height: {0:?}, requested height {1:?}")]
     RequestedRewindInvalid(Option<BlockHeight>, BlockHeight),
     #[cfg(feature = "transparent-inputs")]
@@ -98,8 +78,10 @@ pub enum Error {
     #[cfg(feature = "transparent-inputs")]
     #[error("Transparent derivation: {0}")]
     TransparentDerivation(bip32::Error),
-    #[error("Unsupported proto version: {1} (expected {0})")]
-    UnsupportedProtoVersion(u32, u32),
+    /// The stored wallet is not in this build's format (an old protobuf blob, or another
+    /// format version). The wallet must be rebuilt from its keys and rescanned.
+    #[error("Unsupported wallet data format (version {0:?}); the wallet must be rebuilt and rescanned")]
+    UnsupportedFormat(Option<u32>),
     #[error("Error converting nullifier from slice: {0}")]
     NullifierFromSlice(#[from] TryFromSliceError),
     #[error("Error decoding ufvk string: {0}")]
@@ -172,5 +154,19 @@ impl From<Vec<u8>> for Error {
 impl From<zip32::TryFromIntError> for Error {
     fn from(value: zip32::TryFromIntError) -> Self {
         Error::Zip32FromInt(value)
+    }
+}
+
+#[cfg(feature = "transparent-inputs")]
+impl From<zcash_keys::keys::transparent::gap_limits::GapAddressesError<Error>> for Error {
+    fn from(e: zcash_keys::keys::transparent::gap_limits::GapAddressesError<Error>) -> Self {
+        use zcash_keys::keys::transparent::gap_limits::GapAddressesError;
+        match e {
+            GapAddressesError::Storage(e) => e,
+            GapAddressesError::AddressGeneration(e) => Error::AddressGeneration(e),
+            GapAddressesError::AccountUnknown => {
+                Error::Other("gap address generation for an unknown account".into())
+            }
+        }
     }
 }

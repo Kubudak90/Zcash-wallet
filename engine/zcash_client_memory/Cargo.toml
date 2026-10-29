@@ -1,80 +1,87 @@
 [package]
 name = "zcash_client_memory"
+# Celari's port of ChainSafe's in-memory wallet backend. See UPSTREAM.md for the
+# origin of this crate and what Celari changed. Not published to crates.io.
 version = "0.0.0"
-repository.workspace = true
-# readme = "README.md"
-license.workspace = true
-edition.workspace = true
-rust-version.workspace = true
-categories.workspace = true
-build = "build.rs"
+license = "MIT OR Apache-2.0"
+edition = "2021"
+publish = false
 
-# Exclude proto files so crates.io consumers don't need protoc.
-exclude = ["*.proto"]
-
+# This crate is not a member of the WebZjs workspace (it lives next to it, in
+# Celari's engine/ directory), so every dependency is spelled out here instead
+# of inheriting `workspace = true`. Versions are the librustzcash cohort of
+# 2026-10-21 (zcash_client_backend 0.25, zcash_primitives 0.31, ...), the same
+# as in the patched WebZjs workspace; the WebZjs Cargo.lock pins them.
 [dependencies]
-zcash_address.workspace = true
-zcash_client_backend = { workspace = true, features = ["unstable-serialization", "unstable-spanning-tree", "sync"] }
-zcash_encoding.workspace = true
-zcash_keys = { workspace = true, features = ["sapling"] }
-zcash_primitives.workspace = true
-zcash_protocol.workspace = true
-transparent.workspace = true
-zip32.workspace = true
+zcash_address = "0.14.0"
+zcash_client_backend = { version = "0.25.0", default-features = false, features = ["unstable-serialization", "unstable-spanning-tree", "sync"] }
+zcash_encoding = { version = "0.5", default-features = false }
+zcash_keys = { version = "0.17.0", features = ["sapling"] }
+zcash_primitives = "0.31.0"
+zcash_protocol = { version = "0.11.0", default-features = false }
+transparent = { package = "zcash_transparent", version = "0.11.0", default-features = false }
+zip32 = "0.3"
 
-tokio = { workspace = true, features = ["sync"] }
+tokio = { version = "1.0", features = ["sync"] }
 
 # Dependencies exposed in a public API:
 # (Breaking upgrades to these require a breaking upgrade to this crate.)
 # - Errors
-bip32 = { workspace = true, optional = true }
-bs58.workspace = true
+bip32 = { version = "0.6", default-features = false, features = ["alloc"], optional = true }
+bs58 = { version = "0.5", default-features = false, features = ["alloc", "check"] }
 
 # - Logging and metrics
-tracing.workspace = true
+tracing = "0.1.40"
 
 # - Serialization
-byteorder.workspace = true
-nonempty.workspace = true
-prost.workspace = true
-group.workspace = true
-jubjub.workspace = true
-serde.workspace = true
+byteorder = "1"
+nonempty = "0.11"
+group = "0.14"
+jubjub = "0.11"
+serde = { version = "1", features = ["derive"], default-features = false }
 
 # - Secret management
-secrecy.workspace = true
-subtle.workspace = true
+secrecy = "0.8.0"
+subtle = "2.6.1"
 
 # - Static assertions
-static_assertions.workspace = true
+static_assertions = "1"
 
 # - Shielded protocols
-orchard = { workspace = true, optional = true }
-sapling.workspace = true
+orchard = { version = "0.16", default-features = false, optional = true }
+sapling = { package = "sapling-crypto", version = "0.9", default-features = false }
 
 # - Transparent protocol
-secp256k1 = { workspace = true, optional = true }
-zcash_script.workspace = true
+secp256k1 = { version = "0.33", optional = true }
+zcash_script = { version = "0.6", default-features = false }
 
 # - Note commitment trees
-incrementalmerkletree.workspace = true
-shardtree = { workspace = true, features = ["legacy-api"] }
+incrementalmerkletree = { version = "0.9", default-features = false }
+shardtree = { version = "0.8", features = ["legacy-api"] }
 
 thiserror = "1.0.61"
-rayon.workspace = true
-async-trait = { version = "0.1" }
+hex = "0.4.3"
+rayon = { version = "1.8", features = ["web_spin_lock"] }
+async-trait = "0.1"
 
 # - Test dependencies
-proptest = { workspace = true, optional = true }
+proptest = { version = "1", optional = true }
 wasm_sync = "0.1.2"
-time.workspace = true
+time = { version = "0.3.22", default-features = false, features = ["std"] }
 bytes = "1.9.0"
+
+# On wasm32, `time::OffsetDateTime::now_utc` must read the JavaScript clock
+# (`std::time::SystemTime::now` panics on wasm32-unknown-unknown).
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+time = { version = "0.3.22", default-features = false, features = ["std", "wasm-bindgen"] }
 
 [dev-dependencies]
 ciborium = "0.2.2"
-serde_json.workspace = true
-postcard.workspace = true
-zcash_client_backend = { workspace = true, features = ["test-dependencies"] }
+# Decodes the lightwalletd messages of the mainnet test vectors (testdata/).
+prost = { version = "0.14", default-features = false, features = ["std"] }
+serde_json = "1"
+postcard = { version = "1.0.10", features = ["alloc"] }
+zcash_client_backend = { version = "0.25.0", default-features = false, features = ["test-dependencies"] }
 
 
 [features]
@@ -84,7 +91,8 @@ local-consensus = ["zcash_protocol/local-consensus"]
 multicore = ["zcash_primitives/multicore"]
 
 ## Enables support for storing data related to the sending and receiving of
-## Orchard funds.
+## Orchard funds (and, since zcash_client_backend 0.25, Ironwood funds, which
+## use Orchard-shaped notes in a separate pool).
 orchard = ["dep:orchard", "zcash_client_backend/orchard", "zcash_keys/orchard"]
 
 ## Exposes APIs that are useful for testing, such as `proptest` strategies.
@@ -94,8 +102,10 @@ test-dependencies = [
   "shardtree/test-dependencies",
   "zcash_primitives/test-dependencies",
   "zcash_client_backend/test-dependencies",
-  "incrementalmerkletree/test-dependencies"
 ]
+
+## Runs the upstream PCZT tests (zcash_client_backend's `pczt` feature) in `cargo test`.
+pczt-tests = ["zcash_client_backend/pczt"]
 
 ## Enables receiving transparent funds and sending to transparent recipients
 transparent-inputs = [
@@ -124,10 +134,3 @@ zcashd-compat = ["zcash_keys/zcashd-compat", "zcash_client_backend/zcashd-compat
 
 ## Enables the prospective ZIP 233 (Network Sustainability Mechanism) feature.
 zip-233 = ["zcash_primitives/zip-233"]
-
-[build-dependencies]
-prost-build.workspace = true
-which.workspace = true
-
-[lints]
-workspace = true

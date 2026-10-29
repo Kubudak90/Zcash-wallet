@@ -1,15 +1,92 @@
+//! `WalletCommitmentTrees`: the Sapling, Orchard and Ironwood note commitment trees.
+//!
+//! The Ironwood tree is Orchard-shaped but separate. zcash_client_backend's default
+//! `with_ironwood_tree_mut` reports "no Ironwood tree", which would silently drop Ironwood
+//! commitments during `put_blocks` and make Ironwood notes unspendable, so it is
+//! overridden here, as are the Ironwood subtree root methods.
+
 use std::convert::Infallible;
 
 use incrementalmerkletree::Address;
-use shardtree::{ShardTree, error::ShardTreeError, store::memory::MemoryShardStore};
-#[cfg(feature = "orchard")]
-use zcash_client_backend::data_api::ORCHARD_SHARD_HEIGHT;
+use shardtree::{
+    ShardTree,
+    error::ShardTreeError,
+    store::{ShardStore, memory::MemoryShardStore},
+};
 use zcash_client_backend::data_api::{
     SAPLING_SHARD_HEIGHT, WalletCommitmentTrees, chain::CommitmentTreeRoot,
 };
 use zcash_protocol::consensus::{self, BlockHeight};
 
-use crate::MemoryWalletDb;
+#[cfg(feature = "orchard")]
+use zcash_client_backend::data_api::ORCHARD_SHARD_HEIGHT;
+
+use crate::{MemoryWalletDb, types::memory_wallet::{PoolTree, SubtreeInfo}};
+
+/// Whether the shard of `tree` at `shard_addr` is stored with `root` as its root value.
+///
+/// The cap only caches values above the shard level (it keeps no node at a shard's address
+/// once a value above it is known, such as a frontier ommer), and the tree reads a shard's
+/// root from the stored shard where the cap holds none, so a stored shard with this root is
+/// what `ShardTree::insert(shard_addr, root)` would leave behind.
+fn holds_shard_root<H, const DEPTH: u8, const SHARD_HEIGHT: u8>(
+    tree: &ShardTree<MemoryShardStore<H, BlockHeight>, DEPTH, SHARD_HEIGHT>,
+    shard_addr: Address,
+    root: &H,
+) -> Result<bool, ShardTreeError<Infallible>>
+where
+    H: incrementalmerkletree::Hashable + Clone + PartialEq,
+{
+    Ok(tree
+        .store()
+        .get_shard(shard_addr)
+        .map_err(ShardTreeError::Storage)?
+        .is_some_and(|shard| shard.root().node_value() == Some(root)))
+}
+
+/// Inserts server-provided subtree roots into a tree and records them (with the height
+/// of the block that completed each subtree) for `get_*_subtree_root` and scan range
+/// extension (`put_shard_roots` in zcash_client_sqlite).
+///
+/// `zcash_client_backend::sync::run` sends every subtree root again on every pass.
+/// `ShardTree::insert` (shardtree 0.8) checks each inserted root against every value the
+/// cap holds above it (such as the birthday frontier's ommers), recomputing those from the
+/// sibling subtrees whenever they are complete: once all roots are present, each insert
+/// hashes on the order of the number of shards, so a pass over 1,129 Sapling and 770 Orchard
+/// roots cost ~4 minutes in the browser. A root whose shard is already stored with that
+/// root value is skipped: inserting it again would change nothing (the mainnet test
+/// `subtree_roots_put_again_change_nothing` checks that the saved wallet is byte-identical
+/// to one where every root went through `insert`). Every other root (new, different, or
+/// whose shard is missing or has no root value) still goes through the checked `insert`,
+/// so a conflicting root is still an error. (zcash_client_sqlite instead batch-inserts the
+/// roots into the cap without these checks.)
+///
+/// Callers run it inside `transactionally`, so a call that fails part-way (a refused root
+/// after some were inserted) leaves the wallet as it was, as sqlite's SQL transaction does.
+fn put_roots<H, const DEPTH: u8, const SHARD_HEIGHT: u8>(
+    pool_tree: &mut PoolTree<ShardTree<MemoryShardStore<H, BlockHeight>, DEPTH, SHARD_HEIGHT>, H>,
+    start_index: u64,
+    roots: &[CommitmentTreeRoot<H>],
+) -> Result<(), ShardTreeError<Infallible>>
+where
+    H: incrementalmerkletree::Hashable + Clone + PartialEq,
+{
+    for (root, i) in roots.iter().zip(0u64..) {
+        let index = start_index + i;
+        let root_addr = Address::from_parts(SHARD_HEIGHT.into(), index);
+        if !holds_shard_root(&pool_tree.tree, root_addr, root.root_hash())? {
+            pool_tree.tree.insert(root_addr, root.root_hash().clone())?;
+        }
+        pool_tree.subtrees.insert(
+            index,
+            SubtreeInfo {
+                root: root.root_hash().clone(),
+                end_height: root.subtree_end_height(),
+            },
+        );
+    }
+    Ok(())
+}
 
 impl<P: consensus::Parameters> WalletCommitmentTrees for MemoryWalletDb<P> {
     type Error = Infallible;
@@ -26,8 +103,7 @@ impl<P: consensus::Parameters> WalletCommitmentTrees for MemoryWalletDb<P> {
         ) -> Result<A, E>,
         E: From<ShardTreeError<Infallible>>,
     {
-        tracing::debug!("with_sapling_tree_mut");
-        callback(&mut self.sapling_tree)
+        callback(&mut self.sapling.tree)
     }
 
     fn put_sapling_subtree_roots(
@@ -35,23 +111,14 @@ impl<P: consensus::Parameters> WalletCommitmentTrees for MemoryWalletDb<P> {
         start_index: u64,
         roots: &[CommitmentTreeRoot<sapling::Node>],
     ) -> Result<(), ShardTreeError<Self::Error>> {
-        tracing::debug!("put_sapling_subtree_roots");
-        self.with_sapling_tree_mut(|t| {
-            for (root, i) in roots.iter().zip(0u64..) {
-                let root_addr = Address::from_parts(SAPLING_SHARD_HEIGHT.into(), start_index + i);
-                t.insert(root_addr, *root.root_hash())?;
-            }
-            Ok::<_, ShardTreeError<Self::Error>>(())
-        })?;
+        self.transactionally(|db| put_roots(&mut db.sapling, start_index, roots))
+    }
 
-        // store the end block heights for each shard as well
-        for (root, i) in roots.iter().zip(0u64..) {
-            let root_addr = Address::from_parts(SAPLING_SHARD_HEIGHT.into(), start_index + i);
-            self.sapling_tree_shard_end_heights
-                .insert(root_addr, root.subtree_end_height());
-        }
-
-        Ok(())
+    fn get_sapling_subtree_root(
+        &mut self,
+        index: u64,
+    ) -> Result<Option<sapling::Node>, ShardTreeError<Self::Error>> {
+        Ok(self.sapling.subtrees.get(&index).map(|s| s.root))
     }
 
     #[cfg(feature = "orchard")]
@@ -69,137 +136,55 @@ impl<P: consensus::Parameters> WalletCommitmentTrees for MemoryWalletDb<P> {
         ) -> Result<A, E>,
         E: From<ShardTreeError<Self::Error>>,
     {
-        tracing::debug!("with_orchard_tree_mut");
-        callback(&mut self.orchard_tree)
+        callback(&mut self.orchard.tree)
     }
 
-    /// Adds a sequence of note commitment tree subtree roots to the data store.
     #[cfg(feature = "orchard")]
     fn put_orchard_subtree_roots(
         &mut self,
         start_index: u64,
         roots: &[CommitmentTreeRoot<orchard::tree::MerkleHashOrchard>],
     ) -> Result<(), ShardTreeError<Self::Error>> {
-        tracing::debug!("put_orchard_subtree_roots");
-        self.with_orchard_tree_mut(|t| {
-            for (root, i) in roots.iter().zip(0u64..) {
-                let root_addr = Address::from_parts(ORCHARD_SHARD_HEIGHT.into(), start_index + i);
-                t.insert(root_addr, *root.root_hash())?;
-            }
-            Ok::<_, ShardTreeError<Self::Error>>(())
-        })?;
-
-        // store the end block heights for each shard as well
-        for (root, i) in roots.iter().zip(0u64..) {
-            let root_addr = Address::from_parts(SAPLING_SHARD_HEIGHT.into(), start_index + i);
-            self.orchard_tree_shard_end_heights
-                .insert(root_addr, root.subtree_end_height());
-        }
-
-        Ok(())
-    }
-}
-
-pub(crate) mod serialization {
-    use std::io::Cursor;
-
-    use incrementalmerkletree::{Address, Level};
-    use shardtree::{
-        LocatedPrunableTree, ShardTree,
-        store::{Checkpoint, ShardStore, memory::MemoryShardStore},
-    };
-    use zcash_client_backend::serialization::shardtree::{read_shard, write_shard};
-    use zcash_protocol::consensus::BlockHeight;
-
-    use crate::{Error, proto::memwallet as proto};
-
-    pub(crate) fn tree_to_protobuf<
-        H: Clone
-            + incrementalmerkletree::Hashable
-            + PartialEq
-            + zcash_primitives::merkle_tree::HashSer,
-        const DEPTH: u8,
-        const SHARD_HEIGHT: u8,
-    >(
-        tree: &ShardTree<MemoryShardStore<H, BlockHeight>, DEPTH, SHARD_HEIGHT>,
-    ) -> Result<Option<crate::proto::memwallet::ShardTree>, Error> {
-        use crate::proto::memwallet::{ShardTree, TreeCheckpoint, TreeShard};
-
-        let mut cap_bytes = Vec::new();
-        write_shard(&mut cap_bytes, &tree.store().get_cap()?)?;
-
-        let shards = tree
-            .store()
-            .get_shard_roots()?
-            .iter()
-            .map(|shard_root| {
-                let shard = tree.store().get_shard(*shard_root)?.ok_or_else(|| {
-                    Error::Other(format!("Missing shard for root index {}", shard_root.index()))
-                })?;
-
-                let mut shard_data = Vec::new();
-                write_shard(&mut shard_data, shard.root())?;
-
-                Ok(TreeShard {
-                    shard_index: shard_root.index(),
-                    shard_data,
-                })
-            })
-            .collect::<Result<Vec<TreeShard>, Error>>()?;
-
-        let mut checkpoints = Vec::new();
-        tree.store()
-            .for_each_checkpoint(usize::MAX, |id, checkpoint| {
-                checkpoints.push(TreeCheckpoint {
-                    checkpoint_id: (*id).into(),
-                    position: match checkpoint.tree_state() {
-                        shardtree::store::TreeState::Empty => 0,
-                        shardtree::store::TreeState::AtPosition(position) => position.into(),
-                    },
-                });
-                Ok(())
-            })
-            .ok();
-
-        Ok(Some(ShardTree {
-            cap: cap_bytes,
-            shards,
-            checkpoints,
-        }))
+        self.transactionally(|db| put_roots(&mut db.orchard, start_index, roots))
     }
 
-    pub(crate) fn tree_from_protobuf<
-        H: Clone
-            + incrementalmerkletree::Hashable
-            + PartialEq
-            + zcash_primitives::merkle_tree::HashSer,
-        const DEPTH: u8,
-        const SHARD_HEIGHT: u8,
-    >(
-        proto_tree: proto::ShardTree,
-        max_checkpoints: usize,
-        shard_root_level: Level,
-    ) -> Result<ShardTree<MemoryShardStore<H, BlockHeight>, DEPTH, SHARD_HEIGHT>, Error> {
-        let mut tree = ShardTree::new(MemoryShardStore::empty(), max_checkpoints);
+    #[cfg(feature = "orchard")]
+    fn get_orchard_subtree_root(
+        &mut self,
+        index: u64,
+    ) -> Result<Option<orchard::tree::MerkleHashOrchard>, ShardTreeError<Self::Error>> {
+        Ok(self.orchard.subtrees.get(&index).map(|s| s.root))
+    }
 
-        let cap = read_shard(Cursor::new(&proto_tree.cap))?;
-        tree.store_mut().put_cap(cap)?;
+    #[cfg(feature = "orchard")]
+    fn with_ironwood_tree_mut<F, A, E>(&mut self, mut callback: F) -> Result<Option<A>, E>
+    where
+        for<'a> F: FnMut(
+            &'a mut ShardTree<
+                Self::OrchardShardStore<'a>,
+                { ORCHARD_SHARD_HEIGHT * 2 },
+                ORCHARD_SHARD_HEIGHT,
+            >,
+        ) -> Result<A, E>,
+        E: From<ShardTreeError<Self::Error>>,
+    {
+        callback(&mut self.ironwood.tree).map(Some)
+    }
 
-        for proto_shard in proto_tree.shards {
-            let shard_root = Address::from_parts(shard_root_level, proto_shard.shard_index);
-            let shard_tree = read_shard(&mut Cursor::new(proto_shard.shard_data))?;
-            let shard = LocatedPrunableTree::from_parts(shard_root, shard_tree)
-                .map_err(|_| Error::Other("shard persistence invalid".to_string()))?;
-            tree.store_mut().put_shard(shard)?;
-        }
+    #[cfg(feature = "orchard")]
+    fn put_ironwood_subtree_roots(
+        &mut self,
+        start_index: u64,
+        roots: &[CommitmentTreeRoot<orchard::tree::MerkleHashOrchard>],
+    ) -> Result<(), ShardTreeError<Self::Error>> {
+        self.transactionally(|db| put_roots(&mut db.ironwood, start_index, roots))
+    }
 
-        for proto_checkpoint in proto_tree.checkpoints {
-            tree.store_mut().add_checkpoint(
-                BlockHeight::from(proto_checkpoint.checkpoint_id),
-                Checkpoint::at_position(proto_checkpoint.position.into()),
-            )?;
-        }
-
-        Ok(tree)
+    #[cfg(feature = "orchard")]
+    fn get_ironwood_subtree_root(
+        &mut self,
+        index: u64,
+    ) -> Result<Option<orchard::tree::MerkleHashOrchard>, ShardTreeError<Self::Error>> {
+        Ok(self.ironwood.subtrees.get(&index).map(|s| s.root))
     }
 }
