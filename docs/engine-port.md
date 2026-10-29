@@ -422,7 +422,12 @@ builds from a removed `.webzjs/` on x86_64 Ubuntu 24.04 with clang-18 gave
 identical lists (list sha256 `8e5ffa12…`) and byte-identical trees; the wallet wasm
 is `c8fa1653…`, the keys wasm `2f39260e…` (unchanged since the Integrate phase,
 when two checkouts at different paths with separate RUSTUP_HOME and CARGO_HOME
-also agreed). INFERRED: that CI's own build reproduces it (no CI run yet).
+also agreed). After the build script's `env -i` change and the backend change for
+the scan queue observer (`queue_rescan`, `prune_scan_queue_below`), three more cold
+builds gave the same list again (one on the previous engine, two on the new one):
+those two methods are dead code in the wasm, and its panic locations name only
+four files of the backend, none of them changed. INFERRED: that CI's own build
+reproduces it (no CI run yet).
 
 To change the engine: edit, commit the patch and `engine/` changes, run
 `npm run build:webzjs`, review the reported list difference, commit the new list
@@ -432,13 +437,13 @@ from `.webzjs/target/webzjs-vendor.sha256`, and let CI's from-source run confirm
 
 | Suite | Command | Last result (MEASURED, 2026-10-29) |
 | --- | --- | --- |
-| Backend (`engine/zcash_client_memory`): zcash_client_backend's backend-independent suite, PCZT tests, mainnet Ironwood vectors | `scripts/test-engine-native.sh` | 204 tests: 198 passed, 0 failed, 6 ignored (the ones sqlite ignores); 763 s on 4 cores |
+| Backend (`engine/zcash_client_memory`): zcash_client_backend's backend-independent suite, PCZT tests, mainnet Ironwood vectors | `scripts/test-engine-native.sh` | 204 tests: 198 passed, 0 failed, 6 ignored (the ones sqlite ignores); 763 s on 4 cores. Again after the scan queue observer change, with the same sources and lockfile from the engine's working tree: 198 passed, 0 failed, 6 ignored |
 | Glue (`webzjs-wallet`): history, NU7 rules, sync passes, data requests, against a mock lightwalletd | `bash scripts/build-webzjs.sh && scripts/test-engine-native.sh glue` | 68 passed, 0 failed; 338 s |
 | App unit tests | `npm test` | all passing |
 | App UI tests (fake engine) | `npm run test:e2e` | all passing |
-| Mainnet smoke test (real engine, production build) | `npm run test:e2e:real` | passed in 14.2 s, network supported |
+| Mainnet smoke test (real engine, production build) | `npm run test:e2e:real` | passed in 12.7 s, network supported |
 | Mainnet restore from 2026-10 (production build, through a proxy; a reviewer's spec outside the repository) | - | 622 s; "blocks left" 49,148 -> 39,148 -> 29,148 -> 19,142 -> 9,142 -> 2,277 -> 1 -> Up to date, one rise of 4 blocks (the chain's growth); before Decision 21 it went back to ~48,800 at the second pass and ended at ~21,100 |
-| Upgrade from main's build to this one, mainnet (outside the repository) | - | 13/13 checks: rebuilt once, `db-legacy` kept until the tip, notices; after the soft-lock reload the count went on at 29,161 (before: back to ~48,800) and reached the tip at 707 s |
+| Upgrade from main's build to this one, mainnet (outside the repository, a reviewer's script) | - | 18/18 checks: rebuilt once, `db-legacy` kept until the tip, notices (en, tr); labels 49,269 -> 39,269, soft-lock reload, 29,274 at the first paint after the unlock (before the fix for the unlock: 49,174 for a moment), 19,264 -> 9,264 -> 2,278 -> "1 block left" -> up to date at 3,534,987 at 628 s; no count rose |
 | Build guards | `scripts/test-build-webzjs-guards.sh` | 23 of 23 (12 new cases; the 10 new checks failed against the previous script) |
 
 The backend's lockfile (`engine/zcash_client_memory/Cargo.lock`) is the shipped
