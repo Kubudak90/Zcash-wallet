@@ -29,7 +29,23 @@
 # CC_wasm32_unknown_unknown, the C compiler (default clang);
 # WEBZJS_RUST_TOOLCHAIN and WEBZJS_WASM_BINDGEN_VERSION, the toolchain the
 # patched rust-toolchain.toml and the wasm-bindgen version the lockfile must
-# name (CI sets both); CARGO_TARGET_DIR as cargo reads it.
+# name (CI sets both); CARGO_TARGET_DIR as cargo reads it;
+# WEBZJS_LIST_MISMATCH=warn, see below.
+#
+# Anything else that would change what rustc builds stops the script, since the
+# log would then name tools and inputs the output does not come from: a
+# RUSTUP_TOOLCHAIN or rustup override other than the pinned toolchain, a rustc
+# wrapper, extra rustflags, another rustc (environment variables), and cargo
+# configuration from anywhere but the patched .webzjs/.cargo/config.toml (a
+# .cargo/ in this checkout or above it, or build/target/profile settings in
+# CARGO_HOME's config.toml).
+#
+# At the end the script compares the output with scripts/webzjs-vendor.sha256
+# the way CI does. On x86_64 Linux a mismatch is an error (exit 1, vendor/ is
+# left in place; the new list is written to .webzjs/target/webzjs-vendor.sha256)
+# unless WEBZJS_LIST_MISMATCH=warn, which CI sets because its own check step
+# reports the difference and uploads the new list. Elsewhere it is a warning:
+# other hosts do not reproduce the list (see wasm-opt below).
 set -euo pipefail
 
 WEBZJS_REPO="https://github.com/ChainSafe/WebZjs"
@@ -49,6 +65,23 @@ OUT="${WEBZJS_OUT:-$ROOT/vendor}"
 LOCKFILE="$ROOT/engine/webzjs.Cargo.lock"
 
 command -v wasm-pack >/dev/null || { echo "wasm-pack not found: cargo install wasm-pack" >&2; exit 1; }
+
+# Environment variables that change what cargo and rustc build. CARGO_TARGET_DIR
+# and CARGO_BUILD_JOBS only change where and how fast.
+refused=()
+for var in RUSTC RUSTC_WRAPPER RUSTC_WORKSPACE_WRAPPER RUSTFLAGS CARGO_ENCODED_RUSTFLAGS RUSTDOCFLAGS CARGO_ENCODED_RUSTDOCFLAGS; do
+  [ -z "${!var+set}" ] || refused+=("$var")
+done
+while IFS= read -r var; do
+  case "$var" in
+    CARGO_TARGET_DIR | CARGO_BUILD_TARGET_DIR | CARGO_BUILD_JOBS) ;;
+    *) refused+=("$var") ;;
+  esac
+done < <(compgen -e | grep -E '^CARGO_(BUILD|TARGET|PROFILE|UNSTABLE|ENV)_' || true)
+if [ "${#refused[@]}" -gt 0 ]; then
+  echo "error: these environment variables would change the build: ${refused[*]}; unset them (the output would not be the pinned one)" >&2
+  exit 1
+fi
 
 # Only files committed to this repository count: an uncommitted or edited patch,
 # engine source or lockfile stops the build rather than slipping into vendor/.
@@ -94,7 +127,54 @@ if [ -n "${WEBZJS_RUST_TOOLCHAIN:-}" ] && [ "$channel" != "$WEBZJS_RUST_TOOLCHAI
   echo "error: the patched rust-toolchain.toml names $channel, WEBZJS_RUST_TOOLCHAIN is $WEBZJS_RUST_TOOLCHAIN" >&2
   exit 1
 fi
+if [ -n "${RUSTUP_TOOLCHAIN:-}" ] && [ "$RUSTUP_TOOLCHAIN" != "$channel" ] && [ "${RUSTUP_TOOLCHAIN#"$channel"-}" = "$RUSTUP_TOOLCHAIN" ]; then
+  echo "error: RUSTUP_TOOLCHAIN is $RUSTUP_TOOLCHAIN, but the build is pinned to $channel; unset it" >&2
+  exit 1
+fi
 rustup toolchain install "$channel" --profile minimal --component rust-src --target wasm32-unknown-unknown
+
+# The toolchain rustup actually picks where wasm-pack runs cargo: RUSTUP_TOOLCHAIN
+# and a `rustup override` for one of these directories win over rust-toolchain.toml.
+pinned_rustc="$(rustc "+$channel" --version)"
+pinned_cargo="$(cargo "+$channel" --version)"
+for crate in webzjs-wallet webzjs-keys; do
+  used_rustc="$(cd "$SRC/crates/$crate" && rustc --version)"
+  used_cargo="$(cd "$SRC/crates/$crate" && cargo --version)"
+  if [ "$used_rustc" != "$pinned_rustc" ] || [ "$used_cargo" != "$pinned_cargo" ]; then
+    echo "error: in .webzjs/crates/$crate rustup picks $used_rustc / $used_cargo, not the pinned $channel ($pinned_rustc);" \
+      "see \`rustup show active-toolchain\` there (a rustup override?)" >&2
+    exit 1
+  fi
+done
+
+# Cargo reads configuration from every .cargo/ directory above the crate and from
+# CARGO_HOME. Only the patched .webzjs/.cargo/config.toml may shape the build.
+for crate in webzjs-wallet webzjs-keys; do
+  config="$(cd "$SRC/crates/$crate" && cargo "+$channel" -Zunstable-options config get --show-origin 2>&1)" || {
+    echo "error: cargo config get failed in .webzjs/crates/$crate:" >&2
+    echo "$config" >&2
+    exit 1
+  }
+  foreign="$(awk -v ours="$SRC/.cargo/config.toml" -v ours_real="$(cd "$SRC/.cargo" && pwd -P)/config.toml" '
+    /^[^ #\]]/ { key = $1 }
+    / # / {
+      origin = substr($0, index($0, " # ") + 3)
+      if (origin == ours || origin == ours_real || origin == "--config cli option") next
+      if (key == "build.target-dir" || key == "build.jobs") next
+      split(key, part, ".")
+      if (part[1] ~ /^(build|target|profile|env|unstable|patch|source|host)$/) print key " from " origin
+    }' <<<"$config" | sort -u)"
+  if [ -n "$foreign" ]; then
+    echo "error: cargo configuration outside .webzjs/.cargo/config.toml would change the build of $crate:" >&2
+    echo "$foreign" >&2
+    exit 1
+  fi
+done
+# Not committed anywhere, so not something a build may depend on, even while it is empty.
+if [ -e "$ROOT/.cargo" ]; then
+  echo "error: $ROOT/.cargo exists; cargo reads the configuration in it during this build (move it away)" >&2
+  exit 1
+fi
 
 # wasm-pack runs the wasm-bindgen CLI found on PATH if its version equals the
 # wasm-bindgen crate's in Cargo.lock, and otherwise downloads one. Install
@@ -152,13 +232,14 @@ export CC_wasm32_unknown_unknown="${CC_wasm32_unknown_unknown:-clang}"
 command -v "$CC_wasm32_unknown_unknown" >/dev/null || { echo "error: $CC_wasm32_unknown_unknown not found" >&2; exit 1; }
 
 # Panic locations name source files. trim-paths (stable in cargo 1.101) writes
-# them as /rustc/<commit>/..., /cargo/registry/..., /cargo/git/... and
-# /cargo/deps/<crate>-<version>/... (engine/zcash_client_memory sits outside the
-# workspace) instead of absolute paths of this machine.
+# them as /rustc/<commit>/..., /cargo/registry/..., /cargo/git/... and paths
+# relative to the workspace, instead of absolute paths of this machine;
+# zcash_client_memory appears as celari-engine/zcash_client_memory/..., through
+# the symlink 0003 adds inside the workspace.
 export CARGO_PROFILE_RELEASE_TRIM_PATHS=all
 
-echo "Tools: $(rustc "+$channel" --version); $(wasm-bindgen --version); $(wasm-opt --version);" \
-  "$(wasm-pack --version); $("$CC_wasm32_unknown_unknown" --version | head -n 1)"
+echo "Tools: $(cd "$SRC/crates/webzjs-wallet" && rustc --version) ($(cd "$SRC/crates/webzjs-wallet" && rustup show active-toolchain));" \
+  "$(wasm-bindgen --version); $(wasm-opt --version); $(wasm-pack --version); $("$CC_wasm32_unknown_unknown" --version | head -n 1)"
 
 build() {
   local crate="$1" features="$2"
@@ -224,3 +305,25 @@ self.onunhandledrejection = (e) => {
 JS
 
 echo "Built: $OUT/webzjs-wallet $OUT/webzjs-keys (wasm-bindgen $bindgen)"
+
+# The output against the committed list, computed as CI computes it.
+list="$ROOT/scripts/webzjs-vendor.sha256"
+built="${CARGO_TARGET_DIR:-$SRC/target}/webzjs-vendor.sha256"
+(cd "$OUT" && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum) > "$built"
+if [ ! -f "$list" ]; then
+  echo "note: no scripts/webzjs-vendor.sha256 to compare with; this build's list is $built"
+elif cmp -s "$list" "$built"; then
+  echo "vendor/ matches scripts/webzjs-vendor.sha256 ($(wc -l < "$built") files)."
+else
+  diff -u "$list" "$built" | cat -v >&2 || true
+  if [ "$(uname -s)-$(uname -m)" != "Linux-x86_64" ]; then
+    echo "warning: the output differs from scripts/webzjs-vendor.sha256, as expected off x86_64 Linux; it works, but it is not what CI ships" >&2
+  elif [ "${WEBZJS_LIST_MISMATCH:-}" = warn ]; then
+    echo "warning: the output differs from scripts/webzjs-vendor.sha256 (WEBZJS_LIST_MISMATCH=warn)" >&2
+  else
+    echo "error: the output differs from scripts/webzjs-vendor.sha256 (diff above). If you changed the build inputs on" \
+      "purpose, $built is the new list (CI decides, see .github/workflows/ci.yml); otherwise this vendor/ is not the" \
+      "pinned one: check clang (CI: Ubuntu 24.04's clang-18 1:18.1.3-1ubuntu1) and this machine's setup." >&2
+    exit 1
+  fi
+fi

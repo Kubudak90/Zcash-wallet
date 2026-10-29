@@ -108,6 +108,11 @@ jobs:
       RUST_TOOLCHAIN: nightly-2026-10-28
       WASM_BINDGEN_VERSION: 0.2.129
       CC_wasm32_unknown_unknown: clang-18
+      # The clang-18 package the list was built with: the wasm's producers section records
+      # "clang 18.1.3 (1ubuntu1)", so another build of the compiler changes vendor/. Checked
+      # before building, so a runner image update fails with this name, not a wasm diff.
+      CLANG_PACKAGE: clang-18
+      CLANG_PACKAGE_VERSION: 1:18.1.3-1ubuntu1
     defaults:
       run:
         shell: bash
@@ -189,17 +194,25 @@ jobs:
           rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --component rust-src --target wasm32-unknown-unknown
           rustc "+$RUST_TOOLCHAIN" --version
           "$CC_wasm32_unknown_unknown" --version
-          dpkg-query -W -f '${Package} ${Version}\n' clang-18
+          clang_version="$(dpkg-query -W -f '${Version}' "$CLANG_PACKAGE" 2>/dev/null || echo 'not installed')"
+          echo "$CLANG_PACKAGE $clang_version"
+          if [ "$clang_version" != "$CLANG_PACKAGE_VERSION" ]; then
+            echo "::error title=$CLANG_PACKAGE is not the pinned package::The runner has $CLANG_PACKAGE $clang_version, scripts/webzjs-vendor.sha256 was built with $CLANG_PACKAGE_VERSION. The wasm records the C compiler's version, so vendor/ would not match the list. If the runner image moved on, build with the new package, review the new list and update CLANG_PACKAGE_VERSION and the list together."
+            exit 1
+          fi
 
       # The script installs wasm-bindgen-cli $WASM_BINDGEN_VERSION with
       # cargo install --locked (crates.io checksums, its published lockfile)
       # and binaryen's wasm-opt from a checksum-verified download, and refuses
       # to run if the patched sources name another toolchain or wasm-bindgen.
+      # The script compares vendor/ with the list too; here the next step does that (and keeps
+      # the new list as an artifact), so a mismatch is only a warning in the script.
       - name: Build WebZjs wasm packages from source
         if: steps.cached.outputs.ok != 'true'
         env:
           WEBZJS_RUST_TOOLCHAIN: ${{ env.RUST_TOOLCHAIN }}
           WEBZJS_WASM_BINDGEN_VERSION: ${{ env.WASM_BINDGEN_VERSION }}
+          WEBZJS_LIST_MISMATCH: warn
         run: bash scripts/build-webzjs.sh
 
       - name: Check vendor/ against scripts/webzjs-vendor.sha256
@@ -252,7 +265,7 @@ jobs:
             exit 0
           fi
           cat -v "$RUNNER_TEMP/webzjs-vendor.diff"
-          echo "::error title=vendor/ does not match scripts/webzjs-vendor.sha256::The build from source produced different files (diff in the log and the job summary). If the build inputs changed on purpose, replace scripts/webzjs-vendor.sha256 with the artifact webzjs-vendor-sha256 of this run."
+          echo "::error title=vendor/ does not match scripts/webzjs-vendor.sha256::The build from source produced different files (diff in the log and the job summary). If the build inputs changed on purpose, replace scripts/webzjs-vendor.sha256 with the artifact webzjs-vendor-sha256 of this run. If they did not, look at the tools first: the Install Rust step checked the clang-18 package ($CLANG_PACKAGE_VERSION) and the build log's Tools line names the rest."
           {
             echo "### vendor/ does not match scripts/webzjs-vendor.sha256"
             echo
