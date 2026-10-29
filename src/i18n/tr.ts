@@ -73,6 +73,8 @@ export const tr = {
     'Önce şeffaf adresindeki ilk işlemi arayacağız. Bulamazsak Sapling’in başladığı 2018’den itibaren tararız; bu saatler sürebilir.',
   'restore.birthdayDetecting': 'İlk işlem aranıyor…',
   'restore.birthdayHeight': 'Eşitleme {height}. bloktan başlayacak.',
+  'restore.historyEnhancementHelp':
+    'Açıkken geri yüklemeden sonra Celari geçmiş işlemlerinin her birini sunucudan tam olarak ister (notlar, alıcılar ve ücretler); sunucu böylece hangi işlemlerin senin olduğunu öğrenir. Kapalıyken Geçmiş’te notlar görünmez ve geçmiş ödemeler yalnızca net tutarlarıyla görünür. Bunu daha sonra Ayarlar > Gizlilik’ten değiştirebilirsin.',
 
   'unlock.title': 'Cüzdanın kilitli',
   'unlock.button': 'Kilidi aç',

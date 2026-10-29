@@ -267,7 +267,10 @@ pass. Status checks and the bounded transparent spend searches are served either
 way: without them a send paid from transparent inputs only would count as
 unmined, and its inputs as unspent again after its expiry. The setting is the
 app's (saved with Celari's settings, not in the wallet) and is given to every
-`WebWallet` the adapter opens.
+`WebWallet` the adapter opens. A restore shows the same switch on its month step
+and saves the choice before the wallet is created, so a restore can begin with it
+off (before, the first request went out about 10 minutes into a mainnet restore,
+unless Settings was reached first).
 
 ### 23. The send refusals reach JavaScript with a stable code
 
