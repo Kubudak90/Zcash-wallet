@@ -1,9 +1,10 @@
 import { useRef, useState, type FormEvent, type ReactNode } from 'react';
 
 import { ErrorDetails, Notice, PasswordField, Spinner } from '../components/ui';
-import type { SendStage } from '../engine';
+import { SpendRefusedError, type SendStage } from '../engine';
 import { useI18n } from '../i18n';
 import { spendingDisabled } from '../lib/network';
+import { refusalText } from '../lib/spendRefusal';
 import { spendWait } from '../lib/spendWait';
 import { WrongPasswordError } from '../lib/vault';
 import { useWallet } from '../state/wallet';
@@ -72,11 +73,13 @@ export function SpendConfirm({
     }
   }
 
-  // Once broadcasting started the network may already have the transaction,
-  // so a retry could pay twice.
-  const maybeSent = error?.stage === 'broadcasting';
+  // Once broadcasting started the network may already have the transaction, so a retry
+  // could pay twice; unless the engine refused it before storing or sending anything.
+  const refusal = error?.cause instanceof SpendRefusedError ? error.cause.refusal : null;
+  const maybeSent = error?.stage === 'broadcasting' && !refusal;
   let hint: string | undefined;
-  if (error?.stage === 'building') hint = failureHint ?? t('send.failedRetry');
+  if (refusal) hint = refusalText(refusal, t, lang);
+  else if (error?.stage === 'building') hint = failureHint ?? t('send.failedRetry');
   else if (error?.stage) hint = t('send.failedRetry');
 
   let body: ReactNode;
@@ -139,8 +142,9 @@ export function SpendConfirm({
         {error && !(error.cause instanceof WrongPasswordError) && (
           <Notice tone="error">
             <strong>{t('send.failed')}</strong>
-            {hint && <p>{hint}</p>}
-            <ErrorDetails error={error.cause} />
+            {hint && <p data-testid="spend-failure">{hint}</p>}
+            {/* The engine's own text, in English, only where Celari has no line of its own for it. */}
+            {!refusal && <ErrorDetails error={error.cause} />}
           </Notice>
         )}
         <button type="submit" className="primary" disabled={password === '' || waitFor !== null}>

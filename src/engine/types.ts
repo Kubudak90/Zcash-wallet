@@ -175,6 +175,38 @@ export class EngineStoppedError extends Error {
   }
 }
 
+/** Why the engine refused a spend (SpendRefusedError). */
+export type SpendRefusal =
+  /** The spendable balance does not cover the payment: `requiredZats` (fee included) against `availableZats`. */
+  | { reason: 'insufficientFunds'; requiredZats: bigint; availableZats: bigint }
+  /**
+   * A network upgrade (`upgrade`, e.g. 'NU7') activates at `activationHeight`, `blocksLeft`
+   * blocks from the tip (null where the engine did not say): no
+   * transaction is built or sent from 10 blocks before it until its first block is mined
+   * (11 blocks, about 14 minutes), so that none is made for rules that end before it is mined.
+   */
+  | { reason: 'upgradePending'; activationHeight: number | null; blocksLeft: number | null; upgrade: string | null }
+  /** Built under the rules of the network before an upgrade that has activated since; build it again. */
+  | { reason: 'wrongBranch' }
+  /** It would expire before it could be mined; build it again. */
+  | { reason: 'expired' };
+
+/**
+ * The engine refused a spend before storing or broadcasting anything: nothing left the
+ * wallet and none of its funds is spent or held back, whichever stage the spend had reached
+ * (WebZjs checks the branch and the expiry in pczt_send, before it stores the transaction).
+ * Trying again builds a new transaction.
+ */
+export class SpendRefusedError extends Error {
+  readonly refusal: SpendRefusal;
+  constructor(refusal: SpendRefusal, options?: { cause?: unknown }) {
+    const message = options?.cause instanceof Error ? options.cause.message : `the engine refused the spend: ${refusal.reason}`;
+    super(message, options);
+    this.name = 'SpendRefusedError';
+    this.refusal = refusal;
+  }
+}
+
 export interface ZcashEngine {
   /** Loads the wasm runtime and connects to the lightwalletd proxy. Call once per page. */
   init(serverUrl: string): Promise<void>;
