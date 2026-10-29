@@ -1,7 +1,7 @@
 WebZjs against the 2026-10 cohort: Ironwood (NU6.3) and NU7
 
 Applies on top of 0003-librustzcash-2026-10.patch. Generated from the engine-port
-working tree at 88ccb43 (make-celari-files.sh).
+working tree at 110753d (make-celari-files.sh).
 
 - webzjs-common: Pczt (de)serialisation returns errors instead of panicking; byte
   arrays deserialise from a Uint8Array too.
@@ -21,7 +21,7 @@ working tree at 88ccb43 (make-celari-files.sh).
   sync_progress() also reports the Sapling outputs, Orchard actions and Ironwood actions
   of the blocks the scanner trial-decrypted in the pass, and the Ironwood tree sizes
   before and after them.
-- Review round 3 (PORT-NOTES Decisions 6-10): the history decides whether a send's outputs
+- Review round 3 (docs/engine-port.md Decisions 6-10): the history decides whether a send's outputs
   are known from the stored full transaction (a rescanned payment no longer reads as an
   internal transfer); NU7 boundary rules (sync before building across an epoch change or
   near an activation height, no build for the last 10 blocks of an epoch, pczt_send
@@ -34,13 +34,32 @@ working tree at 88ccb43 (make-celari-files.sh).
   without a transparent receiver, recorded in the wallet, while get_current_address keeps
   the full address. Native tests in webzjs-wallet/src/tests (mock lightwalletd, captured
   mainnet data from ../engine/zcash_client_memory/testdata).
-- Review round 5 (PORT-NOTES Decisions 7 and 9 amended, 15, 17): a GetStatus answer counts only if it is the
+- Review round 5 (docs/engine-port.md Decisions 7 and 9 amended, 15, 17): a GetStatus answer counts only if it is the
   requested transaction; pczt_send reads the network tip again once it holds the
   database; nothing is built or sent for an upgrade's activation block itself; a sync
   batch is bounded by the bytes of its compact blocks (32 MiB, a download beyond 64 MiB is
   abandoned and continued in smaller batches; sync_progress() reports batch_blocks,
   batches_abandoned, largest_batch_bytes), so restores across the 2022-2023 spam era no
   longer exhaust wasm memory; db_to_bytes returns a buffer of exactly the wallet's size.
+- Round 6 (docs/engine-port.md Decisions 21-23): sync_progress() reports what is left to scan,
+  without waiting for a running pass: unscanned_blocks (the blocks of the suggested scan
+  ranges, up to wallet_tip), as the wallet database reports them after each write
+  (zcash_client_memory's scan queue observer: at the wallet's opening, a pass's chain tip
+  update and every batch commit), with unscanned_visited; ended_early is set exactly while
+  blocks are left. set_history_enhancement(false) stops fetching the wallet's own
+  transactions (status checks and transparent spend searches go on);
+  set_status_check_seconds (default 300) spaces out the status checks of a pending
+  transaction; sync_progress().data_requests_skipped. The send refusals UpgradePending,
+  PcztWrongBranch and PcztExpired reach JavaScript with a stable code: the message starts
+  with "<code>: " and the Error carries code and the numbers as properties.
+- Round 7 (docs/engine-port.md Decision 24, finding M4: the browser's renderer memory grew by
+  several KiB per block a restore downloaded, until a reload): no tracing-web performance
+  layer (it wrote a performance.mark() and performance.measure() for every span entered,
+  two INFO spans per scanned block, which the browser keeps until the page unloads; the
+  console layer stays), and every sync() pass runs as a task on one sync worker that the
+  first call starts (a new wasm_thread worker per call was never closed: with
+  keep_worker_alive each left its Web Worker and ~2 MiB of wasm memory, its stack and TLS,
+  behind, once per sync() call).
 
 diff --git a/crates/webzjs-common/src/error.rs b/crates/webzjs-common/src/error.rs
 index ab8e5c1..7b09e7a 100644
@@ -355,15 +374,105 @@ index 68b6da7..0271b96 100644
      }
  
 diff --git a/crates/webzjs-wallet/src/bindgen/mod.rs b/crates/webzjs-wallet/src/bindgen/mod.rs
-index cbd27e2..94efd63 100644
+index cbd27e2..6ff4805 100644
 --- a/crates/webzjs-wallet/src/bindgen/mod.rs
 +++ b/crates/webzjs-wallet/src/bindgen/mod.rs
-@@ -1,3 +1,5 @@
+@@ -1,3 +1,7 @@
 +#[cfg(feature = "wasm")]
  pub mod proposal;
++#[cfg(feature = "wasm")]
++mod sync_worker;
  pub mod transaction_history;
 +#[cfg(feature = "wasm")]
  pub mod wallet;
+diff --git a/crates/webzjs-wallet/src/bindgen/sync_worker.rs b/crates/webzjs-wallet/src/bindgen/sync_worker.rs
+new file mode 100644
+index 0000000..52d3fe3
+--- /dev/null
++++ b/crates/webzjs-wallet/src/bindgen/sync_worker.rs
+@@ -0,0 +1,82 @@
++//! The one Web Worker every `WebWallet::sync` pass runs on.
++//!
++//! Celari (finding M4): `sync` used to start a new wasm_thread worker for every call.
++//! wasm_thread, with the `keep_worker_alive` feature this crate enables, never closes a
++//! worker it started, and wasm-bindgen gives every new thread its own stack and TLS in the
++//! shared wasm memory, which nothing frees. So each pass left a Web Worker (its JS heap, its
++//! performance timeline) and about 2 MiB of wasm memory behind, until the page unloaded;
++//! Celari calls `sync` every 30 s once the wallet is up to date.
++//!
++//! Now the first `sync` starts one worker and every pass, that one and the later ones, is a
++//! task on that worker's event loop. The worker lives as long as the page, as each of the
++//! old per-call workers did.
++
++use std::cell::RefCell;
++use std::future::Future;
++use std::pin::Pin;
++
++use tokio::sync::{mpsc, oneshot};
++use wasm_thread as thread;
++
++type Job = Box<dyn FnOnce() -> Pin<Box<dyn Future<Output = ()>>> + Send>;
++
++thread_local! {
++    // Only the main thread starts passes (`WebWallet::sync` asserts it), so the queue to the
++    // worker lives in a main-thread local.
++    static QUEUE: RefCell<Option<mpsc::UnboundedSender<Job>>> = const { RefCell::new(None) };
++}
++
++fn start() -> Result<mpsc::UnboundedSender<Job>, String> {
++    let (tx, mut rx) = mpsc::unbounded_channel::<Job>();
++    // The join handle is dropped: the worker runs until the page unloads.
++    thread::Builder::new()
++        .name("sync".to_string())
++        .spawn_async(move || async move {
++            while let Some(job) = rx.recv().await {
++                // Each pass is a task of its own, as it was on a worker of its own: a call made
++                // while a pass runs is not held back until that pass ends.
++                wasm_bindgen_futures::spawn_local(job());
++            }
++        })
++        .map_err(|e| format!("could not start the sync worker: {e}"))?;
++    Ok(tx)
++}
++
++/// Runs the future `f()` returns on the sync worker (starting the worker on first use) and
++/// returns its output. Fails if the worker cannot be started, or if it dropped the task
++/// without finishing it. If the wasm traps on the worker, the pass never settles, as it did
++/// on a worker of its own; Celari's engine adapter reports the trap (`EngineStoppedError`)
++/// and runs nothing more until a reload.
++pub async fn run<F, Fut, T>(f: F) -> Result<T, String>
++where
++    F: FnOnce() -> Fut + Send + 'static,
++    Fut: Future<Output = T> + 'static,
++    T: Send + 'static,
++{
++    let (done_tx, done_rx) = oneshot::channel();
++    let mut job: Job = Box::new(move || {
++        Box::pin(async move {
++            // The caller may have stopped waiting; then the output has nowhere to go.
++            let _ = done_tx.send(f().await);
++        })
++    });
++    // A queue whose worker is gone (its receiver dropped) is replaced, once.
++    for _ in 0..2 {
++        let tx = QUEUE.with(|q| -> Result<_, String> {
++            let mut q = q.borrow_mut();
++            if q.as_ref().map_or(true, |tx| tx.is_closed()) {
++                *q = Some(start()?);
++            }
++            Ok(q.as_ref().expect("set just above").clone())
++        })?;
++        match tx.send(job) {
++            Ok(()) => {
++                return done_rx.await.map_err(|_| {
++                    "the sync worker dropped the pass without finishing it".to_string()
++                })
++            }
++            Err(mpsc::error::SendError(returned)) => job = returned,
++        }
++    }
++    Err("the sync worker is gone".to_string())
++}
 diff --git a/crates/webzjs-wallet/src/bindgen/transaction_history.rs b/crates/webzjs-wallet/src/bindgen/transaction_history.rs
 index a6c6029..81c54f5 100644
 --- a/crates/webzjs-wallet/src/bindgen/transaction_history.rs
@@ -807,7 +916,7 @@ index a6c6029..81c54f5 100644
      Ok(TransactionHistoryResponse {
          transactions: paginated,
 diff --git a/crates/webzjs-wallet/src/bindgen/wallet.rs b/crates/webzjs-wallet/src/bindgen/wallet.rs
-index b2df592..d2aab6e 100644
+index b2df592..ad41bda 100644
 --- a/crates/webzjs-wallet/src/bindgen/wallet.rs
 +++ b/crates/webzjs-wallet/src/bindgen/wallet.rs
 @@ -22,7 +22,7 @@ use zcash_client_backend::proto::service::{
@@ -837,19 +946,75 @@ index b2df592..d2aab6e 100644
  
          self.inner
              .import_ufvk(
-@@ -271,6 +271,11 @@ impl WebWallet {
-     /// IMPORTANT: This will spawn a new webworker which will handle the sync task. The sync task will continue to run in the background until the sync process is complete.
-     /// During this time the main thread will not block but certain wallet methods may temporarily block while the wallet is being written to during the sync.
+@@ -268,44 +268,36 @@ impl WebWallet {
      ///
+     /// Start a background sync task which will fetch and scan blocks from the connected lighwalletd server
+     ///
+-    /// IMPORTANT: This will spawn a new webworker which will handle the sync task. The sync task will continue to run in the background until the sync process is complete.
+-    /// During this time the main thread will not block but certain wallet methods may temporarily block while the wallet is being written to during the sync.
++    /// IMPORTANT: The pass runs in a Web Worker, the sync worker, which the first call starts
++    /// and every later call reuses (Celari, finding M4: a new worker per call was never
++    /// closed). During this time the main thread will not block, but certain wallet methods
++    /// may temporarily block while the wallet is being written to during the sync.
++    ///
 +    /// A pass ends early, successfully, at a batch boundary once its time budget has run out
 +    /// (`set_sync_pass_seconds`, default 300 s): `sync_progress().ended_early` is then true and
 +    /// blocks are left to scan; save the wallet and call `sync` again. After scanning, the
 +    /// pass fetches the full transactions the wallet asks for (`pending_data_requests`).
-+    ///
+     ///
      pub async fn sync(&self) -> Result<(), Error> {
          assert!(!thread::is_web_worker_thread());
  
-@@ -318,7 +323,21 @@ impl WebWallet {
+         let db = self.inner.clone();
+ 
+-        let sync_handler = thread::Builder::new()
+-            .name("sync".to_string())
+-            .spawn_async(|| async {
+-                assert!(thread::is_web_worker_thread());
+-                tracing::debug!(
+-                    "Current num threads (wasm_thread) {}",
+-                    rayon::current_num_threads()
+-                );
+-
+-                let db = db;
+-                // Convert error to String since Error isn't Send (contains JsValue)
+-                db.sync().await.map_err(|e| e.to_string())
+-            })
+-            .unwrap_throw()
+-            .join_async();
++        let result = super::sync_worker::run(move || async move {
++            assert!(thread::is_web_worker_thread());
++            // Convert error to String since Error isn't Send (contains JsValue)
++            db.sync().await.map_err(|e| e.to_string())
++        })
++        .await
++        .map_err(|msg| {
++            tracing::error!("{}", msg);
++            Error::Sync(msg)
++        })?;
+ 
+-        // sync_handler.await returns Result<Result<(), String>, Box<dyn Any + Send>>
+-        // The outer Result is for the join (thread panics), inner is sync result
+-        match sync_handler.await {
+-            Ok(Ok(())) => Ok(()),
+-            Ok(Err(err_string)) => {
+-                tracing::warn!("Sync error (will be retried by caller): {}", err_string);
+-                Err(Error::Sync(err_string))
+-            }
+-            Err(panic_error) => {
+-                let msg = format!("Sync thread panicked: {:?}", panic_error);
+-                tracing::error!("{}", msg);
+-                Err(Error::Sync(msg))
+-            }
+-        }
++        result.map_err(|err_string| {
++            tracing::warn!("Sync error (will be retried by caller): {}", err_string);
++            Error::Sync(err_string)
++        })
+     }
+ 
+     pub async fn get_wallet_summary(&self) -> Result<Option<WalletSummary>, Error> {
+@@ -318,7 +310,37 @@ impl WebWallet {
      /// answers immediately while a sync pass is running. Counts are blocks in this pass:
      /// `downloaded` (fetched from lightwalletd), `visited` (handed to the scanner, i.e.
      /// trial decryption started), `scanned` (batch scanned and committed). `scanned_to`
@@ -861,10 +1026,26 @@ index b2df592..d2aab6e 100644
 +    /// contiguous run of blocks `ironwood_actions == ironwood_tree_end - ironwood_tree_start`.
 +    ///
 +    /// When the pass ends, `ended_early` says that it stopped at its time budget
-+    /// (`set_sync_pass_seconds`) with blocks left to scan, and `data_requests`,
-+    /// `data_requests_served`, `data_requests_failed` count the transaction data requests it
-+    /// served from lightwalletd after scanning (memos, outgoing outputs and fees of the
-+    /// transactions it found, their mined status, spends of transparent outputs).
++    /// (`set_sync_pass_seconds`) with blocks left to scan: call `sync` again at once (after
++    /// saving). It is set by the time `sync` resolves, and `ended_early` implies
++    /// `unscanned_blocks > 0`. `data_requests`, `data_requests_served`,
++    /// `data_requests_failed` count the transaction data requests it served from lightwalletd
++    /// after scanning (memos, outgoing outputs and fees of the transactions it found, their
++    /// mined status, spends of transparent outputs); `data_requests_skipped` those it left for
++    /// later by the wallet's settings (`set_history_enhancement`, `set_status_check_seconds`).
++    ///
++    /// What is left to scan, whether or not a pass is running: `unscanned_blocks` is the
++    /// number of blocks the wallet's scan queue still holds (the suggested scan ranges'
++    /// lengths, summed, up to `wallet_tip`), as of the last time the wallet database reported
++    /// it: when the wallet was made (also from saved bytes), at the start of a pass, after the
++    /// pass's chain tip update, and after every batch it committed. A pass scans the newest
++    /// ranges first, so `unscanned_blocks` counts down across passes where the fully scanned
++    /// height stays put. `wallet_tip` is the wallet's chain tip that bounds it (the tip the last
++    /// pass learned; birthday - 1 before a new or restored account's first pass; 0 without an
++    /// account), and `unscanned_visited` the pass's `visited` count at that report, so that
++    /// `max(0, visited - unscanned_visited)` blocks of the running batch have been reached by
++    /// the scanner since. Blocks left, from what the app knows:
++    /// `max(0, unscanned_blocks - max(0, visited - unscanned_visited)) + max(0, network_tip - wallet_tip)`.
 +    /// `batch_blocks` is the batch size in use (it follows the size of the compact blocks, so
 +    /// that one batch stays near 32 MiB), `batches_abandoned` counts batch downloads given up
 +    /// for being too large (then continued in smaller batches) and `largest_batch_bytes` is
@@ -872,7 +1053,7 @@ index b2df592..d2aab6e 100644
      pub fn sync_progress(&self) -> SyncProgress {
          let s = self.inner.sync_progress();
          SyncProgress {
-@@ -328,9 +347,37 @@ impl WebWallet {
+@@ -328,9 +350,62 @@ impl WebWallet {
              revisited: s.revisited,
              scanned: s.scanned,
              scanned_to: s.scanned_to,
@@ -885,6 +1066,10 @@ index b2df592..d2aab6e 100644
 +            data_requests: s.data_requests,
 +            data_requests_served: s.data_requests_served,
 +            data_requests_failed: s.data_requests_failed,
++            data_requests_skipped: s.data_requests_skipped,
++            unscanned_blocks: s.unscanned_blocks,
++            wallet_tip: s.wallet_tip,
++            unscanned_visited: s.unscanned_visited,
 +            batch_blocks: s.batch_blocks,
 +            batches_abandoned: s.batches_abandoned,
 +            largest_batch_bytes: s.largest_batch_bytes,
@@ -901,16 +1086,37 @@ index b2df592..d2aab6e 100644
 +        self.inner.set_sync_pass_ms(u64::from(seconds) * 1000);
 +    }
 +
-+    /// The wallet's open transaction data requests that `sync` serves after each pass
-+    /// (0 once a restored wallet has fetched everything it needs).
++    /// The wallet's open transaction data requests that `sync` serves after each pass with
++    /// the wallet's settings (0 once a restored wallet has fetched everything it needs). While
++    /// history enhancement is off, the requests for full transactions are not counted; a
++    /// status check waiting for its interval is.
 +    pub async fn pending_data_requests(&self) -> Result<u32, Error> {
 +        Ok(self.inner.pending_data_requests().await?.0)
++    }
++
++    /// Whether `sync` fetches the full data of the wallet's own transactions from
++    /// lightwalletd (`GetTransaction`): the memos of received notes and, after a restore, the
++    /// recipients, amounts, memos and fees of past sends. Default `true`. With `false` the
++    /// server is not asked about them (it then cannot tell from these requests which
++    /// transactions are the wallet's); what they would restore stays missing, and they are
++    /// fetched once it is `true` again. Status checks of pending sends and searches for spends
++    /// of the wallet's transparent outputs go on either way. Not saved with the wallet: set it
++    /// after creating the `WebWallet`.
++    pub fn set_history_enhancement(&self, enabled: bool) {
++        self.inner.set_history_enhancement(enabled);
++    }
++
++    /// The least time between two status checks (`GetTransaction`) of one pending
++    /// transaction, in seconds (default 300); 0 checks after every pass. A transaction mined
++    /// in a scanned block needs no check. Not saved with the wallet.
++    pub fn set_status_check_seconds(&self, seconds: u32) {
++        self.inner.set_status_check_ms(u64::from(seconds) * 1000);
 +    }
 +
      /// Create a new transaction proposal to send funds to a given address
      ///
      /// Not this does NOT sign, generate a proof, or send the transaction. It will only craft the proposal which designates how notes from this account can be spent to realize the requested transfer.
-@@ -407,17 +454,17 @@ impl WebWallet {
+@@ -407,17 +482,17 @@ impl WebWallet {
                  );
  
                  let db = db;
@@ -935,7 +1141,7 @@ index b2df592..d2aab6e 100644
  
          let flattened_txid_bytes = txids.iter().flat_map(|&x| x.as_ref().clone()).collect();
          Ok(flattened_txid_bytes)
-@@ -471,17 +518,25 @@ impl WebWallet {
+@@ -471,17 +546,25 @@ impl WebWallet {
      /// * `account_id` - The ID of the account to get the address for
      ///
      pub async fn get_current_address(&self, account_id: u32) -> Result<String, Error> {
@@ -969,7 +1175,24 @@ index b2df592..d2aab6e 100644
      /// Create a Shielding PCZT (Partially Constructed Zcash Transaction).
      ///
      /// A Proposal for shielding funds is created and the the PCZT is constructed for it
-@@ -568,12 +623,11 @@ impl WebWallet {
+@@ -551,6 +634,16 @@ impl WebWallet {
+             .map(Into::into)
+     }
+ 
++    /// Stores the signed and proven transaction in the wallet and broadcasts it.
++    ///
++    /// Refused before anything is stored or broadcast, with an error whose `code` property
++    /// (and the start of its message, `"<code>: "`) is `"PcztWrongBranch"` (built for another
++    /// consensus branch than the next block's: a network upgrade activated; fields
++    /// `pczt_branch`, `network_branch`, `next_height`), `"PcztExpired"` (expires at or below the
++    /// network tip + 3; `expiry_height`, `network_tip`) or `"UpgradePending"` (the last 10
++    /// blocks before an upgrade, and its first block; `activation_height`, `blocks_left`,
++    /// `branch`). Create the transaction again. `pczt_create` and `pczt_shield` refuse to build
++    /// in the same blocks with `"UpgradePending"`.
+     pub async fn pczt_send(&self, pczt: Pczt) -> Result<(), Error> {
+         self.inner.pczt_send(pczt.into()).await
+     }
+@@ -568,12 +661,11 @@ impl WebWallet {
      /// * `account_id` - The ID of the account to get the address for
      ///
      pub async fn get_current_address_transparent(&self, account_id: u32) -> Result<String, Error> {
@@ -987,7 +1210,7 @@ index b2df592..d2aab6e 100644
          } else {
              Err(Error::AccountNotFound(account_id))
          }
-@@ -701,6 +755,18 @@ pub struct SyncProgress {
+@@ -701,6 +793,22 @@ pub struct SyncProgress {
      pub revisited: u32,
      pub scanned: u32,
      pub scanned_to: u32,
@@ -1000,13 +1223,17 @@ index b2df592..d2aab6e 100644
 +    pub data_requests: u32,
 +    pub data_requests_served: u32,
 +    pub data_requests_failed: u32,
++    pub data_requests_skipped: u32,
++    pub unscanned_blocks: u32,
++    pub wallet_tip: u32,
++    pub unscanned_visited: u32,
 +    pub batch_blocks: u32,
 +    pub batches_abandoned: u32,
 +    pub largest_batch_bytes: u32,
  }
  
  #[derive(Debug, Serialize, Deserialize)]
-@@ -712,6 +778,7 @@ pub struct WalletSummary {
+@@ -712,6 +820,7 @@ pub struct WalletSummary {
      // scan_progress: Option<Ratio<u64>>,
      pub next_sapling_subtree_index: u64,
      pub next_orchard_subtree_index: u64,
@@ -1014,7 +1241,7 @@ index b2df592..d2aab6e 100644
  }
  
  #[wasm_bindgen]
-@@ -722,15 +789,23 @@ impl WalletSummary {
+@@ -722,15 +831,23 @@ impl WalletSummary {
      }
  }
  
@@ -1040,7 +1267,7 @@ index b2df592..d2aab6e 100644
  }
  
  impl From<zcash_client_backend::data_api::AccountBalance> for AccountBalance {
-@@ -738,9 +813,12 @@ impl From<zcash_client_backend::data_api::AccountBalance> for AccountBalance {
+@@ -738,9 +855,12 @@ impl From<zcash_client_backend::data_api::AccountBalance> for AccountBalance {
          AccountBalance {
              sapling_balance: balance.sapling_balance().spendable_value().into(),
              orchard_balance: balance.orchard_balance().spendable_value().into(),
@@ -1053,7 +1280,7 @@ index b2df592..d2aab6e 100644
          }
      }
  }
-@@ -764,6 +842,7 @@ where
+@@ -764,6 +884,7 @@ where
              fully_scanned_height: summary.fully_scanned_height().into(),
              next_sapling_subtree_index: summary.next_sapling_subtree_index(),
              next_orchard_subtree_index: summary.next_orchard_subtree_index(),
@@ -1204,10 +1431,10 @@ index 0000000..bb50b9d
 +}
 diff --git a/crates/webzjs-wallet/src/data_requests.rs b/crates/webzjs-wallet/src/data_requests.rs
 new file mode 100644
-index 0000000..51b83dc
+index 0000000..d8671f9
 --- /dev/null
 +++ b/crates/webzjs-wallet/src/data_requests.rs
-@@ -0,0 +1,329 @@
+@@ -0,0 +1,453 @@
 +//! Serving the wallet's transaction data requests after each sync pass (review finding R4).
 +//!
 +//! Compact blocks carry no memos, no outgoing outputs and no transparent data. The backend
@@ -1222,13 +1449,22 @@ index 0000000..51b83dc
 +//! `decrypt_and_store_transaction` or `set_transaction_status`, `GetTaddressTxids` ->
 +//! `decrypt_and_store_transaction` then `notify_address_checked`.
 +//!
-+//! Privacy (PORT-NOTES Decision 9): serving these requests tells lightwalletd which
++//! Privacy (Decision 9 in docs/engine-port.md): serving these requests tells lightwalletd which
 +//! transactions belong to this client. After a restore it receives `GetTransaction` for every
-+//! transaction scanning attributed to the wallet, and `GetStatus` is repeated every pass for
-+//! each send it waits for. This is the standard light-client model (zcash-devtool, the mobile
-+//! SDKs); compact-block scanning alone reveals nothing of the kind.
++//! transaction scanning attributed to the wallet, and `GetStatus` (also a `GetTransaction`)
++//! for each send it waits for. This is the standard light-client model (zcash-devtool, the
++//! mobile SDKs); compact-block scanning alone reveals nothing of the kind. Two settings
++//! ([`ServePolicy`], verifier finding V-6) reduce it: history enhancement can be turned off
++//! (no `GetTransaction` for the wallet's own transactions: the `Enhancement` requests stay
++//! queued, unserved; memos, and after a restore the recipients and fees of past sends, are then
++//! missing), and the status of one transaction is asked for at most once per interval (default
++//! 5 minutes) instead of after every pass (every 30 s in Celari). Status checks and the spend
++//! searches for the wallet's transparent outputs are served either way: without them a send
++//! that scanning cannot see mined (one paid from transparent inputs only) would count as
++//! unmined, and once past its expiry height its inputs as unspent again, and transparent spends
++//! made elsewhere would go unseen.
 +//!
-+//! Not served (counted as deferred, see PORT-NOTES "Deferred"): `TransactionsInvolvingAddress`
++//! Not served (deferred; docs/engine-port.md, "Deferred"): `TransactionsInvolvingAddress`
 +//! requests without an end height. The backend emits them for every ephemeral (ZIP 320)
 +//! address of the account, gap addresses included, with the whole chain as range; sqlite
 +//! wallets space them out at randomized times (`schedule_next_check`, which this backend does
@@ -1243,7 +1479,9 @@ index 0000000..51b83dc
 +//! same seed; Celari builds no multi-step proposals) stays unspendable in Celari: not lost, a
 +//! wallet that serves these checks recovers it (verifier finding V-5).
 +
++use std::collections::HashMap;
 +use std::future::Future;
++use std::sync::atomic::{AtomicBool, AtomicU64, Ordering::Relaxed};
 +
 +use tonic::client::GrpcService;
 +use tonic::codegen::{Body, Bytes, StdError};
@@ -1257,6 +1495,66 @@ index 0000000..51b83dc
 +/// Requests served per pass at most; the rest are served by the next passes (the backend asks
 +/// again for whatever is still missing).
 +pub const MAX_REQUESTS_PER_PASS: usize = 200;
++
++/// The default least time between two `GetStatus` of one transaction: 5 minutes (V-6).
++pub const DEFAULT_STATUS_INTERVAL_MS: u64 = 5 * 60 * 1000;
++
++/// Which of the wallet's transaction data requests a pass serves, and how often (V-6, see the
++/// module docs). Shared by the clones of a `Wallet`; the wallet's settings, not persisted.
++#[derive(Debug)]
++pub struct ServePolicy {
++    /// Serve `Enhancement`: fetch the full data of the wallet's own transactions.
++    enhance: AtomicBool,
++    /// The least time between two `GetStatus` of one transaction, in milliseconds (0: every
++    /// round).
++    status_interval_ms: AtomicU64,
++    /// When `GetStatus` last went out for each transaction still waiting for one (ms, the
++    /// clock the serving round is given).
++    status_asked: wasm_sync::Mutex<HashMap<TxId, f64>>,
++}
++
++impl Default for ServePolicy {
++    /// History enhancement on, status checks at most every [`DEFAULT_STATUS_INTERVAL_MS`].
++    fn default() -> Self {
++        Self::new(true, DEFAULT_STATUS_INTERVAL_MS)
++    }
++}
++
++impl ServePolicy {
++    pub fn new(enhance: bool, status_interval_ms: u64) -> Self {
++        Self {
++            enhance: AtomicBool::new(enhance),
++            status_interval_ms: AtomicU64::new(status_interval_ms),
++            status_asked: wasm_sync::Mutex::new(HashMap::new()),
++        }
++    }
++
++    /// Everything, every round (what `serve_transaction_data_requests` serves).
++    pub fn every_round() -> Self {
++        Self::new(true, 0)
++    }
++
++    pub fn set_enhance(&self, enhance: bool) {
++        self.enhance.store(enhance, Relaxed);
++    }
++
++    pub fn enhance(&self) -> bool {
++        self.enhance.load(Relaxed)
++    }
++
++    pub fn set_status_interval_ms(&self, ms: u64) {
++        self.status_interval_ms.store(ms, Relaxed);
++    }
++
++    pub fn status_interval_ms(&self) -> u64 {
++        self.status_interval_ms.load(Relaxed)
++    }
++
++    /// Whether this policy ever serves `request` (a throttled status check is served later).
++    pub fn serves(&self, request: &TransactionDataRequest) -> bool {
++        is_served(request) && (self.enhance() || !matches!(request, TransactionDataRequest::Enhancement(_)))
++    }
++}
 +
 +/// `RawTransaction.height` of a transaction the server knows but that is mined on a fork, not
 +/// in the main chain (lightwalletd maps zcashd's -1 to this). Height 0 means "in the mempool".
@@ -1328,6 +1626,9 @@ index 0000000..51b83dc
 +    pub served: u32,
 +    /// Of those, the requests that failed (left for the next pass).
 +    pub failed: u32,
++    /// Of those, the requests left for later by the [`ServePolicy`]: `Enhancement` while it is
++    /// off, `GetStatus` asked for less than the interval ago.
++    pub skipped: u32,
 +    /// Requests of a kind this glue does not serve (see the module docs).
 +    pub deferred: u32,
 +}
@@ -1353,17 +1654,38 @@ index 0000000..51b83dc
 +    Wallet(E),
 +}
 +
-+/// Serves the backend's transaction data requests from `source`, at most `max_requests`.
-+///
-+/// Never fails: a request that cannot be served stays in the backend's queue for the next
-+/// pass, and a server error ends the round. The caller's sync pass has already committed its
-+/// blocks, and a failed round must not turn it into a failed pass (Celari saves the wallet only
-+/// after a pass that succeeds).
++/// Serves the backend's transaction data requests from `source`, at most `max_requests`, all of
++/// them every round ([`ServePolicy::every_round`]).
 +pub async fn serve_transaction_data_requests<P, DbT, S>(
 +    params: &P,
 +    db: &mut DbT,
 +    source: &mut S,
 +    max_requests: usize,
++) -> ServeReport
++where
++    P: Parameters,
++    DbT: WalletWrite,
++    <DbT as WalletRead>::Error: std::fmt::Display,
++    S: TxDataSource,
++{
++    serve_transaction_data_requests_with(params, db, source, max_requests, &ServePolicy::every_round(), 0.0).await
++}
++
++/// Serves the backend's transaction data requests from `source` as `policy` allows, at most
++/// `max_requests`; `now_ms` is the time of this round on the clock `policy`'s status interval
++/// is measured with.
++///
++/// Never fails: a request that cannot be served stays in the backend's queue for the next
++/// pass, and a server error ends the round. The caller's sync pass has already committed its
++/// blocks, and a failed round must not turn it into a failed pass (Celari saves the wallet only
++/// after a pass that succeeds).
++pub async fn serve_transaction_data_requests_with<P, DbT, S>(
++    params: &P,
++    db: &mut DbT,
++    source: &mut S,
++    max_requests: usize,
++    policy: &ServePolicy,
++    now_ms: f64,
 +) -> ServeReport
 +where
 +    P: Parameters,
@@ -1393,7 +1715,35 @@ index 0000000..51b83dc
 +    // Transactions first (they also answer the status of what they find), then the address
 +    // searches.
 +    served.sort_by_key(|r| matches!(r, TransactionDataRequest::TransactionsInvolvingAddress(_)));
-+    for request in served.into_iter().take(max_requests) {
++    // When each waiting transaction's status was last asked for. Taken out of the policy for
++    // the round (no lock is held across the requests); only the transactions still waiting
++    // are kept.
++    let mut asked = std::mem::take(&mut *policy.status_asked.lock().unwrap_or_else(|e| e.into_inner()));
++    asked.retain(|txid, _| served.contains(&TransactionDataRequest::GetStatus(*txid)));
++    let (enhance, interval_ms) = (policy.enhance(), policy.status_interval_ms() as f64);
++    let mut attempted = 0;
++    for request in served {
++        let skip = match &request {
++            TransactionDataRequest::Enhancement(_) => !enhance,
++            // Asked less than the interval ago. (A clock set back makes `since` negative: the
++            // check then goes out, rather than waiting for the clock to catch up.)
++            TransactionDataRequest::GetStatus(txid) => asked.get(txid).is_some_and(|last| {
++                let since = now_ms - last;
++                (0.0..interval_ms).contains(&since)
++            }),
++            _ => false,
++        };
++        if skip {
++            report.skipped += 1;
++            continue;
++        }
++        if attempted == max_requests {
++            break;
++        }
++        attempted += 1;
++        if let TransactionDataRequest::GetStatus(txid) = &request {
++            asked.insert(*txid, now_ms);
++        }
 +        match serve_one(params, db, source, &request, chain_tip).await {
 +            Ok(()) => report.served += 1,
 +            Err(ServeError::Server(status)) => {
@@ -1411,6 +1761,7 @@ index 0000000..51b83dc
 +            }
 +        }
 +    }
++    *policy.status_asked.lock().unwrap_or_else(|e| e.into_inner()) = asked;
 +    tracing::info!("transaction data requests: {report:?}");
 +    report
 +}
@@ -1538,30 +1889,122 @@ index 0000000..51b83dc
 +    }
 +}
 diff --git a/crates/webzjs-wallet/src/error.rs b/crates/webzjs-wallet/src/error.rs
-index f3bc8b3..048ce3b 100644
+index f3bc8b3..609ce7e 100644
 --- a/crates/webzjs-wallet/src/error.rs
 +++ b/crates/webzjs-wallet/src/error.rs
-@@ -90,6 +90,20 @@ pub enum Error {
+@@ -90,14 +90,74 @@ pub enum Error {
      PcztSend(String),
      #[error("Failed to combine Pczt: {0}")]
      PcztCombine(String),
-+    #[error("Network upgrade at height {activation_height} in {blocks_left} blocks: no transaction is built or sent from 10 blocks before an upgrade until the upgrade's first block is mined, so that none is made for a consensus branch ({branch:#010x}) it could then never be mined in. Try again after the upgrade.")]
++    // The three refusals below reach JavaScript with a stable code (`Error::code`): the message
++    // starts with it and a colon, and the JS error carries it as `code` with the fields as
++    // numbers (`From<Error> for JsValue`). Each is raised before anything is stored or
++    // broadcast.
++    #[error("UpgradePending: Network upgrade at height {activation_height} in {blocks_left} blocks: no transaction is built or sent from 10 blocks before an upgrade until the upgrade's first block is mined, so that none is made for a consensus branch ({branch:#010x}) it could then never be mined in. Try again after the upgrade.")]
 +    UpgradePending {
 +        activation_height: u32,
 +        blocks_left: u32,
 +        branch: u32,
 +    },
-+    #[error("Refusing to send: the transaction was built for consensus branch {pczt_branch:#010x}, but the next block ({next_height}) is in branch {network_branch:#010x} (a network upgrade activated). Create the transaction again.")]
++    #[error("PcztWrongBranch: Refusing to send: the transaction was built for consensus branch {pczt_branch:#010x}, but the next block ({next_height}) is in branch {network_branch:#010x} (a network upgrade activated). Create the transaction again.")]
 +    PcztWrongBranch {
 +        pczt_branch: u32,
 +        network_branch: u32,
 +        next_height: u32,
 +    },
-+    #[error("Refusing to send: the transaction expires at height {expiry_height} and the network is at {network_tip}, too late for it to be mined. Create the transaction again.")]
++    #[error("PcztExpired: Refusing to send: the transaction expires at height {expiry_height} and the network is at {network_tip}, too late for it to be mined. Create the transaction again.")]
 +    PcztExpired { expiry_height: u32, network_tip: u32 },
      // TODO: Remove this. It is just to help with the inability to handle the generic tests from LRZ at the moment
      #[error("An generic error occurred: {0}")]
      Generic(String),
+ }
+ 
++impl Error {
++    /// The stable code of an error JavaScript should tell apart: the start of its message
++    /// (followed by `": "`) and the `code` property of the JS error. Only the send refusals
++    /// have one: `UpgradePending` (`pczt_create`, `pczt_shield`, `pczt_send`), `PcztWrongBranch`
++    /// and `PcztExpired` (`pczt_send`), all raised before anything is stored or broadcast.
++    pub fn code(&self) -> Option<&'static str> {
++        match self {
++            Error::UpgradePending { .. } => Some("UpgradePending"),
++            Error::PcztWrongBranch { .. } => Some("PcztWrongBranch"),
++            Error::PcztExpired { .. } => Some("PcztExpired"),
++            _ => None,
++        }
++    }
++
++    /// The numbers of an error with a [`code`](Self::code), as the JS error's properties.
++    pub fn details(&self) -> Vec<(&'static str, u32)> {
++        match *self {
++            Error::UpgradePending { activation_height, blocks_left, branch } => {
++                vec![("activation_height", activation_height), ("blocks_left", blocks_left), ("branch", branch)]
++            }
++            Error::PcztWrongBranch { pczt_branch, network_branch, next_height } => {
++                vec![("pczt_branch", pczt_branch), ("network_branch", network_branch), ("next_height", next_height)]
++            }
++            Error::PcztExpired { expiry_height, network_tip } => {
++                vec![("expiry_height", expiry_height), ("network_tip", network_tip)]
++            }
++            _ => vec![],
++        }
++    }
++}
++
++/// A JS `Error` with the error's text as message; an error with a [`code`](Error::code) also
++/// gets the properties `code` (string) and its [`details`](Error::details) (numbers), e.g.
++/// `{ message: "PcztExpired: Refusing to send: …", code: "PcztExpired", expiry_height,
++/// network_tip }`.
+ impl From<Error> for JsValue {
+     fn from(e: Error) -> Self {
+-        js_sys::Error::new(&e.to_string()).into()
++        let err = js_sys::Error::new(&e.to_string());
++        if let Some(code) = e.code() {
++            let _ = js_sys::Reflect::set(&err, &JsValue::from_str("code"), &JsValue::from_str(code));
++            for (name, value) in e.details() {
++                let _ = js_sys::Reflect::set(&err, &JsValue::from_str(name), &JsValue::from(value));
++            }
++        }
++        err.into()
+     }
+ }
+ 
+diff --git a/crates/webzjs-wallet/src/init.rs b/crates/webzjs-wallet/src/init.rs
+index 4896720..2e5d3ce 100644
+--- a/crates/webzjs-wallet/src/init.rs
++++ b/crates/webzjs-wallet/src/init.rs
+@@ -32,10 +32,17 @@ fn setup_tracing() {
+             .with(fmt_layer)
+     };
+ 
++    // Celari (finding M4): no `tracing_web::performance_layer()`. It records every span entry
++    // and exit as user timing entries (a `performance.mark()` on entry, a mark and a
++    // `performance.measure()` on exit, each with the span's fields as `detail`) in the
++    // performance timeline of the thread that entered the span. The browser keeps those until
++    // the page unloads, and no garbage collection frees them. zcash_client_backend enters two
++    // INFO spans per scanned block (`scan_block_with_runners`, `add_block`), so the sync worker
++    // of one pass over 20,000 blocks held 81,994 marks and 40,997 measures, and the renderer
++    // process grew by several KiB per block a restore downloaded, until a reload.
+     #[cfg(feature = "wasm")]
+     let subscriber = {
+-        use tracing_subscriber::fmt::format::Pretty;
+-        use tracing_web::{performance_layer, MakeWebConsoleWriter};
++        use tracing_web::MakeWebConsoleWriter;
+ 
+         // For WASM, we must set the directives here at compile time.
+         let filter_layer = EnvFilter::default()
+@@ -49,12 +56,9 @@ fn setup_tracing() {
+             .without_time() // std::time is not available in browsers
+             .with_writer(MakeWebConsoleWriter::new()); // write events to the console
+ 
+-        let perf_layer = performance_layer().with_details_from_fields(Pretty::default());
+-
+         tracing_subscriber::registry()
+             .with(filter_layer)
+             .with(fmt_layer)
+-            .with(perf_layer)
+     };
+ 
+     subscriber.init();
 diff --git a/crates/webzjs-wallet/src/lib.rs b/crates/webzjs-wallet/src/lib.rs
 index 4c0380d..4e63fa8 100644
 --- a/crates/webzjs-wallet/src/lib.rs
@@ -1595,7 +2038,7 @@ index 4c0380d..4e63fa8 100644
 +mod tests;
 diff --git a/crates/webzjs-wallet/src/pass_budget.rs b/crates/webzjs-wallet/src/pass_budget.rs
 new file mode 100644
-index 0000000..d071ffe
+index 0000000..9f760d3
 --- /dev/null
 +++ b/crates/webzjs-wallet/src/pass_budget.rs
 @@ -0,0 +1,454 @@
@@ -2040,7 +2483,7 @@ index 0000000..d071ffe
 +
 +/// Milliseconds since the Unix epoch: the JavaScript clock on wasm32
 +/// (`std::time::SystemTime::now` panics there), the system clock elsewhere.
-+fn now_ms() -> f64 {
++pub(crate) fn now_ms() -> f64 {
 +    #[cfg(target_arch = "wasm32")]
 +    {
 +        js_sys::Date::now()
@@ -2054,10 +2497,10 @@ index 0000000..d071ffe
 +    }
 +}
 diff --git a/crates/webzjs-wallet/src/progress.rs b/crates/webzjs-wallet/src/progress.rs
-index f58a6ff..3d547ba 100644
+index f58a6ff..ffdb660 100644
 --- a/crates/webzjs-wallet/src/progress.rs
 +++ b/crates/webzjs-wallet/src/progress.rs
-@@ -5,10 +5,13 @@
+@@ -5,10 +5,19 @@
  //! the UI cannot show progress. The sync loop in `zcash_client_backend::sync::run` has no
  //! progress callback, but it drives its block cache in a fixed order per batch:
  //! `insert` (download done) -> `with_blocks` twice (trial decryption, then note tracking)
@@ -2066,13 +2509,29 @@ index f58a6ff..3d547ba 100644
 +//! when it is called, see `ProgressCache::delete`). Wrapping the cache lets us count
  //! blocks as they move through those steps, with atomics any thread may read without
  //! touching the wallet database lock.
++//!
++//! What is left to scan comes from the wallet database itself: zcash_client_memory tells its
++//! scan queue observer the queue's size after every write (`ScanQueueSource`), which during a
++//! pass means after the chain tip update and after every batch commit (E2E-1: counting from
++//! the fully scanned height went back up at every pass, because a pass scans the newest
++//! ranges first).
  
 +use std::future::Future;
 +use std::pin::Pin;
  use std::sync::atomic::{AtomicBool, AtomicU32, Ordering::Relaxed};
  use std::sync::Arc;
  
-@@ -36,6 +39,64 @@ pub struct SyncCounters {
+@@ -16,7 +25,8 @@ use async_trait::async_trait;
+ use zcash_client_backend::data_api::chain::{error::Error as ChainError, BlockCache, BlockSource};
+ use zcash_client_backend::data_api::scanning::ScanRange;
+ use zcash_client_backend::proto::compact_formats::CompactBlock;
+-use zcash_protocol::consensus::BlockHeight;
++use zcash_client_memory::{MemoryWalletDb, ScanQueueSize};
++use zcash_protocol::consensus::{BlockHeight, Parameters};
+ 
+ /// Counters for the current (or most recent) sync pass. All methods are lock-free.
+ #[derive(Debug, Default)]
+@@ -36,6 +46,76 @@ pub struct SyncCounters {
      /// Highest height visited since the last batch download. `scan_cached_blocks` walks
      /// each batch twice, so a block only counts when it exceeds this.
      batch_max: AtomicU32,
@@ -2097,6 +2556,18 @@ index f58a6ff..3d547ba 100644
 +    data_requests: AtomicU32,
 +    data_requests_served: AtomicU32,
 +    data_requests_failed: AtomicU32,
++    /// Of `data_requests`, those the pass left for later by the wallet's settings: full
++    /// transactions while history enhancement is off, status checks asked for too recently.
++    data_requests_skipped: AtomicU32,
++    /// Blocks the wallet's scan queue holds for scanning (the suggested scan ranges, up to
++    /// `wallet_tip`), as the wallet database last reported them (`scan_queue`): at the wallet's
++    /// opening, at the start of a pass, after its chain tip update and after each batch it
++    /// committed. Not reset between passes.
++    unscanned_blocks: AtomicU32,
++    /// The wallet's chain tip that bounds `unscanned_blocks` (0: none).
++    wallet_tip: AtomicU32,
++    /// `visited` when `unscanned_blocks` was reported.
++    unscanned_visited: AtomicU32,
 +    /// The batch size (blocks) the pass is running with; it follows the bytes of the blocks
 +    /// (`pass_budget`, verifier finding M1).
 +    batch_blocks: AtomicU32,
@@ -2137,7 +2608,7 @@ index f58a6ff..3d547ba 100644
  }
  
  /// A copy of the counters at one instant.
-@@ -47,6 +108,18 @@ pub struct SyncSnapshot {
+@@ -47,6 +127,22 @@ pub struct SyncSnapshot {
      pub revisited: u32,
      pub scanned: u32,
      pub scanned_to: u32,
@@ -2150,13 +2621,23 @@ index f58a6ff..3d547ba 100644
 +    pub data_requests: u32,
 +    pub data_requests_served: u32,
 +    pub data_requests_failed: u32,
++    pub data_requests_skipped: u32,
++    pub unscanned_blocks: u32,
++    pub wallet_tip: u32,
++    pub unscanned_visited: u32,
 +    pub batch_blocks: u32,
 +    pub batches_abandoned: u32,
 +    pub largest_batch_bytes: u32,
  }
  
  impl SyncCounters {
-@@ -58,18 +131,49 @@ impl SyncCounters {
+@@ -54,22 +150,66 @@ impl SyncCounters {
+     pub fn start(&self) {
+         self.downloaded.store(0, Relaxed);
+         self.visited.store(0, Relaxed);
++        // `visited` restarts: what the last report already counted restarts with it.
++        self.unscanned_visited.store(0, Relaxed);
+         self.revisited.store(0, Relaxed);
          self.scanned.store(0, Relaxed);
          self.scanned_to.store(0, Relaxed);
          self.batch_max.store(0, Relaxed);
@@ -2169,6 +2650,7 @@ index f58a6ff..3d547ba 100644
 +        self.data_requests.store(0, Relaxed);
 +        self.data_requests_served.store(0, Relaxed);
 +        self.data_requests_failed.store(0, Relaxed);
++        self.data_requests_skipped.store(0, Relaxed);
 +        self.batches_abandoned.store(0, Relaxed);
 +        self.largest_batch_bytes.store(0, Relaxed);
          self.running.store(true, Relaxed);
@@ -2203,12 +2685,22 @@ index f58a6ff..3d547ba 100644
 +        self.data_requests.store(report.requests, Relaxed);
 +        self.data_requests_served.store(report.served, Relaxed);
 +        self.data_requests_failed.store(report.failed, Relaxed);
++        self.data_requests_skipped.store(report.skipped, Relaxed);
++    }
++
++    /// Records what the wallet's scan queue holds for scanning, as the wallet database reports
++    /// it after a write (during a pass: from inside `sync::run`, at batch boundaries), with the
++    /// `visited` count of that moment.
++    pub fn scan_queue(&self, size: ScanQueueSize) {
++        self.unscanned_visited.store(self.visited.load(Relaxed), Relaxed);
++        self.wallet_tip.store(size.chain_tip.map_or(0, u32::from), Relaxed);
++        self.unscanned_blocks.store(size.unscanned_blocks, Relaxed);
 +    }
 +
      fn on_insert(&self, blocks: &[CompactBlock]) {
          // `sync::run` is sequential: the previous batch was scanned and committed before
          // this one was fetched, so everything downloaded so far is now scanned.
-@@ -79,12 +183,20 @@ impl SyncCounters {
+@@ -79,12 +219,20 @@ impl SyncCounters {
          self.batch_max.store(first.saturating_sub(1), Relaxed);
      }
  
@@ -2231,7 +2723,7 @@ index f58a6ff..3d547ba 100644
          } else {
              self.revisited.fetch_add(1, Relaxed);
          }
-@@ -98,6 +210,22 @@ impl SyncCounters {
+@@ -98,10 +246,43 @@ impl SyncCounters {
              revisited: self.revisited.load(Relaxed),
              scanned: self.scanned.load(Relaxed),
              scanned_to: self.scanned_to.load(Relaxed),
@@ -2248,13 +2740,34 @@ index f58a6ff..3d547ba 100644
 +            data_requests: self.data_requests.load(Relaxed),
 +            data_requests_served: self.data_requests_served.load(Relaxed),
 +            data_requests_failed: self.data_requests_failed.load(Relaxed),
++            data_requests_skipped: self.data_requests_skipped.load(Relaxed),
++            unscanned_blocks: self.unscanned_blocks.load(Relaxed),
++            wallet_tip: self.wallet_tip.load(Relaxed),
++            unscanned_visited: self.unscanned_visited.load(Relaxed),
 +            batch_blocks: self.batch_blocks.load(Relaxed),
 +            batches_abandoned: self.batches_abandoned.load(Relaxed),
 +            largest_batch_bytes: self.largest_batch_bytes.load(Relaxed),
          }
      }
  }
-@@ -127,9 +255,9 @@ impl<C: BlockSource> BlockSource for ProgressCache<C> {
+ 
++/// A wallet database that reports its scan queue to the sync counters whenever a write may
++/// have changed it, so that what is left to scan can be read while a pass holds the database.
++pub trait ScanQueueSource {
++    /// Reports the scan queue to `counters` now and after every later write.
++    fn report_scan_queue_to(&mut self, counters: Arc<SyncCounters>);
++}
++
++impl<P: Parameters> ScanQueueSource for MemoryWalletDb<P> {
++    fn report_scan_queue_to(&mut self, counters: Arc<SyncCounters>) {
++        self.set_scan_queue_observer(Some(Arc::new(move |size| counters.scan_queue(size))));
++    }
++}
++
+ /// A `BlockCache` that forwards to another cache and reports progress to `SyncCounters`.
+ pub struct ProgressCache<C> {
+     inner: C,
+@@ -127,9 +308,9 @@ impl<C: BlockSource> BlockSource for ProgressCache<C> {
          F: FnMut(CompactBlock) -> Result<(), ChainError<WalletErrT, Self::Error>>,
      {
          self.inner.with_blocks(from_height, limit, |block| {
@@ -2266,7 +2779,7 @@ index f58a6ff..3d547ba 100644
              Ok(())
          })
      }
-@@ -155,9 +283,19 @@ where
+@@ -155,9 +336,19 @@ where
          self.inner.insert(compact_blocks).await
      }
  
@@ -2526,10 +3039,10 @@ index 0000000..449df04
 +}
 diff --git a/crates/webzjs-wallet/src/tests/boundary.rs b/crates/webzjs-wallet/src/tests/boundary.rs
 new file mode 100644
-index 0000000..a0dc1e1
+index 0000000..d230042
 --- /dev/null
 +++ b/crates/webzjs-wallet/src/tests/boundary.rs
-@@ -0,0 +1,378 @@
+@@ -0,0 +1,435 @@
 +//! Review finding R1: the NU7 boundary (mainnet activation 3,543,405).
 +
 +use std::convert::Infallible;
@@ -2698,6 +3211,63 @@ index 0000000..a0dc1e1
 +    );
 +    assert_eq!(mock.count("SendTransaction"), 0);
 +    assert_eq!(wallet.db.read().await.tx_table().iter().count(), 0, "nothing stored");
++}
++
++/// `pczt_send` with a PCZT that expires too soon to be mined (at or below the network tip + 3):
++/// `PcztExpired`, before anything is stored or broadcast.
++#[tokio::test]
++async fn pczt_send_refuses_an_expired_pczt_before_storing() {
++    let mock = MockLwd::new(3_533_900);
++    let (wallet, _) = mainnet_wallet(&mock, Some(3_533_900));
++    let pczt = pczt::roles::creator::Creator::new(NU6_3_BRANCH, 3_533_903, 133, None, None)
++        .unwrap()
++        .build()
++        .unwrap();
++    let result = wallet.pczt_send(pczt).await;
++    assert!(
++        matches!(result, Err(Error::PcztExpired { expiry_height: 3_533_903, network_tip: 3_533_900 })),
++        "refused for its expiry, before extraction: {result:?}"
++    );
++    assert_eq!(mock.count("SendTransaction"), 0);
++    assert_eq!(wallet.db.read().await.tx_table().iter().count(), 0, "nothing stored");
++}
++
++/// Ship list item 9: the send refusals reach JavaScript as errors the app can tell apart
++/// without parsing English: `Error::code` is the JS error's `code` property and the start of
++/// its message (`"<code>: "`), and the numbers are its properties (`From<Error> for JsValue`,
++/// which needs a browser; `smoke/smoke.js` checks the JS objects).
++#[test]
++fn send_refusals_carry_a_stable_code() {
++    let cases = [
++        (
++            Error::UpgradePending { activation_height: NU7, blocks_left: 3, branch: NU6_3_BRANCH },
++            "UpgradePending",
++            vec![("activation_height", NU7), ("blocks_left", 3), ("branch", NU6_3_BRANCH)],
++        ),
++        (
++            Error::PcztWrongBranch { pczt_branch: NU6_3_BRANCH, network_branch: NU7_BRANCH, next_height: NU7 + 3 },
++            "PcztWrongBranch",
++            vec![("pczt_branch", NU6_3_BRANCH), ("network_branch", NU7_BRANCH), ("next_height", NU7 + 3)],
++        ),
++        (
++            Error::PcztExpired { expiry_height: 3_533_903, network_tip: 3_533_900 },
++            "PcztExpired",
++            vec![("expiry_height", 3_533_903), ("network_tip", 3_533_900)],
++        ),
++    ];
++    for (e, code, details) in cases {
++        let message = e.to_string();
++        println!("{code}: {message}");
++        assert_eq!(e.code(), Some(code));
++        assert!(message.starts_with(&format!("{code}: ")), "{message}");
++        assert_eq!(message.matches(code).count(), 1, "the code once: {message}");
++        assert_eq!(e.details(), details);
++    }
++    // Other errors keep their text and have no code.
++    for e in [Error::Generic("Failed to propose the transfer".into()), Error::PcztSend("x".into()), Error::InvalidSeedPhrase] {
++        assert_eq!((e.code(), e.details()), (None, vec![]), "{e}");
++        assert!(!["UpgradePending", "PcztWrongBranch", "PcztExpired"].iter().any(|c| e.to_string().starts_with(c)));
++    }
 +}
 +
 +/// Verifier findings V-4 / NU7-1: `pczt_send` reads the network tip, then waits for the
@@ -2910,10 +3480,10 @@ index 0000000..a0dc1e1
 +}
 diff --git a/crates/webzjs-wallet/src/tests/data_requests.rs b/crates/webzjs-wallet/src/tests/data_requests.rs
 new file mode 100644
-index 0000000..def024c
+index 0000000..9c7f0aa
 --- /dev/null
 +++ b/crates/webzjs-wallet/src/tests/data_requests.rs
-@@ -0,0 +1,361 @@
+@@ -0,0 +1,517 @@
 +//! Review finding R4: serving the wallet's transaction data requests restores what compact
 +//! blocks lack (outgoing recipients, memos, fees, mined status) and drains the queue.
 +
@@ -2970,7 +3540,7 @@ index 0000000..def024c
 +    st.wallet().transaction_data_requests().unwrap().into_iter().filter(is_served).collect()
 +}
 +
-+/// A payment with a memo, seen again after a rebuild and rescan from the seed (Decision 2):
++/// A payment with a memo, seen again after a rebuild and rescan (docs/engine-port.md, Decision 2):
 +/// without enhancement the history has neither the recipient's amount nor the fee nor the
 +/// memo; serving the enhancement request (lightwalletd `GetTransaction` of the full
 +/// transaction) restores all three, and leaves no request open.
@@ -3275,6 +3845,162 @@ index 0000000..def024c
 +    assert_eq!((p.data_requests, p.data_requests_served, p.data_requests_failed), (3, 3, 0));
 +    assert_eq!(mock.count("GetTransaction"), 3);
 +}
++
++/// Verifier finding V-6, history enhancement off: the full data of the wallet's own
++/// transactions is not fetched (no `GetTransaction` for an `Enhancement` request, which stays
++/// queued), while the status check of a pending send and the spend search of a transparent
++/// output go on. Turned on again, the enhancement is served.
++#[tokio::test]
++async fn history_enhancement_off_asks_nothing_about_the_wallets_transactions() {
++    use crate::data_requests::{serve_transaction_data_requests_with, ServePolicy};
++    let (mut st, account, usk, _, _) = seed_wallet(ironwood_network(None));
++    receive_ironwood(&mut st, &usk, Zatoshis::const_from_u64(1_000_000));
++    // A send the wallet waits for (status check), a transaction of the wallet whose full data
++    // is wanted (enhancement), a transparent output whose spend is searched for.
++    let pending = build_unmined_payment(&mut st, account, &usk, 100_000);
++    st.wallet_mut().queue_tx_status(pending).unwrap();
++    let own = TxId::from_bytes([0x5e; 32]);
++    st.wallet_mut().queue_tx_retrieval(std::iter::once(own), None).unwrap();
++    let tip = st.wallet().chain_height().unwrap().unwrap();
++    let taddr = st.wallet().get_account(account).unwrap().unwrap().uivk().default_transparent_address().unwrap().0;
++    let outpoint = OutPoint::new([0x42; 32], 0);
++    let output = WalletTransparentOutput::from_parts(
++        outpoint.clone(),
++        TxOut::new(Zatoshis::const_from_u64(70_000), Script::from(taddr.script())),
++        Some(tip),
++        Some(account),
++        None,
++        None,
++    )
++    .unwrap();
++    st.wallet_mut().put_received_transparent_utxo(&output).unwrap();
++    st.wallet_mut().queue_transparent_spend_detection(taddr, *outpoint.txid(), 0).unwrap();
++    for _ in 0..2 {
++        let (hh, _) = st.generate_empty_block();
++        st.scan_cached_blocks(hh, 1);
++    }
++    let open = served_requests(&st);
++    eprintln!("open: {open:?}");
++    assert!(open.contains(&TransactionDataRequest::Enhancement(own)));
++    assert!(open.contains(&TransactionDataRequest::GetStatus(pending)));
++
++    let network = st.network().clone();
++    let policy = ServePolicy::new(false, 0);
++    let mut source = Fetched::default();
++    let report = serve_transaction_data_requests_with(&network, st.wallet_mut(), &mut source, MAX_REQUESTS_PER_PASS, &policy, 0.0).await;
++    eprintln!("enhancement off: report {report:?}, calls {:?}", source.1);
++    let enhancements = open.iter().filter(|r| matches!(r, TransactionDataRequest::Enhancement(_))).count() as u32;
++    assert!(enhancements >= 1);
++    assert_eq!(report.skipped, enhancements, "every enhancement left alone");
++    for r in &open {
++        if let TransactionDataRequest::Enhancement(txid) = r {
++            assert!(!source.1.contains(&format!("GetTransaction {txid}")), "no GetTransaction for {txid}: {:?}", source.1);
++        }
++    }
++    assert!(source.1.contains(&format!("GetTransaction {pending}")), "the status check goes on: {:?}", source.1);
++    assert!(source.1.iter().any(|c| c.starts_with("GetTaddressTxids ")), "the spend search goes on: {:?}", source.1);
++    assert!(served_requests(&st).contains(&TransactionDataRequest::Enhancement(own)), "stays queued");
++    assert!(!served_requests(&st).iter().any(|r| matches!(r, TransactionDataRequest::TransactionsInvolvingAddress(_))), "search done");
++    assert!(!policy.serves(&TransactionDataRequest::Enhancement(own)));
++    assert!(policy.serves(&TransactionDataRequest::GetStatus(pending)));
++
++    policy.set_enhance(true);
++    let mut source = Fetched::default();
++    let report = serve_transaction_data_requests_with(&network, st.wallet_mut(), &mut source, MAX_REQUESTS_PER_PASS, &policy, 1.0).await;
++    eprintln!("enhancement on: report {report:?}, calls {:?}", source.1);
++    assert!(source.1.contains(&format!("GetTransaction {own}")));
++    assert!(!served_requests(&st).contains(&TransactionDataRequest::Enhancement(own)), "served once on");
++}
++
++/// V-6, status checks spaced out: the status of one pending transaction is asked for at most
++/// once per interval (default 5 minutes) instead of after every pass (every 30 s in Celari).
++/// Another transaction's check is not held back by it, and an interval of 0 asks every round.
++#[tokio::test]
++async fn status_checks_are_spaced_out_per_transaction() {
++    use crate::data_requests::{serve_transaction_data_requests_with, ServePolicy, DEFAULT_STATUS_INTERVAL_MS};
++    let (mut st, account, usk, _, _) = seed_wallet(ironwood_network(None));
++    receive_ironwood(&mut st, &usk, Zatoshis::const_from_u64(1_000_000));
++    receive_ironwood(&mut st, &usk, Zatoshis::const_from_u64(1_000_000));
++    let x = build_unmined_payment(&mut st, account, &usk, 100_000);
++    st.wallet_mut().queue_tx_status(x).unwrap();
++    let policy = ServePolicy::default();
++    assert_eq!(policy.status_interval_ms(), DEFAULT_STATUS_INTERVAL_MS);
++    assert_eq!(DEFAULT_STATUS_INTERVAL_MS, 300_000);
++    // The server knows X, in the mempool: the request stays open after every check.
++    let mut server = Fetched::default();
++    server.0.insert(x, raw(&st, x, 0));
++    let checks = |server: &Fetched, txid: TxId| server.1.iter().filter(|c| **c == format!("GetTransaction {txid}")).count();
++    async fn round(st: &mut St, server: &mut Fetched, policy: &ServePolicy, t_ms: f64) -> crate::data_requests::ServeReport {
++        let network = st.network().clone();
++        serve_transaction_data_requests_with(&network, st.wallet_mut(), server, MAX_REQUESTS_PER_PASS, policy, t_ms).await
++    }
++    let t0 = 1_000_000.0;
++    let mut timeline = vec![];
++    for dt_s in [0.0, 30.0, 60.0, 299.0] {
++        let r = round(&mut st, &mut server, &policy, t0 + dt_s * 1000.0).await;
++        timeline.push((dt_s, checks(&server, x), r.skipped));
++    }
++    // A second send waiting from 299.5 s: checked at once.
++    let y = build_unmined_payment(&mut st, account, &usk, 100_000);
++    st.wallet_mut().queue_tx_status(y).unwrap();
++    server.0.insert(y, raw(&st, y, 0));
++    let r = round(&mut st, &mut server, &policy, t0 + 299_500.0).await;
++    timeline.push((299.5, checks(&server, x), r.skipped));
++    assert_eq!(checks(&server, y), 1, "another transaction's check is not held back");
++    for dt_s in [300.0, 330.0, 600.0] {
++        let r = round(&mut st, &mut server, &policy, t0 + dt_s * 1000.0).await;
++        timeline.push((dt_s, checks(&server, x), r.skipped));
++    }
++    eprintln!("(seconds, GetTransaction of X so far, skipped) per round: {timeline:?}; calls {:?}", server.1);
++    let counts: Vec<usize> = timeline.iter().map(|t| t.1).collect();
++    assert_eq!(counts, vec![1, 1, 1, 1, 1, 2, 2, 3], "X at 0 s, 300 s and 600 s only");
++    assert!(served_requests(&st).contains(&TransactionDataRequest::GetStatus(x)), "still waiting");
++    // Interval 0: every round.
++    policy.set_status_interval_ms(0);
++    let before = checks(&server, x);
++    round(&mut st, &mut server, &policy, t0 + 600_001.0).await;
++    round(&mut st, &mut server, &policy, t0 + 600_002.0).await;
++    assert_eq!(checks(&server, x), before + 2);
++}
++
++/// V-6 through `Wallet::sync`: with history enhancement off a pass sends no `GetTransaction`
++/// for the open enhancement requests, reports them as skipped, and `pending_data_requests`
++/// does not count them (so the app does not wait for them); turned on, the next pass serves
++/// them.
++#[tokio::test]
++async fn sync_follows_the_history_enhancement_setting() {
++    let mock = MockLwd::new(mainnet::LAST).with_mainnet_data();
++    let (wallet, _) = mainnet_wallet(&mock, Some(mainnet::LAST));
++    let txid = |hex: &str| TxId::from_bytes(hex::decode(hex).unwrap().try_into().unwrap());
++    wallet
++        .db
++        .write()
++        .await
++        .queue_tx_retrieval(
++            [txid(mainnet::TX_IRONWOOD.0), txid(mainnet::TX_SAPLING.0), TxId::from_bytes([0xab; 32])].into_iter(),
++            None,
++        )
++        .unwrap();
++    // (The second count, requests not served, also holds the account's open-ended ephemeral
++    // address checks, which are never served.)
++    let (on, unserved) = wallet.pending_data_requests().await.unwrap();
++    assert_eq!(on, 3);
++    wallet.set_history_enhancement(false);
++    assert_eq!(wallet.pending_data_requests().await.unwrap(), (0, unserved + 3), "not waited for while off");
++    wallet.sync().await.unwrap();
++    let p = wallet.sync_progress();
++    eprintln!("off: {p:?}, calls {:?}", mock.calls());
++    assert_eq!(mock.count("GetTransaction"), 0);
++    assert_eq!((p.data_requests, p.data_requests_served, p.data_requests_skipped), (3, 0, 3));
++    assert_eq!(wallet.pending_data_requests().await.unwrap().0, 0);
++    wallet.set_history_enhancement(true);
++    assert_eq!(wallet.pending_data_requests().await.unwrap().0, 3);
++    wallet.sync().await.unwrap();
++    let p = wallet.sync_progress();
++    assert_eq!(mock.count("GetTransaction"), 3);
++    assert_eq!((p.data_requests, p.data_requests_served, p.data_requests_skipped), (3, 3, 0));
++    assert_eq!(wallet.pending_data_requests().await.unwrap().0, 0);
++}
 diff --git a/crates/webzjs-wallet/src/tests/fixtures.rs b/crates/webzjs-wallet/src/tests/fixtures.rs
 new file mode 100644
 index 0000000..42dd9e0
@@ -3383,7 +4109,7 @@ index 0000000..42dd9e0
 +}
 diff --git a/crates/webzjs-wallet/src/tests/history.rs b/crates/webzjs-wallet/src/tests/history.rs
 new file mode 100644
-index 0000000..bcaff07
+index 0000000..bc4fecf
 --- /dev/null
 +++ b/crates/webzjs-wallet/src/tests/history.rs
 @@ -0,0 +1,57 @@
@@ -3409,7 +4135,7 @@ index 0000000..bcaff07
 +}
 +
 +/// Review finding R0: a payment to someone else, seen again after the wallet was rebuilt from
-+/// its seed and rescanned (Decision 2's forced rescan of every existing Celari wallet, and any
++/// its seed and rescanned (docs/engine-port.md, Decision 2: every existing Celari wallet, and any
 +/// restore), must still read as a payment. Compact-block scanning records only the change
 +/// output (a `sent_notes` row to the account itself), so "a sent output is recorded" does not
 +/// mean "the transaction's outputs are known"; only the full transaction data does.
@@ -3446,10 +4172,10 @@ index 0000000..bcaff07
 +}
 diff --git a/crates/webzjs-wallet/src/tests/mock_lwd.rs b/crates/webzjs-wallet/src/tests/mock_lwd.rs
 new file mode 100644
-index 0000000..7680606
+index 0000000..e4d3c0c
 --- /dev/null
 +++ b/crates/webzjs-wallet/src/tests/mock_lwd.rs
-@@ -0,0 +1,375 @@
+@@ -0,0 +1,407 @@
 +//! A lightwalletd stand-in for native tests: a tower service that speaks gRPC (HTTP/2
 +//! framing, `grpc-status` trailers) to tonic's client, serving captured mainnet data.
 +
@@ -3547,6 +4273,9 @@ index 0000000..7680606
 +    pub(crate) node_tip: Option<u64>,
 +    /// The raw transactions `SendTransaction` received.
 +    pub(crate) sent: Vec<Vec<u8>>,
++    /// Called when a `GetBlockRange` request arrives (a batch boundary of a sync pass), with
++    /// the mock's state locked: it must not reach the mock.
++    pub(crate) on_block_range: Option<Arc<dyn Fn() + Send + Sync>>,
 +}
 +
 +#[derive(Clone, Default)]
@@ -3642,6 +4371,32 @@ index 0000000..7680606
 +        }
 +        drop(s);
 +        self
++    }
++
++    /// Reports the last captured subtree of every pool as completed in the captured block at
++    /// `height` (the roots stay the real ones; only `completing_block_height` and `_hash`
++    /// change), so that a wallet born at the first captured block queues the blocks from
++    /// `height` on as the chain tip's subtree (`ChainTip`, scanned first) and those below it as
++    /// `Historic`: a pass scans the newest range first, as on mainnet when a restore spans the
++    /// end of a subtree.
++    pub(crate) fn with_subtrees_completed_at(self, height: u32) -> Self {
++        {
++            let mut s = self.0.lock().unwrap();
++            let block = CompactBlock::decode(&s.blocks[&u64::from(height)][..]).unwrap();
++            for roots in s.subtree_roots.values_mut() {
++                let last = roots.last_mut().expect("captured subtree roots");
++                let mut root = SubtreeRoot::decode(&last[..]).unwrap();
++                root.completing_block_height = u64::from(height);
++                root.completing_block_hash = block.hash.clone();
++                *last = root.encode_to_vec();
++            }
++        }
++        self
++    }
++
++    /// Calls `probe` whenever a `GetBlockRange` request arrives ([`State::on_block_range`]).
++    pub(crate) fn on_block_range(&self, probe: impl Fn() + Send + Sync + 'static) {
++        self.0.lock().unwrap().on_block_range = Some(Arc::new(probe));
 +    }
 +
 +    pub(crate) fn calls(&self) -> Vec<String> {
@@ -3762,6 +4517,9 @@ index 0000000..7680606
 +                    let range = BlockRange::decode(msg).unwrap();
 +                    let (start, end) = (range.start.unwrap().height, range.end.unwrap().height);
 +                    s.calls.push(format!("{method} {start}..={end}"));
++                    if let Some(probe) = &s.on_block_range {
++                        probe();
++                    }
 +                    let blocks: Vec<_> = s.blocks.range(start..=end).map(|(_, b)| b.clone()).collect();
 +                    if blocks.len() as u64 != end - start + 1 {
 +                        response(vec![], NOT_FOUND, "mock: blocks missing")
@@ -3827,12 +4585,12 @@ index 0000000..7680606
 +}
 diff --git a/crates/webzjs-wallet/src/tests/mod.rs b/crates/webzjs-wallet/src/tests/mod.rs
 new file mode 100644
-index 0000000..02b7078
+index 0000000..4f99a69
 --- /dev/null
 +++ b/crates/webzjs-wallet/src/tests/mod.rs
 @@ -0,0 +1,15 @@
 +//! Native (host) tests of the webzjs-wallet glue: `cargo test -p webzjs-wallet
-+//! --no-default-features --lib` (engine-port's `test-wallet-native.sh`).
++//! --no-default-features --lib` (in Celari: `scripts/test-engine-native.sh glue`).
 +//!
 +//! Wallets come from zcash_client_backend's test framework over Celari's memory backend
 +//! (`zcash_client_memory::testing`, feature `test-dependencies`) or from real mainnet data
@@ -3848,10 +4606,10 @@ index 0000000..02b7078
 +mod nu7_pipeline;
 diff --git a/crates/webzjs-wallet/src/tests/nu7_pipeline.rs b/crates/webzjs-wallet/src/tests/nu7_pipeline.rs
 new file mode 100644
-index 0000000..00b11d8
+index 0000000..508218f
 --- /dev/null
 +++ b/crates/webzjs-wallet/src/tests/nu7_pipeline.rs
-@@ -0,0 +1,775 @@
+@@ -0,0 +1,827 @@
 +//! `Wallet::pczt_create` / `pczt_shield` / `pczt_send` end to end, with the wallet's chain tip
 +//! and the network's on either side of mainnet's NU7 activation (3,543,405). Written by the
 +//! round-4 verifiers (NU7 lens, `../verify-nu7/`), adopted in round 5 with the fixes of their
@@ -4627,12 +5385,64 @@ index 0000000..00b11d8
 +    sent.expect("accepted by the node one block behind: its next block is NU7's");
 +    assert_eq!(sent_tx(&mock, 0).consensus_branch_id(), BranchId::Nu7);
 +}
++
++/// Verifier finding V-6 through `Wallet::sync` (the chain fixture above gives a real pending
++/// send): the status of a send the wallet waits for is checked by the first pass, then at most
++/// once per interval (default 5 minutes) instead of after every pass, and every pass again with
++/// the interval at 0.
++#[tokio::test]
++async fn status_checks_of_a_waiting_send_are_spaced_out_across_passes() {
++    use std::convert::Infallible;
++    use zcash_client_backend::data_api::ll::LowLevelWalletWrite;
++    use zcash_client_backend::data_api::wallet::input_selection::GreedyInputSelector;
++    use zcash_client_backend::wallet::OvkPolicy;
++    use zcash_client_backend::zip321::{Payment, TransactionRequest};
++
++    let mut c = Chain::new();
++    c.receive_ironwood(2_000_000);
++    c.empty_to(3_543_320, true);
++    // A send the wallet built and waits for (never mined here), with its status check queued.
++    let request = TransactionRequest::new(vec![Payment::without_memo(
++        OrchardPoolTester::sk_default_address(&OrchardPoolTester::sk(&[0xf5; 32])).to_zcash_address(c.st.network()),
++        Zatoshis::const_from_u64(100_000),
++    )])
++    .unwrap();
++    let proposal = c
++        .st
++        .propose_transfer(c.account, &GreedyInputSelector::new(), &super::fixtures::webzjs_change_strategy(), request, ConfirmationsPolicy::MIN)
++        .unwrap();
++    let txid = *c
++        .st
++        .create_proposed_transactions::<Infallible, _, Infallible, _>(&c.usk, OvkPolicy::Sender, &proposal)
++        .unwrap()
++        .first();
++    c.st.wallet_mut().queue_tx_status(txid).unwrap();
++    let mock = MockLwd::new(3_543_320);
++    c.serve(&mock, 3_543_320);
++    let wallet = c.wallet(&mock);
++    let call = format!("GetTransaction {}", hex::encode(txid.as_ref()));
++    let checks = || mock.calls().iter().filter(|c| **c == call).count();
++
++    wallet.sync().await.unwrap();
++    assert_eq!(checks(), 1, "the first pass checks: {:?}", mock.calls());
++    wallet.sync().await.unwrap();
++    let p = wallet.sync_progress();
++    println!("second pass right after: {p:?}");
++    assert_eq!(checks(), 1, "the next pass does not ask again");
++    assert!(p.data_requests_skipped >= 1);
++    assert!(wallet.pending_data_requests().await.unwrap().0 >= 1, "still pending");
++    wallet.set_status_check_ms(0);
++    wallet.sync().await.unwrap();
++    wallet.sync().await.unwrap();
++    assert_eq!(checks(), 3, "interval 0: every pass");
++    assert_eq!(unmined(&wallet).await, vec![txid]);
++}
 diff --git a/crates/webzjs-wallet/src/tests/sync_pass.rs b/crates/webzjs-wallet/src/tests/sync_pass.rs
 new file mode 100644
-index 0000000..7b582fc
+index 0000000..a374003
 --- /dev/null
 +++ b/crates/webzjs-wallet/src/tests/sync_pass.rs
-@@ -0,0 +1,319 @@
+@@ -0,0 +1,439 @@
 +//! Review finding R3: a sync pass frees each batch of compact blocks once scanned, and a pass
 +//! with a time budget ends at a batch boundary so the wallet can be saved.
 +
@@ -4952,8 +5762,128 @@ index 0000000..7b582fc
 +    wallet.db.read().await.encode(&mut grown).unwrap();
 +    assert!(grown == bytes);
 +}
++
++type MainnetWallet = crate::Wallet<zcash_client_memory::MemoryWalletDb<webzjs_common::Network>, MockLwd>;
++
++/// The captured block above which the mock reports the chain tip's subtree
++/// (`MockLwd::with_subtrees_completed_at`): passes scan 3,533,450..=3,533,508 first, then
++/// 3,533,400..3,533,450.
++const SPLIT: u32 = 3_533_450;
++
++/// What the scan queue holds for scanning, read from the database: the suggested ranges'
++/// lengths up to the wallet's chain tip, the chain tip, and the fully scanned height.
++async fn queue_of(wallet: &MainnetWallet) -> (u32, u32, u32) {
++    let db = wallet.db.read().await;
++    let tip = u32::from(db.chain_height().unwrap().unwrap());
++    let left = db
++        .suggest_scan_ranges()
++        .unwrap()
++        .iter()
++        .map(|r| u32::from(r.block_range().end).min(tip + 1).saturating_sub(u32::from(r.block_range().start)))
++        .sum();
++    let fully = db.block_fully_scanned().unwrap().map_or(mainnet::FIRST - 1, |m| u32::from(m.block_height()));
++    (left, tip, fully)
++}
++
++/// Final review finding E2E-1: "blocks left" went back up at every pass of a restore, because a
++/// pass scans the newest ranges first and the app counted from the fully scanned height, which
++/// stays at the birthday until the lowest range is done. `sync_progress().unscanned_blocks` is
++/// what the scan queue holds: here 109 captured blocks, the newest 59 queued first (batches of
++/// 20, one batch per pass with a budget that runs out at once). After every pass it equals the
++/// suggested ranges' lengths read from the database, it only goes down, `ended_early` is set
++/// exactly while blocks are left, and a wallet opened from the saved bytes reports the same
++/// count before any pass (Celari reopens nothing between passes, but saves after each and
++/// opens from the bytes at unlock).
++#[tokio::test]
++async fn unscanned_blocks_count_down_across_top_down_passes() {
++    use zcash_client_backend::data_api::wallet::ConfirmationsPolicy;
++    let blocks = mainnet::LAST - mainnet::FIRST + 1;
++    let mock = MockLwd::new(mainnet::LAST).with_mainnet_data().with_all_tree_states().with_subtrees_completed_at(SPLIT);
++    let budgeted = |mut w: MainnetWallet| {
++        w.batch_size = 20;
++        w.next_batch_blocks.store(20, Relaxed);
++        w.set_sync_pass_ms(1);
++        w
++    };
++    let (wallet, _) = mainnet_wallet(&mock, None);
++    // A new account before its first pass: nothing queued up to the wallet's tip, which is the
++    // birthday - 1, so what is left is the network tip minus that.
++    let p = wallet.sync_progress();
++    assert_eq!((p.unscanned_blocks, p.wallet_tip), (0, mainnet::FIRST - 1), "{p:?}");
++    let mut wallet = budgeted(wallet);
++    let (mut history, mut last, mut passes) = (vec![], u32::MAX, 0);
++    loop {
++        passes += 1;
++        assert!(passes < 20, "the passes make progress");
++        wallet.sync().await.unwrap();
++        let p = wallet.sync_progress();
++        let (left, tip, fully) = queue_of(&wallet).await;
++        history.push((p.unscanned_blocks, left, tip - fully, p.ended_early, p.visited));
++        assert_eq!(p.unscanned_blocks, left, "what the scan queue holds after pass {passes}: {history:?}");
++        assert_eq!(p.wallet_tip, tip);
++        assert_eq!(p.unscanned_visited, p.visited, "reported after the pass's last batch");
++        assert!(p.unscanned_blocks < last, "never goes up: {history:?}");
++        assert_eq!(p.ended_early, p.unscanned_blocks > 0, "ended_early exactly while blocks are left: {history:?}");
++        last = p.unscanned_blocks;
++        // Saved, and opened from the bytes: the count is there before any pass.
++        let bytes = wallet.db_to_bytes().await.unwrap();
++        let db = zcash_client_memory::MemoryWalletDb::decode_new(&bytes, webzjs_common::Network::MainNetwork, crate::PRUNING_DEPTH).unwrap();
++        wallet = budgeted(crate::Wallet::new(db, mock.clone(), webzjs_common::Network::MainNetwork, ConfirmationsPolicy::MIN).unwrap());
++        let reopened = wallet.sync_progress();
++        assert_eq!((reopened.unscanned_blocks, reopened.wallet_tip), (p.unscanned_blocks, p.wallet_tip), "reopened");
++        if !p.ended_early {
++            break;
++        }
++    }
++    eprintln!("(unscanned_blocks, queue, tip - fully scanned, ended_early, visited) per pass: {history:?}");
++    assert_eq!(history[0].2, blocks, "top-down: the fully scanned height did not move in the first pass");
++    assert!(history[0].0 <= blocks - 19, "while the queue shrank by its first batch: {history:?}");
++    assert_eq!(last, 0);
++    assert_eq!(queue_of(&wallet).await.2, mainnet::LAST);
++    assert!(passes >= 6);
++}
++
++/// E2E-1, during a pass: `unscanned_blocks` is reported at every batch boundary, from inside
++/// `sync::run`, and read while the pass holds the wallet database (a lock-free read: the
++/// probe runs as each batch download goes out, when the database is write-locked). At each
++/// boundary, what is left plus what the pass has scanned is the whole range.
++#[tokio::test]
++async fn unscanned_blocks_are_reported_at_batch_boundaries_while_the_pass_holds_the_wallet() {
++    let blocks = mainnet::LAST - mainnet::FIRST + 1;
++    let mock = MockLwd::new(mainnet::LAST).with_mainnet_data().with_all_tree_states().with_subtrees_completed_at(SPLIT);
++    let (mut wallet, _) = mainnet_wallet(&mock, None);
++    wallet.batch_size = 20;
++    wallet.next_batch_blocks.store(20, Relaxed);
++    wallet.set_sync_pass_ms(0);
++    let seen = Arc::new(std::sync::Mutex::new(vec![]));
++    {
++        let (progress, db, seen) = (wallet.progress.clone(), wallet.db.clone(), seen.clone());
++        mock.on_block_range(move || seen.lock().unwrap().push((progress.snapshot(), db.try_read().is_err())));
++    }
++    wallet.sync().await.unwrap();
++    let seen = seen.lock().unwrap().clone();
++    let ranges: Vec<String> = mock.calls().into_iter().filter(|c| c.starts_with("GetBlockRange")).collect();
++    eprintln!("batches {ranges:?}");
++    for (p, locked) in &seen {
++        eprintln!(
++            "at a batch download: unscanned_blocks {} wallet_tip {} unscanned_visited {} visited {} running {} db locked {locked}",
++            p.unscanned_blocks, p.wallet_tip, p.unscanned_visited, p.visited, p.running
++        );
++    }
++    assert_eq!(seen.len(), 6, "six batches: {ranges:?}");
++    assert!(ranges[0].starts_with(&format!("GetBlockRange {SPLIT}..")), "the newest range first: {ranges:?}");
++    for (p, locked) in &seen {
++        assert!(*locked && p.running, "read while the pass holds the database");
++        assert_eq!(p.wallet_tip, mainnet::LAST);
++        assert_eq!(p.unscanned_visited, p.visited, "reported once the last batch was committed");
++        assert_eq!(p.unscanned_blocks + p.visited, blocks, "left + scanned in this pass = the range: {p:?}");
++    }
++    assert!(seen.windows(2).all(|w| w[1].0.unscanned_blocks < w[0].0.unscanned_blocks));
++    let p = wallet.sync_progress();
++    assert_eq!((p.unscanned_blocks, p.ended_early), (0, false));
++}
 diff --git a/crates/webzjs-wallet/src/wallet.rs b/crates/webzjs-wallet/src/wallet.rs
-index 5dabddc..86bb013 100644
+index 5dabddc..e10b755 100644
 --- a/crates/webzjs-wallet/src/wallet.rs
 +++ b/crates/webzjs-wallet/src/wallet.rs
 @@ -1,4 +1,5 @@
@@ -4962,17 +5892,19 @@ index 5dabddc..86bb013 100644
  
  use bip0039::{English, Mnemonic};
  use nonempty::NonEmpty;
-@@ -8,7 +9,10 @@ use tonic::{
+@@ -8,8 +9,11 @@ use tonic::{
      codegen::{Body, Bytes, StdError},
  };
  
 +use crate::boundary;
-+use crate::data_requests::{self, serve_transaction_data_requests};
++use crate::data_requests::{self, serve_transaction_data_requests_with, ServePolicy};
  use crate::error::Error;
-+use crate::pass_budget::{BatchBytes, BudgetedTransport, PassBudget};
- use crate::progress::{ProgressCache, SyncCounters, SyncSnapshot};
+-use crate::progress::{ProgressCache, SyncCounters, SyncSnapshot};
++use crate::pass_budget::{now_ms, BatchBytes, BudgetedTransport, PassBudget};
++use crate::progress::{ProgressCache, ScanQueueSource, SyncCounters, SyncSnapshot};
  use crate::BlockRange;
  use webzjs_common::Network;
+ 
 @@ -29,9 +33,11 @@ use tokio::sync::RwLock;
  use zcash_address::ZcashAddress;
  use zcash_client_backend::data_api::wallet::{
@@ -5026,7 +5958,7 @@ index 5dabddc..86bb013 100644
  
  /// constant that signals what's the minimum transparent balance for proposing a
  /// shielding transaction
-@@ -97,6 +117,17 @@ pub struct Wallet<W, T> {
+@@ -97,6 +117,20 @@ pub struct Wallet<W, T> {
      pub(crate) min_split_output_value: u64,
      /// Progress of the running sync pass; readable without the database lock.
      pub(crate) progress: Arc<SyncCounters>,
@@ -5041,10 +5973,13 @@ index 5dabddc..86bb013 100644
 +    pub(crate) next_batch_blocks: Arc<AtomicU32>,
 +    /// Time budget of a sync pass in milliseconds (0: none), shared by clones.
 +    pub(crate) sync_pass_ms: Arc<AtomicU64>,
++    /// Which transaction data requests a pass serves, and how often (`data_requests`, V-6),
++    /// shared by clones.
++    pub(crate) data_policy: Arc<ServePolicy>,
  }
  
  impl<W, T: Clone> Clone for Wallet<W, T> {
-@@ -109,16 +140,44 @@ impl<W, T: Clone> Clone for Wallet<W, T> {
+@@ -109,16 +143,45 @@ impl<W, T: Clone> Clone for Wallet<W, T> {
              target_note_count: self.target_note_count,
              min_split_output_value: self.min_split_output_value,
              progress: self.progress.clone(),
@@ -5053,6 +5988,7 @@ index 5dabddc..86bb013 100644
 +            batch_bytes: self.batch_bytes,
 +            next_batch_blocks: self.next_batch_blocks.clone(),
 +            sync_pass_ms: self.sync_pass_ms.clone(),
++            data_policy: self.data_policy.clone(),
          }
      }
  }
@@ -5093,7 +6029,17 @@ index 5dabddc..86bb013 100644
      }
  }
  
-@@ -138,6 +197,7 @@ where
+@@ -130,7 +193,8 @@ where
+             AccountId = <W as WalletRead>::AccountId,
+             Error = <W as WalletRead>::Error,
+             NoteRef = NoteRef,
+-        > + WalletCommitmentTrees,
++        > + WalletCommitmentTrees
++        + ScanQueueSource,
+ 
+     AccountId: Copy
+         + Debug
+@@ -138,6 +202,7 @@ where
          + Hash
          + Default
          + Send
@@ -5101,7 +6047,7 @@ index 5dabddc..86bb013 100644
          + ConditionallySelectable
          + Serialize
          + DeserializeOwned
-@@ -154,6 +214,31 @@ where
+@@ -154,24 +219,93 @@ where
      T::ResponseBody: Body<Data = Bytes> + std::marker::Send + 'static,
      <T::ResponseBody as Body>::Error: Into<StdError> + std::marker::Send,
  {
@@ -5132,9 +6078,15 @@ index 5dabddc..86bb013 100644
 +
      /// Create a new instance of a Zcash wallet for a given network
      pub fn new(
-         db: W,
-@@ -163,15 +248,40 @@ where
+-        db: W,
++        mut db: W,
+         client: T,
+         network: Network,
+         min_confirmations: ConfirmationsPolicy,
      ) -> Result<Self, Error> {
++        let progress = Arc::new(SyncCounters::default());
++        // What is left to scan is readable at once, before the first pass.
++        db.report_scan_queue_to(progress.clone());
          Ok(Wallet {
              db: Arc::new(RwLock::new(db)),
 -            client: CompactTxStreamerClient::new(client),
@@ -5143,12 +6095,14 @@ index 5dabddc..86bb013 100644
              min_confirmations,
              target_note_count: 4,
              min_split_output_value: 10000000,
-             progress: Arc::new(SyncCounters::default()),
+-            progress: Arc::new(SyncCounters::default()),
++            progress,
 +            transport: client,
 +            batch_size: BATCH_SIZE,
 +            batch_bytes: BatchBytes::default(),
 +            next_batch_blocks: Arc::new(AtomicU32::new(BATCH_SIZE)),
 +            sync_pass_ms: Arc::new(AtomicU64::new(DEFAULT_SYNC_PASS_MS)),
++            data_policy: Arc::new(ServePolicy::default()),
          })
      }
  
@@ -5156,6 +6110,21 @@ index 5dabddc..86bb013 100644
 +    /// pass runs until the wallet is at the chain tip.
 +    pub fn set_sync_pass_ms(&self, ms: u64) {
 +        self.sync_pass_ms.store(ms, Relaxed);
++    }
++
++    /// Whether sync passes fetch the full data of the wallet's own transactions from
++    /// lightwalletd (`Enhancement` requests: memos, and after a restore the recipients, amounts
++    /// and fees of past sends). Default on. Off, the server is not asked about them; the
++    /// requests stay queued and are served once it is turned on again. Status checks of
++    /// pending sends and spend searches of transparent outputs go on either way (V-6).
++    pub fn set_history_enhancement(&self, enabled: bool) {
++        self.data_policy.set_enhance(enabled);
++    }
++
++    /// The least time between two status checks (`GetStatus`) of one pending transaction, in
++    /// milliseconds; default 5 minutes, 0 = after every pass (V-6).
++    pub fn set_status_check_ms(&self, ms: u64) {
++        self.data_policy.set_status_interval_ms(ms);
 +    }
 +
 +    /// The height lightwalletd reports as the chain tip.
@@ -5175,7 +6144,7 @@ index 5dabddc..86bb013 100644
      /// Add a new account to the wallet
      ///
      /// # Arguments
-@@ -278,26 +388,161 @@ where
+@@ -278,26 +412,166 @@ where
          })?)
      }
  
@@ -5218,6 +6187,8 @@ index 5dabddc..86bb013 100644
 -        .await
 -        .map_err(Into::into);
 -        self.progress.finish(result.is_ok());
++        // (Again: the database may have been replaced since the wallet was made.)
++        db.report_scan_queue_to(self.progress.clone());
 +        // `run` again with another batch size whenever the transport ended it for one (the
 +        // blocks' size changed, or a batch was abandoned for being too large: `pass_budget`).
 +        // Each restart follows a batch that arrived in full or one abandoned at no more than
@@ -5259,11 +6230,13 @@ index 5dabddc..86bb013 100644
 +        };
 +        if result.is_ok() {
 +            let mut source = self.client.clone();
-+            let report = serve_transaction_data_requests(
++            let report = serve_transaction_data_requests_with(
 +                &self.network,
 +                &mut *db,
 +                &mut source,
 +                data_requests::MAX_REQUESTS_PER_PASS,
++                &self.data_policy,
++                now_ms(),
 +            )
 +            .await;
 +            self.progress.data_requests_done(&report);
@@ -5272,11 +6245,12 @@ index 5dabddc..86bb013 100644
          result
      }
  
-+    /// The wallet's transaction data requests this glue serves after each pass that are
-+    /// still open, and those it does not serve (`data_requests`).
++    /// The wallet's open transaction data requests that passes serve with the wallet's
++    /// settings (`set_history_enhancement`; a status check waiting for its interval counts),
++    /// and those they do not serve (`data_requests`).
 +    pub async fn pending_data_requests(&self) -> Result<(u32, u32), Error> {
 +        let requests = self.db.read().await.transaction_data_requests()?;
-+        let served = requests.iter().filter(|r| data_requests::is_served(r)).count();
++        let served = requests.iter().filter(|r| self.data_policy.serves(r)).count();
 +        Ok((served as u32, (requests.len() - served) as u32))
 +    }
 +
@@ -5349,7 +6323,7 @@ index 5dabddc..86bb013 100644
      /// Progress of the running (or last) sync pass. Reads only atomics, so it answers
      /// while `sync` holds the database write lock.
      pub fn sync_progress(&self) -> SyncSnapshot {
-@@ -323,17 +568,7 @@ where
+@@ -323,17 +597,7 @@ where
      ) -> Result<Proposal<StandardFeeRule, NoteRef>, Error> {
          let input_selector = GreedyInputSelector::new();
  
@@ -5368,7 +6342,7 @@ index 5dabddc..86bb013 100644
          let request = TransactionRequest::new(vec![Payment::without_memo(
              to_address,
              Zatoshis::from_u64(value)?,
-@@ -348,7 +583,7 @@ where
+@@ -348,7 +612,7 @@ where
                  .get_target_and_anchor_heights(self.min_confirmations.trusted())?
          );
          let mut db = self.db.write().await;
@@ -5377,7 +6351,7 @@ index 5dabddc..86bb013 100644
              &mut *db,
              &self.network,
              account_id,
-@@ -356,8 +591,13 @@ where
+@@ -356,8 +620,13 @@ where
              &change_strategy,
              request,
              self.min_confirmations,
@@ -5392,7 +6366,7 @@ index 5dabddc..86bb013 100644
          tracing::info!("Transfer proposal created");
          Ok(proposal)
      }
-@@ -374,6 +614,7 @@ where
+@@ -374,6 +643,7 @@ where
          usk: &UnifiedSpendingKey,
      ) -> Result<NonEmpty<TxId>, Error> {
          let prover = LocalTxProver::bundled();
@@ -5400,7 +6374,7 @@ index 5dabddc..86bb013 100644
          let mut db = self.db.write().await;
          let transactions = create_proposed_transactions::<
              _,
-@@ -385,13 +626,19 @@ where
+@@ -385,13 +655,19 @@ where
          >(
              &mut *db,
              &self.network,
@@ -5421,7 +6395,7 @@ index 5dabddc..86bb013 100644
          Ok(transactions)
      }
  
-@@ -467,48 +714,12 @@ where
+@@ -467,48 +743,12 @@ where
      pub async fn pczt_shield(&self, account_id: AccountId) -> Result<Pczt, Error> {
          tracing::info!("pczt_shield: Starting for account {:?}", account_id);
  
@@ -5475,7 +6449,7 @@ index 5dabddc..86bb013 100644
  
          let input_selector = GreedyInputSelector::new();
          let mut db = self.db.write().await;
-@@ -557,6 +768,11 @@ where
+@@ -557,6 +797,11 @@ where
              &from_addrs,
              account_id,
              self.min_confirmations, // librustzcash operates under the assumption of zero or one conf being the same but that could change.
@@ -5487,7 +6461,7 @@ index 5dabddc..86bb013 100644
          )
          .map_err(|e| {
              tracing::error!("pczt_shield: propose_shielding failed: {:?}", e);
-@@ -575,9 +791,16 @@ where
+@@ -575,9 +820,16 @@ where
          >(
              &mut *db,
              &self.network,
@@ -5504,7 +6478,7 @@ index 5dabddc..86bb013 100644
          )
          .map_err(|e| {
              tracing::error!("pczt_shield: create_pczt_from_proposal failed: {:?}", e);
-@@ -606,55 +829,21 @@ where
+@@ -606,55 +858,21 @@ where
              // `None` when the address cannot receive one (transparent P2PKH/P2SH, TEX, or a
              // unified address with only a transparent receiver).
              Some(memo) => Payment::new(to_address, Some(amount), Some(memo), None, None, vec![])
@@ -5567,7 +6541,7 @@ index 5dabddc..86bb013 100644
              &mut *db,
              &self.network,
              account_id,
-@@ -662,8 +851,11 @@ where
+@@ -662,8 +880,11 @@ where
              &change_strategy,
              request,
              self.min_confirmations,
@@ -5580,7 +6554,7 @@ index 5dabddc..86bb013 100644
          tracing::info!("PCZT proposal created");
          let pczt = create_pczt_from_proposal::<
              _,
-@@ -675,9 +867,16 @@ where
+@@ -675,9 +896,16 @@ where
          >(
              &mut *db,
              &self.network,
@@ -5597,7 +6571,7 @@ index 5dabddc..86bb013 100644
          )
          .map_err(|e| {
              tracing::error!("pczt_create: create_pczt_from_proposal failed: {:?}", e);
-@@ -737,73 +936,65 @@ where
+@@ -737,73 +965,65 @@ where
              pczt
          };
  
@@ -5724,7 +6698,7 @@ index 5dabddc..86bb013 100644
          self.send_authorized_transactions(&NonEmpty::new(txid))
              .await
      }
-@@ -815,6 +1006,67 @@ where
+@@ -815,6 +1035,67 @@ where
      }
  }
  

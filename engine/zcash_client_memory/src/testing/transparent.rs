@@ -1,7 +1,7 @@
 //! zcash_client_backend's transparent tests (`data_api::testing::transparent`), as
 //! zcash_client_sqlite 0.23 runs them (`wallet/transparent.rs`). The standalone-key import
 //! tests are left out: this backend refuses those imports with an explicit error (see
-//! PORT-NOTES "Deferred").
+//! docs/engine-port.md, "Deferred").
 
 use zcash_keys::keys::transparent::gap_limits::GapLimits;
 

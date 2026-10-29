@@ -49,6 +49,18 @@ impl ScanQueue {
         ranges
     }
 
+    /// The blocks still to scan: the lengths of the ranges `suggest_scan_ranges(Historic)`
+    /// returns (what `WalletRead::suggest_scan_ranges` hands to a sync pass), summed, counted
+    /// up to `tip` inclusive.
+    pub(crate) fn unscanned_blocks(&self, tip: BlockHeight) -> u32 {
+        let end = u32::from(tip).saturating_add(1);
+        self.0
+            .iter()
+            .filter(|(_, _, p)| *p >= ScanPriority::Historic)
+            .map(|(start, e, _)| min(u32::from(*e), end).saturating_sub(u32::from(*start)))
+            .fold(0, u32::saturating_add)
+    }
+
     /// `insert_queue_entries`: empty entries are skipped. A non-empty entry overlapping an
     /// existing one is an error (sqlite's table has no such constraint, but its callers
     /// never insert overlapping ranges; here the invariant is checked).
@@ -232,6 +244,30 @@ mod tests {
 
     fn h(n: u32) -> BlockHeight {
         BlockHeight::from_u32(n)
+    }
+
+    /// What a sync pass still has to scan: the suggested ranges (priority Historic and above:
+    /// not the ignored blocks below the birthday, not the scanned ones), up to the tip.
+    #[test]
+    fn unscanned_blocks_counts_the_suggested_ranges_up_to_the_tip() {
+        let q = ScanQueue(vec![
+            (h(0), h(100), ScanPriority::Ignored),
+            (h(100), h(150), ScanPriority::Historic),
+            (h(150), h(160), ScanPriority::Scanned),
+            (h(160), h(170), ScanPriority::Verify),
+            (h(170), h(200), ScanPriority::ChainTip),
+        ]);
+        let suggested: u32 = q
+            .suggest_scan_ranges(ScanPriority::Historic)
+            .iter()
+            .map(|r| r.len() as u32)
+            .sum();
+        assert_eq!(q.unscanned_blocks(h(199)), 90);
+        assert_eq!(q.unscanned_blocks(h(199)), suggested);
+        assert_eq!(q.unscanned_blocks(h(179)), 50 + 10 + 10);
+        assert_eq!(q.unscanned_blocks(h(120)), 21);
+        assert_eq!(q.unscanned_blocks(h(50)), 0);
+        assert_eq!(ScanQueue::new().unscanned_blocks(h(10)), 0);
     }
 
     #[test]

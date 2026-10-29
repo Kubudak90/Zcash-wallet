@@ -166,22 +166,26 @@ impl<P: consensus::Parameters> MemoryWalletDb<P> {
             #[cfg(feature = "transparent-inputs")]
             gap_limits: self.gap_limits,
             anchor_retention_interval: self.anchor_retention_interval,
+            scan_queue_observer: self.scan_queue_observer.clone(),
         }
     }
 
-    /// Runs `f`; if it fails, restores the wallet to its state before the call.
+    /// Runs `f`; if it fails, restores the wallet to its state before the call. Either way
+    /// the scan queue observer is then told the queue's size (`set_scan_queue_observer`).
     pub(crate) fn transactionally<T, E>(
         &mut self,
         f: impl FnOnce(&mut Self) -> Result<T, E>,
     ) -> Result<T, E> {
         let backup = self.snapshot();
-        match f(self) {
+        let result = match f(self) {
             Ok(t) => Ok(t),
             Err(e) => {
                 *self = backup;
                 Err(e)
             }
-        }
+        };
+        self.publish_scan_queue();
+        result
     }
 
     /// The anchor retention policy: from NU6.3 activation, at this wallet's interval
@@ -1483,13 +1487,15 @@ impl<P: consensus::Parameters> WalletWrite for MemoryWalletDb<P> {
         reset_account_birthdays: HashSet<AccountId>,
     ) -> Result<(), RewindError<AccountId, Error>> {
         let backup = self.snapshot();
-        match self.rewind_to_chain_state_internal(&chain_state, reset_account_birthdays) {
+        let result = match self.rewind_to_chain_state_internal(&chain_state, reset_account_birthdays) {
             Ok(()) => Ok(()),
             Err(e) => {
                 *self = backup;
                 Err(e)
             }
-        }
+        };
+        self.publish_scan_queue();
+        result
     }
 
     #[cfg(feature = "transparent-inputs")]
