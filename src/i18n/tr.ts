@@ -108,6 +108,7 @@ export const tr = {
 
   'sync.starting': 'Ağa bağlanılıyor…',
   'sync.syncing': 'Eşitleniyor · {blocks} blok kaldı',
+  'sync.syncingOne': 'Eşitleniyor · 1 blok kaldı',
   'sync.upToDate': 'Güncel · blok {height}',
   'sync.behindNetwork': '{height}. bloğa kadar tarandı · ağın gerisinde',
   'sync.error': 'Bağlantı sorunu, yeniden denenecek',
@@ -189,6 +190,7 @@ export const tr = {
   'send.stage.broadcasting': 'Ağa gönderiliyor…',
   'send.doNotClose': 'İşlem bitene kadar bu sekmeyi kapatma.',
   'send.waitForSync': 'Cüzdan hâlâ eşitleniyor ({blocks} blok kaldı). Güncel olunca devam edebilirsin.',
+  'send.waitForSyncOne': 'Cüzdan hâlâ eşitleniyor (1 blok kaldı). Güncel olunca devam edebilirsin.',
   'send.waitForConnect': 'Cüzdan hâlâ ağa bağlanıyor. Güncel olunca devam edebilirsin.',
   'send.waitForRetry':
     'Cüzdan {blocks} blok geride ve eşitleme bağlantı sorunu yüzünden durdu; yeniden denenecek. Güncel olunca devam edebilirsin.',

@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
+import { translate, type Lang } from '../../src/i18n';
 import {
   CATCH_UP_BLOCKS,
   catchUpFor,
   passBlocksDone,
   queueBlocksLeft,
+  syncLabel,
   syncView,
   type QueueReading,
   type SyncInfo,
@@ -294,5 +296,19 @@ describe('a stopped engine', () => {
   it('shows as stopped, not as a connection problem that will retry', () => {
     expect(syncView(sync({ status: 'stopped', error: 'the wallet engine stopped' }), SYNCED, BIRTHDAY)).toEqual({ kind: 'stopped' });
     expect(syncView(sync({ status: 'error', error: 'x' }), SYNCED, BIRTHDAY)).toEqual({ kind: 'error' });
+  });
+});
+
+describe('syncLabel', () => {
+  const label = (view: Parameters<typeof syncLabel>[0], lang: Lang) =>
+    syncLabel(view, (key, vars) => translate(lang, key, vars), lang);
+
+  it('says one block, not "1 blocks", while the last pass is saved (final review V2-3)', () => {
+    expect(label({ kind: 'syncing', blocksLeft: 1, pct: 99 }, 'en')).toBe('Syncing · 1 block left');
+    expect(label({ kind: 'syncing', blocksLeft: 1, pct: 99 }, 'tr')).toBe('Eşitleniyor · 1 blok kaldı');
+    expect(label({ kind: 'syncing', blocksLeft: 2, pct: 99 }, 'en')).toBe('Syncing · 2 blocks left');
+    expect(label({ kind: 'syncing', blocksLeft: 39_175, pct: 20 }, 'en')).toBe('Syncing · 39,175 blocks left');
+    expect(label({ kind: 'syncing', blocksLeft: 39_175, pct: 20 }, 'tr')).toBe('Eşitleniyor · 39.175 blok kaldı');
+    expect(label({ kind: 'upToDate', height: 3_534_896 }, 'en')).toBe('Up to date · block 3,534,896');
   });
 });

@@ -107,6 +107,7 @@ export const en: Record<MessageKey, string> = {
 
   'sync.starting': 'Connecting…',
   'sync.syncing': 'Syncing · {blocks} blocks left',
+  'sync.syncingOne': 'Syncing · 1 block left',
   'sync.upToDate': 'Up to date · block {height}',
   'sync.behindNetwork': 'Scanned to block {height} · behind the network',
   'sync.error': 'Connection problem, will retry',
@@ -188,6 +189,7 @@ export const en: Record<MessageKey, string> = {
   'send.stage.broadcasting': 'Broadcasting…',
   'send.doNotClose': 'Do not close this tab until it finishes.',
   'send.waitForSync': 'The wallet is still syncing ({blocks} blocks left). You can continue once it is up to date.',
+  'send.waitForSyncOne': 'The wallet is still syncing (1 block left). You can continue once it is up to date.',
   'send.waitForConnect': 'The wallet is still connecting to the network. You can continue once it is up to date.',
   'send.waitForRetry':
     'The wallet is {blocks} blocks behind and its sync stopped on a connection problem; it will retry. You can continue once it is up to date.',

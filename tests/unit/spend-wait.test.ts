@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { spendWait } from '../../src/lib/spendWait';
+import { translate } from '../../src/i18n';
+import { spendWait, spendWaitText } from '../../src/lib/spendWait';
 import { CATCH_UP_BLOCKS, syncView, type SyncInfo } from '../../src/lib/syncView';
 
 const BIRTHDAY = 2_900_000;
@@ -51,5 +52,22 @@ describe('spendWait', () => {
     const failed = sync({ status: 'error', error: 'stream reset' });
     expect(waitFor(failed, { scannedHeight: TIP - CATCH_UP_BLOCKS, tipHeight: TIP })).toBeNull();
     expect(waitFor(sync({ status: 'error', error: 'x', networkTip: null }), null)).toBeNull();
+  });
+});
+
+describe('spendWaitText', () => {
+  it('says one block, not "1 blocks" (final review V2-3), and groups digits per language', () => {
+    const en = (key: Parameters<typeof translate>[1], vars?: Record<string, string | number>) => translate('en', key, vars);
+    const tr = (key: Parameters<typeof translate>[1], vars?: Record<string, string | number>) => translate('tr', key, vars);
+    expect(spendWaitText({ kind: 'syncing', blocksLeft: 1 }, en, 'en')).toBe(
+      'The wallet is still syncing (1 block left). You can continue once it is up to date.',
+    );
+    expect(spendWaitText({ kind: 'syncing', blocksLeft: 1 }, tr, 'tr')).toBe(
+      'Cüzdan hâlâ eşitleniyor (1 blok kaldı). Güncel olunca devam edebilirsin.',
+    );
+    expect(spendWaitText({ kind: 'syncing', blocksLeft: 12_345 }, en, 'en')).toContain('(12,345 blocks left)');
+    expect(spendWaitText({ kind: 'behind', blocksLeft: 12_345 }, tr, 'tr')).toContain('12.345 blok geride');
+    expect(spendWaitText({ kind: 'connecting' }, en, 'en')).toBe(translate('en', 'send.waitForConnect'));
+    expect(spendWaitText(null, en, 'en')).toBeNull();
   });
 });
