@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  LONG_SCAN_BLOCKS,
   NU7_ACTIVATION_HEIGHT,
   SAPLING_ACTIVATION_HEIGHT,
+  blocksToScan,
   currentMonth,
   estimateBirthday,
   heightBefore,
@@ -182,5 +184,35 @@ describe('i18n', () => {
   it('interpolates variables', () => {
     expect(translate('tr', 'sync.syncing', { blocks: '47.654' })).toBe('Eşitleniyor · 47.654 blok kaldı');
     expect(translate('en', 'sync.syncing', { blocks: '47,654' })).toBe('Syncing · 47,654 blocks left');
+  });
+});
+
+describe('blocksToScan (the restore notice for an old birthday)', () => {
+  const now = new Date('2026-10-29T12:00:00Z');
+  const tip = 3_534_800;
+
+  it('is the gap from the birthday estimateBirthday picks to the tip', () => {
+    for (const month of ['2026-10', '2025-01', '2023-06', '2018-10']) {
+      expect(blocksToScan(month, tip, now)).toBe(tip - estimateBirthday(new Date(`${month}-01T00:00:00Z`), tip, now));
+    }
+    // This month: four weeks plus the 14-day margin, at 75 s a block.
+    expect(blocksToScan('2026-10', tip, now)).toBe(Math.floor((42.5 * 86_400) / 75));
+  });
+
+  it('passes LONG_SCAN_BLOCKS about 14 months back (margin included), not for a recent month', () => {
+    expect(blocksToScan('2026-01', tip, now)).toBeLessThan(LONG_SCAN_BLOCKS);
+    // 2025-10-01: 407.5 days with the margin, 469,440 blocks; 2025-09-01: 437.5 days, 504,000.
+    expect(blocksToScan('2025-10', tip, now)).toBe(469_440);
+    expect(blocksToScan('2025-09', tip, now)).toBe(504_000);
+    expect(blocksToScan('2025-10', tip, now)).toBeLessThan(LONG_SCAN_BLOCKS);
+    expect(blocksToScan('2025-09', tip, now)).toBeGreaterThan(LONG_SCAN_BLOCKS);
+    // The verifiers' long restores: 2025-01 (784k blocks measured) and the spam era.
+    expect(blocksToScan('2025-01', tip, now)).toBeGreaterThan(780_000);
+    expect(blocksToScan('2022-08', tip, now)).toBeGreaterThan(1_800_000);
+  });
+
+  it('counts from the date alone, at 75 s a block, before the tip is known', () => {
+    expect(blocksToScan('2025-01', null, now)).toBe(blocksToScan('2025-01', tip, now));
+    expect(blocksToScan('2026-10', null, now)).toBe(Math.floor((42.5 * 86_400) / 75));
   });
 });

@@ -35,13 +35,19 @@ export interface Settings {
   autoLockMinutes: number;
   /** Amounts show as a placeholder (useHideBalances); kept across locks. */
   hideBalances: boolean;
+  /**
+   * Sync passes fetch the wallet's own transactions in full (ZcashEngine.setHistoryEnhancement):
+   * memos, and after a restore the recipients and fees of past sends; the server then learns
+   * which transactions are the wallet's. On by default.
+   */
+  historyEnhancement: boolean;
 }
 
 export const DEFAULT_SERVER = import.meta.env.VITE_DEFAULT_LIGHTWALLETD || 'https://zcash-mainnet.chainsafe.dev';
 
 export function defaultSettings(): Settings {
   const lang = typeof navigator !== 'undefined' && navigator.language.toLowerCase().startsWith('tr') ? 'tr' : 'en';
-  return { lang, serverUrl: DEFAULT_SERVER, autoLockMinutes: 15, hideBalances: false };
+  return { lang, serverUrl: DEFAULT_SERVER, autoLockMinutes: 15, hideBalances: false, historyEnhancement: true };
 }
 
 /** Puts and deletes keys in one IndexedDB transaction: all of them happen, or none. */

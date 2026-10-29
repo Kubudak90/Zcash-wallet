@@ -243,6 +243,15 @@ export interface ZcashEngine {
 
   sync(): Promise<void>;
   /**
+   * Whether sync passes fetch the wallet's own transactions in full from the server
+   * ("history enhancement"): memos, and after a restore the recipients and fees of past sends.
+   * The server then learns which transactions are the wallet's. Applies to the open wallet
+   * and to every wallet opened later in this page; nothing is lost while it is off (the
+   * requests wait and are served once it is on again). Optional: an engine that always
+   * fetches them leaves it out. Default on.
+   */
+  setHistoryEnhancement?(enabled: boolean): void;
+  /**
    * Calls `listener` once if the engine stops (EngineStoppedError), whether or not a call was
    * running then. Optional: engines that cannot stop leave it out.
    */

@@ -66,6 +66,8 @@ export const tr = {
   'restore.birthdayMonth': 'Ay',
   'restore.birthdayPlaceholder': 'YYYY-AA',
   'restore.birthdayInvalid': 'Ayı 2023-05 ya da 05.2023 biçiminde, 2018-10 ile bu ay arasında gir.',
+  'restore.longScan':
+    '{month} ile başlamak yaklaşık {blocks} blok taramak demek. İlk tarama saatler sürebilir (2022’den ya da 2023 başından yaklaşık bir gün) ve birkaç GB bellek ister; cüzdan her kilitlendiğinde de duraklar. Cüzdanın daha sonraki bir aydan önce kullanılmadığından eminsen, emin olduğun en son ayı seç.',
   'restore.birthdayUnknown': 'Bilmiyorum',
   'restore.birthdayUnknownHelp':
     'Önce şeffaf adresindeki ilk işlemi arayacağız. Bulamazsak Sapling’in başladığı 2018’den itibaren tararız; bu saatler sürebilir.',
@@ -277,10 +279,14 @@ export const tr = {
   'settings.language': 'Dil',
   'settings.server': 'Sunucu (lightwalletd gRPC-web proxy)',
   'settings.serverHelp':
-    'Sunucu IP adresini ve gönderdiğin işlemleri görebilir. Celari kendi işlemlerinin tamamını da ondan ister (geri yüklemeden sonra not, ücret ve alıcılar için ve gönderdiğin ödemeleri izlemek için); bu yüzden sunucu hangi işlemlerin senin olduğunu anlayabilir. Gizli bakiyeni ve kimden para aldığını göremez. Kendi sunucunu da çalıştırabilirsin.',
+    'Sunucu IP adresini ve gönderdiğin işlemleri görebilir. Gizlilik altındaki “Geçmiş için işlemlerin tamamını getir” kapalı değilse Celari kendi işlemlerinin tamamını da ondan ister (notlar için, geri yüklemeden sonra ücret ve alıcılar için); bu yüzden sunucu hangi işlemlerin senin olduğunu anlayabilir. Her iki durumda da gönderdiğin her ödemeyi onaylanana kadar ona sorar. Gizli bakiyeni ve kimden para aldığını göremez. Kendi sunucunu da çalıştırabilirsin.',
   'settings.serverSave': 'Kaydet ve yeniden başlat',
   'settings.serverReset': 'Varsayılana dön',
   'settings.serverInvalid': 'https:// ile başlayan geçerli bir adres gir.',
+  'settings.privacy': 'Gizlilik',
+  'settings.historyEnhancement': 'Geçmiş için işlemlerin tamamını getir',
+  'settings.historyEnhancementHelp':
+    'Açıkken Celari kendi işlemlerinin her birini sunucudan tam olarak ister: notları için ve geri yüklemeden sonra geçmiş ödemelerin alıcıları ve ücretleri için. Sunucu böylece hangi işlemlerin senin olduğunu öğrenir. Kapalıyken bunu bu yoldan öğrenmez, ama Geçmiş’te notlar görünmez ve geri yüklemeden sonra geçmiş ödemeler yalnızca net tutarlarıyla görünür; yeniden açınca eksikler getirilir. Her iki durumda da Celari gönderdiğin bir ödemeyi onaylanana kadar sunucuya sorar, en fazla 5 dakikada bir.',
   'settings.autoLock': 'Otomatik kilit',
   'settings.minutes': '{n} dakika işlem yapılmazsa',
   'settings.autoLockHidden': 'Cüzdan, bu sekme 1 dakika arka planda kalınca da kilitlenir.',

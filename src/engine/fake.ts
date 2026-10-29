@@ -155,6 +155,8 @@ export interface FakeKnobs {
    * engine's text, `code` and numbers.
    */
   refuseSpend?: 'UpgradePending' | 'PcztWrongBranch' | 'PcztExpired';
+  /** Set by the fake: the last value setHistoryEnhancement() received (undefined: never called). */
+  historyEnhancement?: boolean;
 }
 const knobs = (): FakeKnobs => (globalThis as { __fakeEngine?: FakeKnobs }).__fakeEngine ?? {};
 const chainTip = () => TIP + (knobs().chainGrowth ?? 0);
@@ -260,6 +262,11 @@ export class FakeEngine implements ZcashEngine {
 
   onStopped(listener: (error: EngineStoppedError) => void): void {
     this.crash.onStopped(listener);
+  }
+
+  setHistoryEnhancement(enabled: boolean): void {
+    const g = globalThis as { __fakeEngine?: FakeKnobs };
+    g.__fakeEngine = { ...g.__fakeEngine, historyEnhancement: enabled };
   }
 
   async latestHeight(): Promise<number> {

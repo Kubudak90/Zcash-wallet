@@ -83,6 +83,10 @@ declare module '@chainsafe/webzjs-wallet' {
     sync(): Promise<void>;
     // Optional here: the adapter feature-detects it (patches/webzjs/0001-sync-progress.patch).
     sync_progress?(): SyncProgress;
+    /** patches/webzjs/0004 (round 6): whether passes fetch the wallet's own transactions (default true). Not saved. */
+    set_history_enhancement(enabled: boolean): void;
+    /** patches/webzjs/0004 (round 6): seconds between status checks of one pending transaction (default 300). Not saved. */
+    set_status_check_seconds(seconds: number): void;
     get_wallet_summary(): Promise<WalletSummary | undefined>;
     db_to_bytes(): Promise<Uint8Array>;
     get_current_address(account_id: number): Promise<string>;
