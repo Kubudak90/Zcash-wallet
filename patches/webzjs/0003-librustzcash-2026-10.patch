@@ -1,7 +1,7 @@
 librustzcash 2026-10 cohort: manifests, toolchain and cargo configuration
 
 Applies on top of 0002-memo.patch. Generated from the engine-port working tree at
-110753d (make-celari-files.sh); the Rust changes that go with it are in
+eb25e39 (make-celari-files.sh); the Rust changes that go with it are in
 0004-ironwood-nu7.patch, and the two only build together.
 
 - Zcash crates from crates.io (releases of 2026-10-21, NU6.2/NU6.3/NU7-aware) instead of
