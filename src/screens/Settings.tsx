@@ -186,6 +186,9 @@ export function Settings() {
   const serverErrorId = useId();
   const lockId = useId();
   const lockHelpId = useId();
+  const historyHelpId = useId();
+  // Shown at once; the saved settings follow once IndexedDB has them.
+  const [historyEnhancement, setHistoryEnhancement] = useState(settings.historyEnhancement);
 
   return (
     <Screen title={t('settings.title')}>
@@ -228,6 +231,26 @@ export function Settings() {
             {t('settings.serverSave')}
           </button>
         </div>
+      </section>
+
+      <section className="settings-group">
+        <h2>{t('settings.privacy')}</h2>
+        <label className="check">
+          <input
+            type="checkbox"
+            name="history-enhancement"
+            checked={historyEnhancement}
+            aria-describedby={historyHelpId}
+            onChange={(e) => {
+              setHistoryEnhancement(e.target.checked);
+              void controller.saveSettings({ ...settings, historyEnhancement: e.target.checked });
+            }}
+          />
+          {t('settings.historyEnhancement')}
+        </label>
+        <p id={historyHelpId} className="muted small">
+          {t('settings.historyEnhancementHelp')}
+        </p>
       </section>
 
       <section className="settings-group">

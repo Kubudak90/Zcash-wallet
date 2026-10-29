@@ -66,6 +66,8 @@ export const en: Record<MessageKey, string> = {
   'restore.birthdayMonth': 'Month',
   'restore.birthdayPlaceholder': 'YYYY-MM',
   'restore.birthdayInvalid': 'Enter a month such as 2023-05 or 05.2023, between 2018-10 and this month.',
+  'restore.longScan':
+    'Starting from {month} means scanning about {blocks} blocks. The first scan can take hours (from 2022 or early 2023, about a day) and needs several GB of memory, and it pauses whenever the wallet locks. If you are sure the wallet was not used before a later month, choose the latest month you are sure of.',
   'restore.birthdayUnknown': 'I don’t know',
   'restore.birthdayUnknownHelp':
     'We will first look for the earliest transaction on your transparent address. If none is found we scan from Sapling activation in 2018, which can take hours.',
@@ -277,10 +279,14 @@ export const en: Record<MessageKey, string> = {
   'settings.language': 'Language',
   'settings.server': 'Server (lightwalletd gRPC-web proxy)',
   'settings.serverHelp':
-    'The server can see your IP address and the transactions you broadcast. Celari also asks it for your own transactions in full (for memos, fees and recipients after a restore, and to follow payments you sent), so it can tell which transactions are yours. It cannot see your shielded balance or who paid you. You can run your own.',
+    'The server can see your IP address and the transactions you broadcast. Unless you turn off “Fetch full transactions for History” under Privacy, Celari also asks it for your own transactions in full (for memos, and for fees and recipients after a restore), so it can tell which transactions are yours. Either way it asks about each payment you sent until it is confirmed. It cannot see your shielded balance or who paid you. You can run your own.',
   'settings.serverSave': 'Save and restart',
   'settings.serverReset': 'Reset to default',
   'settings.serverInvalid': 'Enter a valid address starting with https://.',
+  'settings.privacy': 'Privacy',
+  'settings.historyEnhancement': 'Fetch full transactions for History',
+  'settings.historyEnhancementHelp':
+    'On: Celari asks the server for each of your own transactions in full, for their memos and, after a restore, for the recipients and fees of past payments. The server then learns which transactions are yours. Off: it does not learn that this way, but History shows no memos and, after a restore, past payments by their net amount only; turning it on again fetches what is missing. Either way Celari asks the server about a payment you sent until it is confirmed, at most every 5 minutes.',
   'settings.autoLock': 'Auto-lock',
   'settings.minutes': 'after {n} minutes of inactivity',
   'settings.autoLockHidden': 'The wallet also locks once this tab has been in the background for 1 minute.',

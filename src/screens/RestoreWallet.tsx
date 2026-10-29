@@ -1,10 +1,12 @@
-import { useId, useState, type FormEvent } from 'react';
+import { useEffect, useId, useState, type FormEvent } from 'react';
 
 import { ErrorDetails, Notice, Screen, Spinner } from '../components/ui';
 import { useI18n } from '../i18n';
 import {
+  LONG_SCAN_BLOCKS,
   SAPLING_ACTIVATION_HEIGHT,
   SAPLING_MONTH,
+  blocksToScan,
   currentMonth,
   estimateBirthday,
   parseBirthdayMonth,
@@ -32,11 +34,29 @@ export function RestoreWallet({ onCancel }: { onCancel: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [birthday, setBirthday] = useState<number | null>(null);
+  /** The network tip, read once the month step shows, for the long-scan notice; null until it answers. */
+  const [tip, setTip] = useState<number | null>(null);
   const monthErrorId = useId();
+  const longScanId = useId();
+
+  useEffect(() => {
+    if (step !== 'birthday' || tip !== null) return;
+    let live = true;
+    controller.latestHeight().then(
+      (h) => live && setTip(h),
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, [step, tip, controller]);
 
   // Browsers without a month picker show a text box, where people type '05.2023'.
   const parsedMonth = parseBirthdayMonth(month);
   const monthError = !unknown && monthTouched && month.trim() !== '' && parsedMonth === null;
+  // A start this old means hours of scanning: say so, without stopping anyone who is sure.
+  const longScan = !unknown && parsedMonth !== null ? blocksToScan(parsedMonth, tip) : 0;
+  const showLongScan = longScan > LONG_SCAN_BLOCKS;
 
   async function submitSecret(e: FormEvent) {
     e.preventDefault();
@@ -149,7 +169,7 @@ export function RestoreWallet({ onCancel }: { onCancel: () => void }) {
               value={month}
               disabled={unknown}
               aria-invalid={monthError}
-              aria-describedby={monthError ? monthErrorId : undefined}
+              aria-describedby={monthError ? monthErrorId : showLongScan ? longScanId : undefined}
               onChange={(e) => setMonth(e.target.value)}
               onBlur={() => setMonthTouched(true)}
             />
@@ -158,6 +178,16 @@ export function RestoreWallet({ onCancel }: { onCancel: () => void }) {
             <p id={monthErrorId} className="field-error">
               {t('restore.birthdayInvalid')}
             </p>
+          )}
+          {showLongScan && parsedMonth && (
+            <Notice tone="warn">
+              <span id={longScanId} data-testid="long-scan">
+                {t('restore.longScan', {
+                  month: parsedMonth,
+                  blocks: (Math.round(longScan / 10_000) * 10_000).toLocaleString(lang === 'tr' ? 'tr-TR' : 'en-US'),
+                })}
+              </span>
+            </Notice>
           )}
           <label className="check">
             <input type="checkbox" checked={unknown} onChange={(e) => setUnknown(e.target.checked)} />

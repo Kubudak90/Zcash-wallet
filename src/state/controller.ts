@@ -183,6 +183,8 @@ export class WalletController {
       if (!globalThis.crossOriginIsolated) throw new Error('isolation');
       const engine = await loadEngine();
       await engine.init(this.state.settings.serverUrl);
+      // A setting of this browser, not of the wallet database: applied to every wallet the engine opens.
+      engine.setHistoryEnhancement?.(this.state.settings.historyEnhancement);
       this.engine = engine;
       engine.onStopped?.((e) => this.engineStopped(e));
       // What the engine knows without a server stands until a server says more.
@@ -488,6 +490,10 @@ export class WalletController {
     if (restart) {
       window.location.reload();
       return;
+    }
+    // From the next pass on; requests left meanwhile wait in the wallet for it to be on again.
+    if (settings.historyEnhancement !== this.state.settings.historyEnhancement) {
+      this.engine?.setHistoryEnhancement?.(settings.historyEnhancement);
     }
     this.set({ settings });
   }

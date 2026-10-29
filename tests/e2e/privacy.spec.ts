@@ -1,5 +1,8 @@
+import { generateMnemonic } from '@scure/bip39';
+import { wordlist } from '@scure/bip39/wordlists/english';
 import { expect, test, type Page } from '@playwright/test';
 
+import { currentMonth } from '../../src/lib/birthday';
 import { CLEAR_AFTER_MS } from '../../src/lib/clipboard';
 import { PASSWORD, UA, createWallet } from './helpers';
 
@@ -170,4 +173,79 @@ test('the eye is named in Turkish too', async ({ page }) => {
   await page.getByRole('button', { name: 'Bakiyeleri gizle' }).click();
   await expect(page.getByTestId('balance-total').locator('.visually-hidden')).toHaveText('tutar gizlendi');
   await expect(page.getByText('•••• ZEC herkesin görebildiği şeffaf adreste duruyor.', { exact: false })).toBeVisible();
+});
+
+const enhancement = (page: Page) =>
+  page.evaluate(() => (window as unknown as { __fakeEngine?: { historyEnhancement?: boolean } }).__fakeEngine?.historyEnhancement);
+
+test('fetching full transactions for History can be turned off, and stays off across a lock', async ({ page }) => {
+  // Verifier finding V-6, owner decision: the switch, default on, with what each side costs.
+  await createWallet(page);
+  // On by default, and the engine is told so before any wallet opens.
+  expect(await enhancement(page)).toBe(true);
+  await page.getByRole('button', { name: 'Settings' }).click();
+  const box = page.getByRole('checkbox', { name: 'Fetch full transactions for History' });
+  await expect(box).toBeChecked();
+  await expect(box).toHaveAccessibleDescription(/The server then learns which transactions are yours\./);
+  await expect(box).toHaveAccessibleDescription(/History shows no memos and, after a restore, past payments by their net amount only/);
+  const server = page.getByLabel('Server (lightwalletd gRPC-web proxy)');
+  await expect(server).toHaveAccessibleDescription(/Unless you turn off “Fetch full transactions for History” under Privacy/);
+
+  await box.uncheck();
+  await expect.poll(() => enhancement(page)).toBe(false);
+  // Saved with the settings: the next page (after a lock) tells the engine again.
+  await page.getByRole('button', { name: 'Lock' }).click();
+  await expect(page.getByRole('heading', { name: 'Your wallet is locked' })).toBeVisible();
+  expect(await enhancement(page)).toBe(false);
+  await unlock(page);
+  await page.getByRole('button', { name: 'Settings' }).click();
+  await expect(box).not.toBeChecked();
+  await box.check();
+  await expect.poll(() => enhancement(page)).toBe(true);
+
+  await page.getByRole('button', { name: 'Türkçe' }).click();
+  const kutu = page.getByRole('checkbox', { name: 'Geçmiş için işlemlerin tamamını getir' });
+  await expect(kutu).toBeChecked();
+  await expect(kutu).toHaveAccessibleDescription(/Sunucu böylece hangi işlemlerin senin olduğunu öğrenir\./);
+});
+
+test('a restore from an old month says the first scan takes hours, without stopping it', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Restore an existing wallet' }).click();
+  await page.getByRole('textbox').fill(generateMnemonic(wordlist, 256));
+  await page.getByRole('button', { name: 'Continue' }).click();
+  const month = page.getByLabel('Month', { exact: true });
+  const notice = page.getByTestId('long-scan');
+  const old = `${new Date().getFullYear() - 2}-01`;
+
+  // This month: no notice.
+  await month.fill(currentMonth());
+  await expect(page.getByRole('button', { name: 'Continue' })).toBeEnabled();
+  await expect(notice).toHaveCount(0);
+  // Two years back: well over 500,000 blocks.
+  await month.fill(old);
+  await expect(notice).toContainText(new RegExp(`^Starting from ${old} means scanning about [\\d,]+ blocks\\. The first scan can take hours`));
+  await expect(notice).toContainText('needs several GB of memory');
+  await expect(notice).toContainText('choose the latest month you are sure of');
+  await expect(month).toHaveAccessibleDescription(/means scanning about/);
+  const blocks = Number((await notice.textContent())!.match(/about ([\d,]+) blocks/)![1]!.replace(/,/g, ''));
+  expect(blocks).toBeGreaterThan(500_000);
+  // It does not stop the restore.
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByText(/Sync will start at block/)).toBeVisible();
+});
+
+test('the old-month notice in Turkish', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Türkçe' }).click();
+  await page.getByRole('button', { name: 'Var olan cüzdanı geri yükle' }).click();
+  await page.getByRole('textbox').fill(generateMnemonic(wordlist, 256));
+  await page.getByRole('button', { name: 'Devam' }).click();
+  const old = `${new Date().getFullYear() - 2}-01`;
+  await page.getByLabel('Ay', { exact: true }).fill(old);
+  await expect(page.getByTestId('long-scan')).toContainText(
+    new RegExp(`^${old} ile başlamak yaklaşık [\\d.]+ blok taramak demek\\. İlk tarama saatler sürebilir`),
+  );
+  await expect(page.getByTestId('long-scan')).toContainText('emin olduğun en son ayı seç');
+  await expect(page.getByRole('button', { name: 'Devam' })).toBeEnabled();
 });

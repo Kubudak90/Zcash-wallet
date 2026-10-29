@@ -45,6 +45,11 @@ const ACCOUNT_HD_INDEX = 0;
 // Notes are spendable after one confirmation, as in upstream's web wallet.
 const MIN_CONFIRMATIONS_TRUSTED = 1;
 const MIN_CONFIRMATIONS_UNTRUSTED = 1;
+/**
+ * How often a sync pass may ask the server about one transaction the wallet waits for
+ * (GetStatus), in seconds; the engine's default, set explicitly (docs/engine-port.md, Decision 22).
+ */
+const STATUS_CHECK_SECONDS = 300;
 
 /**
  * Builds the spending key and seed fingerprint for one signing operation.
@@ -100,6 +105,8 @@ export class WebzjsEngine implements ZcashEngine {
   private wallet: WebWallet | null = null;
   // A throwaway wallet for chain queries before the real one is unlocked.
   private probe: WebWallet | null = null;
+  /** setHistoryEnhancement(): not saved by WebZjs, so given to every WebWallet this adapter makes. */
+  private historyEnhancement = true;
 
   async init(serverUrl: string): Promise<void> {
     this.serverUrl = serverUrl;
@@ -110,13 +117,23 @@ export class WebzjsEngine implements ZcashEngine {
   }
 
   private newWallet(db: Uint8Array | null): WebWallet {
-    return new WebWallet(
+    const wallet = new WebWallet(
       NETWORK,
       this.serverUrl,
       MIN_CONFIRMATIONS_TRUSTED,
       MIN_CONFIRMATIONS_UNTRUSTED,
       db ?? undefined,
     );
+    // Neither is saved with the wallet (patches/webzjs/0004, round 6): set after every new WebWallet.
+    wallet.set_history_enhancement(this.historyEnhancement);
+    wallet.set_status_check_seconds(STATUS_CHECK_SECONDS);
+    return wallet;
+  }
+
+  setHistoryEnhancement(enabled: boolean): void {
+    this.historyEnhancement = enabled;
+    this.wallet?.set_history_enhancement(enabled);
+    this.probe?.set_history_enhancement(enabled);
   }
 
   private get chain(): WebWallet {

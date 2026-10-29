@@ -77,6 +77,24 @@ export function newWalletBirthday(tipHeight: number): number {
   return Math.max(SAPLING_ACTIVATION_HEIGHT, heightBefore(tipHeight, NEW_WALLET_MARGIN_SECONDS));
 }
 
+/**
+ * A restore that scans more blocks than this from its birthday gets a notice (RestoreWallet):
+ * the first scan then takes hours and several GB of memory. About 14 months of 75 s blocks.
+ */
+export const LONG_SCAN_BLOCKS = 500_000;
+
+/**
+ * About how many blocks a restore from the start of `month` ('YYYY-MM') scans: the gap from the
+ * birthday estimateBirthday() picks to `tipHeight`. Without a tip, the time since then at 75 s a
+ * block (NU7's faster blocks make the real count only larger).
+ */
+export function blocksToScan(month: string, tipHeight: number | null, now: Date = new Date()): number {
+  const date = new Date(`${month}-01T00:00:00Z`);
+  if (tipHeight !== null) return tipHeight - estimateBirthday(date, tipHeight, now);
+  const seconds = Math.max(0, (now.getTime() - date.getTime()) / 1000) + SAFETY_MARGIN_DAYS * 86_400;
+  return Math.floor(seconds / BLOCK_TIME_SECONDS);
+}
+
 /** Scan progress between the birthday and the chain tip, 0..1. */
 export function syncProgress(birthday: number, scannedHeight: number, tipHeight: number): number {
   const span = tipHeight - birthday;
