@@ -1,266 +1,408 @@
-use std::{
-    collections::{BTreeSet, HashMap},
-    ops::Range,
-};
+//! `WalletWrite` for [`MemoryWalletDb`].
+//!
+//! Block and transaction storage delegate to zcash_client_backend's
+//! `data_api::ll::wallet::{put_blocks, store_decrypted_tx}`; the rest follows the
+//! zcash_client_sqlite 0.23 function named in each method's comment.
+//!
+//! Every multi-step mutation runs through [`MemoryWalletDb::transactionally`]: on error the
+//! wallet is restored to its state before the call, as a rolled-back SQL transaction would
+//! leave zcash_client_sqlite's database. A half-applied `put_blocks` must never be persisted.
 
-use rayon::prelude::*;
+use std::cmp::{max, min};
+use std::collections::{HashMap, HashSet};
+use std::ops::Range;
+
+use incrementalmerkletree::{Marking, Retention};
 use secrecy::{ExposeSecret, SecretVec};
-
-use ::transparent::bundle::OutPoint;
-use incrementalmerkletree::{Marking, Position, Retention};
-use shardtree::store::ShardStore;
+use shardtree::{ShardTree, store::{ShardStore, memory::MemoryShardStore}};
 use zcash_client_backend::{
-    TransferType,
-    address::UnifiedAddress,
     data_api::{
-        AccountBirthday, DecryptedTransaction, ScannedBlock, SentTransaction,
-        SentTransactionOutput, WalletRead, WalletWrite,
-    },
-    data_api::{
-        AccountPurpose, AccountSource, SAPLING_SHARD_HEIGHT, TransactionStatus,
-        WalletCommitmentTrees as _, Zip32Derivation,
+        Account as _, AccountBirthday, AccountPurpose, AccountSource, DecryptedTransaction,
+        ScannedBlock, SentTransaction, TransactionStatus, WalletRead,
+        WalletWrite, Zip32Derivation,
+        anchor_retention::AnchorRetention,
         chain::ChainState,
+        error::RewindError,
+        ll::{LowLevelWalletWrite, wallet as ll_wallet},
         scanning::{ScanPriority, ScanRange},
     },
-    keys::{UnifiedAddressRequest, UnifiedFullViewingKey, UnifiedSpendingKey},
-    wallet::{NoteId, Recipient, WalletTransparentOutput},
+    wallet::{Note, Recipient},
+    DecryptedOutput, TransferType,
 };
+use zcash_keys::{
+    address::UnifiedAddress,
+    keys::{
+        AddressGenerationError, ReceiverRequirement, UnifiedAddressRequest,
+        UnifiedFullViewingKey, UnifiedSpendingKey,
+    },
+};
+use zcash_primitives::transaction::TxId;
 use zcash_protocol::{
-    PoolType,
-    ShieldedProtocol::{self, Sapling},
-    TxId,
+    ShieldedPool,
     consensus::{self, BlockHeight, NetworkUpgrade},
+    memo::MemoBytes,
 };
 use zip32::{DiversifierIndex, fingerprint::SeedFingerprint};
 
-use crate::{
-    MemoryWalletBlock, MemoryWalletDb, Nullifier, PRUNING_DEPTH, ReceivedNote, VERIFY_LOOKAHEAD,
-    error::Error,
-};
-
-#[cfg(feature = "orchard")]
-use {
-    shardtree::error::ShardTreeError, std::collections::BTreeMap,
-    zcash_client_backend::data_api::ORCHARD_SHARD_HEIGHT,
-    zcash_protocol::ShieldedProtocol::Orchard,
-};
-
 #[cfg(feature = "transparent-inputs")]
 use {
-    ::transparent::{address::TransparentAddress, bundle::TxOut},
+    ::transparent::{
+        address::TransparentAddress,
+        bundle::{OutPoint, TxOut},
+        keys::{NonHardenedChildIndex, TransparentKeyScope},
+    },
     zcash_client_backend::{
-        data_api::TransactionsInvolvingAddress, wallet::TransparentAddressMetadata,
+        data_api::TransactionsInvolvingAddress,
+        wallet::{TransparentAddressMetadata, WalletTransparentOutput},
+    },
+    zcash_keys::{
+        address::Address,
+        keys::{
+            ReceiverRequirement::{Allow, Require},
+            transparent::gap_limits::{generate_address_list, generate_gap_addresses},
+        },
+    },
+    zcash_protocol::PoolType,
+};
+
+use crate::{
+    Account, AccountId, MemoryWalletDb, PRUNING_DEPTH, VERIFY_LOOKAHEAD,
+    error::Error,
+    types::{
+        address::KeyScope,
+        memory_wallet::{PoolTree, SubtreeInfo},
     },
 };
 
-impl<P: consensus::Parameters> WalletWrite for MemoryWalletDb<P> {
-    type UtxoRef = OutPoint;
+/// The offset added to the current Unix time to pick the first diversifier index tried for a
+/// new shielded-only address (zcash_client_sqlite `MIN_SHIELDED_DIVERSIFIER_OFFSET`).
+const MIN_SHIELDED_DIVERSIFIER_OFFSET: u64 = 2817325936;
 
-    fn create_account(
-        &mut self,
-        account_name: &str,
-        seed: &SecretVec<u8>,
-        birthday: &AccountBirthday,
-        key_source: Option<&str>,
-    ) -> Result<(Self::AccountId, UnifiedSpendingKey), Self::Error> {
-        if cfg!(not(test)) {
-            unimplemented!(
-                "Memwallet does not support adding accounts from seed phrases. 
-    Instead derive the ufvk in the calling code and import it using `import_account_ufvk`"
-            )
-        } else {
-            let seed_fingerprint = SeedFingerprint::from_seed(seed.expose_secret())
-                .ok_or(Self::Error::InvalidSeedLength)?;
-            let account_index = self
-                .max_zip32_account_index(&seed_fingerprint)?
-                .map(|a| a.next().ok_or(Self::Error::AccountOutOfRange))
-                .transpose()?
-                .unwrap_or(zip32::AccountId::ZERO);
+/// The current Unix time in seconds. Uses the `time` crate, which reads the JavaScript clock
+/// on wasm32 (`std::time::SystemTime::now` panics there).
+pub(crate) fn unix_time_now() -> u64 {
+    u64::try_from(time::OffsetDateTime::now_utc().unix_timestamp()).unwrap_or(0)
+}
 
-            let usk =
-                UnifiedSpendingKey::from_seed(&self.params, seed.expose_secret(), account_index)?;
-            let ufvk = usk.to_unified_full_viewing_key();
+/// A structural copy of a note commitment tree, through the store interface (the shardtree
+/// types do not implement `Clone`). Includes retained checkpoints. Infallible: every
+/// operation of `MemoryShardStore` is.
+pub(crate) fn copy_tree<H: incrementalmerkletree::Hashable + Clone + PartialEq, const DEPTH: u8, const SHARD_HEIGHT: u8>(
+    tree: &ShardTree<MemoryShardStore<H, BlockHeight>, DEPTH, SHARD_HEIGHT>,
+    max_checkpoints: usize,
+) -> ShardTree<MemoryShardStore<H, BlockHeight>, DEPTH, SHARD_HEIGHT> {
+    fn ok<T>(r: Result<T, std::convert::Infallible>) -> T {
+        match r {
+            Ok(t) => t,
+            Err(e) => match e {},
+        }
+    }
+    let src = tree.store();
+    let mut store = MemoryShardStore::<H, BlockHeight>::empty();
+    for addr in ok(src.get_shard_roots()) {
+        if let Some(shard) = ok(src.get_shard(addr)) {
+            ok(store.put_shard(shard));
+        }
+    }
+    ok(store.put_cap(ok(src.get_cap())));
+    let mut checkpoints = vec![];
+    ok(src.for_each_checkpoint(usize::MAX, |id, cp| {
+        checkpoints.push((*id, cp.clone()));
+        Ok(())
+    }));
+    for (id, cp) in checkpoints {
+        ok(store.add_checkpoint(id, cp));
+    }
+    for id in ok(src.retained_checkpoints()) {
+        ok(store.add_retained_checkpoint(id));
+    }
+    ShardTree::new(store, max_checkpoints)
+}
 
-            let (id, _account) = self.add_account(
-                account_name,
-                AccountSource::Derived {
-                    derivation: Zip32Derivation::new(
-                        seed_fingerprint,
-                        account_index,
-                        #[cfg(feature = "zcashd-compat")]
-                        None,
-                    ),
-                    key_source: key_source.map(|s| s.to_string()),
-                },
-                ufvk,
-                birthday.clone(),
-            )?;
+impl<H: incrementalmerkletree::Hashable + Clone + PartialEq, const DEPTH: u8, const SHARD_HEIGHT: u8>
+    PoolTree<ShardTree<MemoryShardStore<H, BlockHeight>, DEPTH, SHARD_HEIGHT>, H>
+{
+    fn deep_copy(&self, max_checkpoints: usize) -> Self {
+        PoolTree {
+            tree: copy_tree(&self.tree, max_checkpoints),
+            subtrees: self.subtrees.clone(),
+        }
+    }
+}
 
-            Ok((id, usk))
+/// How truncation affects one note commitment tree (`TreeTruncation`).
+enum TreeTruncation {
+    ToCheckpoint,
+    Unaffected,
+    ResetToSubtreeRoots,
+    WouldDestroyWitnesses,
+    DivergedCheckpoints,
+}
+
+impl<P: consensus::Parameters> MemoryWalletDb<P> {
+    /// A full copy of the wallet.
+    pub(crate) fn snapshot(&self) -> Self {
+        Self {
+            params: self.params.clone(),
+            max_checkpoints: self.max_checkpoints,
+            accounts: self.accounts.clone(),
+            addresses: self.addresses.clone(),
+            blocks: self.blocks.clone(),
+            tx_table: self.tx_table.clone(),
+            received_notes: self.received_notes.clone(),
+            sent_notes: self.sent_notes.clone(),
+            spend_maps: self.spend_maps.clone(),
+            transparent: self.transparent.clone(),
+            tx_retrieval_queue: self.tx_retrieval_queue.clone(),
+            #[cfg(feature = "transparent-inputs")]
+            transparent_spend_search_queue: self.transparent_spend_search_queue.clone(),
+            scan_queue: self.scan_queue.clone(),
+            output_locks: self.output_locks.clone(),
+            sapling: self.sapling.deep_copy(self.max_checkpoints),
+            #[cfg(feature = "orchard")]
+            orchard: self.orchard.deep_copy(self.max_checkpoints),
+            #[cfg(feature = "orchard")]
+            ironwood: self.ironwood.deep_copy(self.max_checkpoints),
+            #[cfg(feature = "transparent-inputs")]
+            gap_limits: self.gap_limits,
+            anchor_retention_interval: self.anchor_retention_interval,
         }
     }
 
-    fn delete_account(&mut self, account: Self::AccountId) -> Result<(), Self::Error> {
-        self.accounts.accounts.remove(&account);
-        todo!("remove all transactions associated with the account")
-    }
-
-    fn get_next_available_address(
+    /// Runs `f`; if it fails, restores the wallet to its state before the call.
+    pub(crate) fn transactionally<T, E>(
         &mut self,
-        account: Self::AccountId,
-        request: UnifiedAddressRequest,
-    ) -> Result<Option<(UnifiedAddress, DiversifierIndex)>, Self::Error> {
-        tracing::debug!("get_next_available_address");
-        self.accounts
-            .get_mut(account)
-            .map(|account| account.next_available_address(request))
-            .transpose()
-            .map(|a| a.flatten())
+        f: impl FnOnce(&mut Self) -> Result<T, E>,
+    ) -> Result<T, E> {
+        let backup = self.snapshot();
+        match f(self) {
+            Ok(t) => Ok(t),
+            Err(e) => {
+                *self = backup;
+                Err(e)
+            }
+        }
     }
 
-    fn update_chain_tip(&mut self, tip_height: BlockHeight) -> Result<(), Self::Error> {
-        tracing::debug!("update_chain_tip");
-        // If the caller provided a chain tip that is before Sapling activation, do nothing.
+    /// The anchor retention policy: from NU6.3 activation, at this wallet's interval
+    /// (zcash_client_sqlite `put_blocks`). ZIP 318 pool migrations are not supported by this
+    /// backend, so no migration-committed intervals are added.
+    fn anchor_retention(&self) -> Option<AnchorRetention> {
+        self.params
+            .activation_height(NetworkUpgrade::Nu6_3)
+            .map(|from_height| {
+                AnchorRetention::new(
+                    from_height,
+                    zcash_protocol::zip318::BlockSpacing::for_network(&self.params),
+                    self.anchor_retention_interval(),
+                )
+            })
+    }
+
+    /// `max_zip32_account_index`: the highest ZIP 32 index of accounts with this seed.
+    fn max_zip32_account_index(&self, seed_fp: &SeedFingerprint) -> Option<zip32::AccountId> {
+        self.accounts
+            .iter()
+            .filter_map(|a| match a.source() {
+                AccountSource::Derived { derivation, .. }
+                | AccountSource::Imported {
+                    purpose:
+                        AccountPurpose::Spending {
+                            derivation: Some(derivation),
+                        },
+                    ..
+                } if derivation.seed_fingerprint() == seed_fp => Some(derivation.account_index()),
+                _ => None,
+            })
+            .max()
+    }
+
+    /// `add_account` (zcash_client_sqlite `wallet.rs`): records the account, its default
+    /// address and its transparent gap addresses.
+    fn add_account_full(
+        &mut self,
+        account_name: &str,
+        source: AccountSource,
+        ufvk: UnifiedFullViewingKey,
+        birthday: &AccountBirthday,
+    ) -> Result<Account, Error> {
+        let uivk = ufvk.to_unified_incoming_viewing_key();
+        if let Some(existing) = self.account_for_uivk(&uivk)? {
+            // `upgrade_account_ufvk`: only a strictly more capable key replaces the stored
+            // one; anything else is a collision.
+            let existing_id = existing.id();
+            let existing_ufvk = existing.ufvk.clone();
+            if !ufvk.subsumes_uivk(&existing.uivk()) || existing_ufvk.subsumes_ufvk(&ufvk) {
+                return Err(Error::Other(format!(
+                    "the key collides with existing account {existing_id:?}"
+                )));
+            }
+            let account = self
+                .accounts
+                .get_mut(existing_id)
+                .ok_or(Error::AccountUnknown(existing_id))?;
+            account.ufvk = ufvk;
+            return Ok(account.clone());
+        }
+
+        let (account_id, account) =
+            self.add_account_row(account_name, source, ufvk, birthday.clone())?;
+
+        // Bring the note commitment trees, the scan queue and the birthday metadata into a
+        // state consistent with the new account's birthday by rewinding to the chain state
+        // before it; the new account is the only one whose birthday may be reset (sqlite
+        // `add_account`). On a wallet that has not scanned past the birthday this changes
+        // nothing; otherwise it truncates within the pruning window and queues the blocks
+        // from the birthday for rescanning.
+        match self.rewind_to_chain_state_internal(
+            &birthday.prior_chain_state(),
+            std::iter::once(account_id).collect(),
+        ) {
+            Ok(()) => {}
+            Err(RewindError::DataSource(e)) => return Err(e),
+            Err(RewindError::RewindBeyondBirthdays(_)) => {
+                return Err(Error::CorruptedData(
+                    "rewind for a new account refused although its birthday may be reset"
+                        .into(),
+                ));
+            }
+            Err(e) => return Err(Error::Other(format!("rewind for a new account failed: {e:?}"))),
+        }
+
+        // Blocks below the birthday (from Sapling activation) are ignored.
+        let sapling_activation_height = self
+            .params
+            .activation_height(NetworkUpgrade::Sapling)
+            .unwrap_or_else(|| BlockHeight::from_u32(0));
+        if sapling_activation_height < birthday.height() {
+            let ignored_range = sapling_activation_height..birthday.height();
+            self.scan_queue.replace_queue_entries(
+                &ignored_range,
+                Some(ScanRange::from_parts(
+                    ignored_range.clone(),
+                    ScanPriority::Ignored,
+                ))
+                .into_iter(),
+                false,
+            )?;
+        }
+
+        // The default Unified Address, exposed at the birthday.
+        let (address, d_idx) = account
+            .ufvk
+            .default_address(UnifiedAddressRequest::AllAvailableKeys)?;
+        self.addresses.upsert_unified(
+            account_id,
+            d_idx,
+            &address,
+            Some(birthday.height()),
+            false,
+        )?;
+
+        #[cfg(feature = "transparent-inputs")]
+        {
+            // The external addresses below the default address's index, then the gap
+            // addresses of each scope.
+            if let Ok(default_idx) = NonHardenedChildIndex::try_from(d_idx) {
+                let list = generate_address_list(
+                    &uivk,
+                    Some(&account.ufvk),
+                    TransparentKeyScope::EXTERNAL,
+                    UnifiedAddressRequest::ALLOW_ALL,
+                    NonHardenedChildIndex::ZERO..default_idx,
+                    false,
+                )?;
+                self.addresses
+                    .store_range(account_id, KeyScope::External, list)?;
+            }
+            for key_scope in [
+                TransparentKeyScope::EXTERNAL,
+                TransparentKeyScope::INTERNAL,
+                TransparentKeyScope::EPHEMERAL,
+            ] {
+                let gap_limits = self.gap_limits;
+                generate_gap_addresses(
+                    self,
+                    &gap_limits,
+                    account_id,
+                    &uivk,
+                    Some(&account.ufvk),
+                    key_scope,
+                    UnifiedAddressRequest::unsafe_custom(Allow, Allow, Require),
+                    false,
+                )?;
+            }
+        }
+
+        self.accounts
+            .get(account_id)
+            .cloned()
+            .ok_or(Error::AccountUnknown(account_id))
+    }
+
+    /// `scanning::update_chain_tip`.
+    fn update_chain_tip_internal(&mut self, new_tip: BlockHeight) -> Result<(), Error> {
         let sapling_activation = match self.params.activation_height(NetworkUpgrade::Sapling) {
-            Some(h) if h <= tip_height => h,
+            Some(h) if h <= new_tip => h,
             _ => return Ok(()),
         };
+        let max_scanned = self.max_scanned_height();
+        let wallet_birthday = self.wallet_birthday();
 
-        let max_scanned = self.block_height_extrema().map(|range| *range.end());
-        let wallet_birthday = self.get_wallet_birthday()?;
+        // A tip below the max scanned height means a reorg is in progress; scanning will
+        // detect the discontinuity and truncate.
+        if let Some(h) = max_scanned {
+            if new_tip < h {
+                return Ok(());
+            }
+        }
 
-        // If the chain tip is below the prior max scanned height, then the caller has caught
-        // the chain in the middle of a reorg. Do nothing; the caller will continue using the
-        // old scan ranges and either:
-        // - encounter an error trying to fetch the blocks (and thus trigger the same handling
-        //   logic as if this happened with the old linear scanning code); or
-        // - encounter a discontinuity error in `scan_cached_blocks`, at which point they will
-        //   call `WalletDb::truncate_to_height` as part of their reorg handling which will
-        //   resolve the problem.
-        //
-        // We don't check the shard height, as normal usage would have the caller update the
-        // shard state prior to this call, so it is possible and expected to be in a situation
-        // where we should update the tip-related scan ranges but not the shard-related ones.
-        match max_scanned {
-            Some(h) if tip_height < h => return Ok(()),
-            _ => (),
-        };
+        let chain_end = new_tip + 1;
 
-        // `ScanRange` uses an exclusive upper bound.
-        let chain_end = tip_height + 1;
+        // The least of the pools' last subtree end heights, so that the last incomplete
+        // shard of every pool (Ironwood included) is covered.
+        let min_shard_tip = Self::shielded_pools()
+            .iter()
+            .filter_map(|pool| {
+                self.pool_subtree_ends(*pool)
+                    .into_iter()
+                    .map(|(_, end)| end)
+                    .max()
+            })
+            .min();
 
-        let sapling_shard_tip = self.sapling_tip_shard_end_height();
-        // TODO: Handle orchard case as well. See zcash_client_sqlite scanning.rs update_chain_tip
-        let min_shard_tip = sapling_shard_tip;
-
-        // Create a scanning range for the fragment of the last shard leading up to new tip.
-        // We set a lower bound at the wallet birthday (if known), because account creation
-        // requires specifying a tree frontier that ensures we don't need tree information
-        // prior to the birthday.
         let tip_shard_entry = min_shard_tip.filter(|h| h < &chain_end).map(|h| {
             let min_to_scan = wallet_birthday.filter(|b| b > &h).unwrap_or(h);
             ScanRange::from_parts(min_to_scan..chain_end, ScanPriority::ChainTip)
         });
 
-        // Create scan ranges to either validate potentially invalid blocks at the wallet's
-        // view of the chain tip, or connect the prior tip to the new tip.
-        let tip_entry = max_scanned.map_or_else(
-            || {
-                // No blocks have been scanned, so we need to anchor the start of the new scan
-                // range to something else.
-                wallet_birthday.map_or_else(
-                    // We don't have a wallet birthday, which means we have no accounts yet.
-                    // We can therefore ignore all blocks up to the chain tip.
-                    || ScanRange::from_parts(sapling_activation..chain_end, ScanPriority::Ignored),
-                    // We have a wallet birthday, so mark all blocks between that and the
-                    // chain tip as `Historic` (performing wallet recovery).
-                    |wallet_birthday| {
-                        ScanRange::from_parts(wallet_birthday..chain_end, ScanPriority::Historic)
-                    },
-                )
+        let tip_entry = match max_scanned {
+            None => match wallet_birthday {
+                None => ScanRange::from_parts(sapling_activation..chain_end, ScanPriority::Ignored),
+                Some(b) => ScanRange::from_parts(b..chain_end, ScanPriority::Historic),
             },
-            |max_scanned| {
-                // The scan range starts at the block after the max scanned height. Since
-                // `scan_cached_blocks` retrieves the metadata for the block being connected to
-                // (if it exists), the connectivity of the scan range to the max scanned block
-                // will always be checked if relevant.
+            Some(max_scanned) => {
                 let min_unscanned = max_scanned + 1;
-
-                // If we don't have shard metadata, this means we're doing linear scanning, so
-                // create a scan range from the prior tip to the current tip with `Historic`
-                // priority.
                 if tip_shard_entry.is_none() {
                     ScanRange::from_parts(min_unscanned..chain_end, ScanPriority::Historic)
                 } else {
-                    // Determine the height to which we expect new blocks retrieved from the
-                    // block source to be stable and not subject to being reorg'ed.
-                    let stable_height = tip_height.saturating_sub(PRUNING_DEPTH);
-
-                    // If the wallet's max scanned height is above the stable height,
-                    // prioritize the range between it and the new tip as `ChainTip`.
+                    let stable_height = new_tip.saturating_sub(PRUNING_DEPTH);
                     if max_scanned > stable_height {
-                        // We are in the steady-state case, where a wallet is close to the
-                        // chain tip and just needs to catch up.
-                        //
-                        // This overlaps the `tip_shard_entry` range and so will be coalesced
-                        // with it.
                         ScanRange::from_parts(min_unscanned..chain_end, ScanPriority::ChainTip)
                     } else {
-                        // In this case, the max scanned height is considered stable relative
-                        // to the chain tip. However, it may be stable or unstable relative to
-                        // the prior chain tip, which we could determine by looking up the
-                        // prior chain tip height from the scan queue. For simplicity we merge
-                        // these two cases together, and proceed as though the max scanned
-                        // block is unstable relative to the prior chain tip.
-                        //
-                        // To confirm its stability, prioritize the `VERIFY_LOOKAHEAD` blocks
-                        // above the max scanned height as `Verify`:
-                        //
-                        // - We use `Verify` to ensure that a connectivity check is performed,
-                        //   along with any required rewinds, before any `ChainTip` ranges
-                        //   (from this or any prior `update_chain_tip` call) are scanned.
-                        //
-                        // - We prioritize `VERIFY_LOOKAHEAD` blocks because this is expected
-                        //   to be 12.5 minutes, within which it is reasonable for a user to
-                        //   have potentially received a transaction (if they opened their
-                        //   wallet to provide an address to someone else, or spent their own
-                        //   funds creating a change output), without necessarily having left
-                        //   their wallet open long enough for the transaction to be mined and
-                        //   the corresponding block to be scanned.
-                        //
-                        // - We limit the range to at most the stable region, to prevent any
-                        //   `Verify` ranges from being susceptible to reorgs, and potentially
-                        //   interfering with subsequent `Verify` ranges defined by future
-                        //   calls to `update_chain_tip`. Any gap between `stable_height` and
-                        //   `shard_start_height` will be filled by the scan range merging
-                        //   logic with a `Historic` range.
-                        //
-                        // If `max_scanned == stable_height` then this is a zero-length range.
-                        // In this case, any non-empty `(stable_height+1)..shard_start_height`
-                        // will be marked `Historic`, minimising the prioritised blocks at the
-                        // chain tip and allowing for other ranges (for example, `FoundNote`)
-                        // to take priority.
                         ScanRange::from_parts(
-                            min_unscanned
-                                ..std::cmp::min(
-                                    stable_height + 1,
-                                    min_unscanned + VERIFY_LOOKAHEAD,
-                                ),
+                            min_unscanned..min(stable_height + 1, min_unscanned + VERIFY_LOOKAHEAD),
                             ScanPriority::Verify,
                         )
                     }
                 }
-            },
-        );
-        if let Some(entry) = &tip_shard_entry {
-            tracing::debug!("{} will update latest shard", entry);
-        }
-        tracing::debug!("{} will connect prior scanned state to new tip", tip_entry);
+            }
+        };
 
         let query_range = match tip_shard_entry.as_ref() {
             Some(se) => Range {
-                start: std::cmp::min(se.block_range().start, tip_entry.block_range().start),
-                end: std::cmp::max(se.block_range().end, tip_entry.block_range().end),
+                start: min(se.block_range().start, tip_entry.block_range().start),
+                end: max(se.block_range().end, tip_entry.block_range().end),
             },
             None => tip_entry.block_range().clone(),
         };
@@ -269,819 +411,789 @@ impl<P: consensus::Parameters> WalletWrite for MemoryWalletDb<P> {
             &query_range,
             tip_shard_entry.into_iter().chain(Some(tip_entry)),
             false,
-        )?;
-        Ok(())
+        )
     }
 
-    /// Adds a sequence of blocks to the data store.
-    ///
-    /// Assumes blocks will be here in order.
-    fn put_blocks(
-        &mut self,
-        from_state: &ChainState,
-        blocks: Vec<ScannedBlock<Self::AccountId>>,
-    ) -> Result<(), Self::Error> {
-        tracing::debug!("put_blocks");
-        let mut last_scanned_height = None;
-        struct BlockPositions {
-            height: BlockHeight,
-            sapling_start_position: Position,
-            #[cfg(feature = "orchard")]
-            orchard_start_position: Position,
-        }
-        let start_positions = blocks.first().map(|block| BlockPositions {
-            height: block.height(),
-            sapling_start_position: Position::from(
-                u64::from(block.sapling().final_tree_size())
-                    - u64::try_from(block.sapling().commitments().len()).unwrap(),
-            ),
-            #[cfg(feature = "orchard")]
-            orchard_start_position: Position::from(
-                u64::from(block.orchard().final_tree_size())
-                    - u64::try_from(block.orchard().commitments().len()).unwrap(),
-            ),
-        });
-
-        let mut sapling_commitments = vec![];
-        #[cfg(feature = "orchard")]
-        let mut orchard_commitments = vec![];
-        let mut note_positions = vec![];
-        for block in blocks.into_iter() {
-            let mut transactions = HashMap::new();
-            let mut memos = HashMap::new();
-            if last_scanned_height
-                .iter()
-                .any(|prev| block.height() != *prev + 1)
-            {
-                return Err(Error::NonSequentialBlocks);
-            }
-
-            for transaction in block.transactions().iter() {
-                let txid = transaction.txid();
-
-                // Mark the Sapling nullifiers of the spent notes as spent in the `sapling_spends` map.
-                for spend in transaction.sapling_spends() {
-                    println!(
-                        "marking note {:?} as spent in transaction {:?}",
-                        spend.nf(),
-                        txid
-                    );
-                    self.mark_sapling_note_spent(*spend.nf(), txid)?;
-                }
-
-                // Mark the Orchard nullifiers of the spent notes as spent in the `orchard_spends` map.
-                #[cfg(feature = "orchard")]
-                for spend in transaction.orchard_spends() {
-                    self.mark_orchard_note_spent(*spend.nf(), txid)?;
-                }
-
-                for output in transaction.sapling_outputs() {
-                    // Insert the memo into the `memos` map.
-                    let note_id = NoteId::new(
-                        txid,
-                        Sapling,
-                        u16::try_from(output.index())
-                            .expect("output indices are representable as u16"),
-                    );
-                    if let Ok(Some(memo)) = self.get_memo(note_id) {
-                        memos.insert(note_id, memo.encode());
-                    }
-                    // Check whether this note was spent in a later block range that
-                    // we previously scanned.
-                    let spent_in = output
-                        .nf()
-                        .and_then(|nf| self.nullifiers.get(&Nullifier::Sapling(*nf)))
-                        .and_then(|(height, tx_idx)| self.tx_locator.get(*height, *tx_idx))
-                        .copied();
-
-                    self.insert_received_sapling_note(note_id, output, spent_in);
-                }
-
-                #[cfg(feature = "orchard")]
-                for output in transaction.orchard_outputs().iter() {
-                    // Insert the memo into the `memos` map.
-                    let note_id = NoteId::new(
-                        txid,
-                        Orchard,
-                        u16::try_from(output.index())
-                            .expect("output indices are representable as u16"),
-                    );
-                    if let Ok(Some(memo)) = self.get_memo(note_id) {
-                        memos.insert(note_id, memo.encode());
-                    }
-                    // Check whether this note was spent in a later block range that
-                    // we previously scanned.
-                    let spent_in = output
-                        .nf()
-                        .and_then(|nf| self.nullifiers.get(&Nullifier::Orchard(*nf)))
-                        .and_then(|(height, tx_idx)| self.tx_locator.get(*height, *tx_idx))
-                        .copied();
-
-                    self.insert_received_orchard_note(note_id, output, spent_in)
-                }
-
-                transactions.insert(txid, transaction.clone());
-            }
-
-            // Insert the new nullifiers from this block into the nullifier map
-            self.insert_sapling_nullifier_map(block.height(), block.sapling().nullifier_map())?;
-            #[cfg(feature = "orchard")]
-            self.insert_orchard_nullifier_map(block.height(), block.orchard().nullifier_map())?;
-            note_positions.extend(block.transactions().iter().flat_map(|wtx| {
-                let iter = wtx.sapling_outputs().iter().map(|out| {
-                    (
-                        ShieldedProtocol::Sapling,
-                        out.note_commitment_tree_position(),
-                    )
-                });
-                #[cfg(feature = "orchard")]
-                let iter = iter.chain(wtx.orchard_outputs().iter().map(|out| {
-                    (
-                        ShieldedProtocol::Orchard,
-                        out.note_commitment_tree_position(),
-                    )
-                }));
-
-                iter
-            }));
-
-            let memory_block = MemoryWalletBlock {
-                height: block.height(),
-                hash: block.block_hash(),
-                block_time: block.block_time(),
-                _transactions: transactions.keys().cloned().collect(),
-                _memos: memos,
-                sapling_commitment_tree_size: Some(block.sapling().final_tree_size()),
-                sapling_output_count: Some(block.sapling().commitments().len().try_into().unwrap()),
-                #[cfg(feature = "orchard")]
-                orchard_commitment_tree_size: Some(block.orchard().final_tree_size()),
-                #[cfg(feature = "orchard")]
-                orchard_action_count: Some(block.orchard().commitments().len().try_into().unwrap()),
-            };
-
-            // Insert transaction metadata into the transaction table
-            transactions
-                .into_iter()
-                .for_each(|(_id, tx)| self.tx_table.put_tx_meta(tx, block.height()));
-
-            // Insert the block into the block map
-            self.blocks.insert(block.height(), memory_block);
-            last_scanned_height = Some(block.height());
-
-            let block_commitments = block.into_commitments();
-            sapling_commitments.extend(block_commitments.sapling.into_iter().map(Some));
-            #[cfg(feature = "orchard")]
-            orchard_commitments.extend(block_commitments.orchard.into_iter().map(Some));
-        }
-
-        if let Some((start_positions, last_scanned_height)) =
-            start_positions.zip(last_scanned_height)
-        {
-            // Create subtrees from the note commitments in parallel.
-            const CHUNK_SIZE: usize = 1024;
-            let sapling_subtrees = sapling_commitments
-                .par_chunks_mut(CHUNK_SIZE)
-                .enumerate()
-                .filter_map(|(i, chunk)| {
-                    let start = start_positions.sapling_start_position + (i * CHUNK_SIZE) as u64;
-                    let end = start + chunk.len() as u64;
-
-                    shardtree::LocatedTree::from_iter(
-                        start..end,
-                        SAPLING_SHARD_HEIGHT.into(),
-                        chunk.iter_mut().map(|n| n.take().expect("always Some")),
-                    )
-                })
-                .map(|res| (res.subtree, res.checkpoints))
-                .collect::<Vec<_>>();
-
-            #[cfg(feature = "orchard")]
-            let orchard_subtrees = orchard_commitments
-                .par_chunks_mut(CHUNK_SIZE)
-                .enumerate()
-                .filter_map(|(i, chunk)| {
-                    let start = start_positions.orchard_start_position + (i * CHUNK_SIZE) as u64;
-                    let end = start + chunk.len() as u64;
-
-                    shardtree::LocatedTree::from_iter(
-                        start..end,
-                        ORCHARD_SHARD_HEIGHT.into(),
-                        chunk.iter_mut().map(|n| n.take().expect("always Some")),
-                    )
-                })
-                .map(|res| (res.subtree, res.checkpoints))
-                .collect::<Vec<_>>();
-
-            // Collect the complete set of Sapling checkpoints
-            #[cfg(feature = "orchard")]
-            let sapling_checkpoint_positions: BTreeMap<BlockHeight, Position> = sapling_subtrees
-                .iter()
-                .flat_map(|(_, checkpoints)| checkpoints.iter())
-                .map(|(k, v)| (*k, *v))
-                .collect();
-
-            #[cfg(feature = "orchard")]
-            let orchard_checkpoint_positions: BTreeMap<BlockHeight, Position> = orchard_subtrees
-                .iter()
-                .flat_map(|(_, checkpoints)| checkpoints.iter())
-                .map(|(k, v)| (*k, *v))
-                .collect();
-
-            #[cfg(feature = "orchard")]
-            let (missing_sapling_checkpoints, missing_orchard_checkpoints) = (
-                ensure_checkpoints(
-                    orchard_checkpoint_positions.keys(),
-                    &sapling_checkpoint_positions,
-                    from_state.final_sapling_tree(),
-                ),
-                ensure_checkpoints(
-                    sapling_checkpoint_positions.keys(),
-                    &orchard_checkpoint_positions,
-                    from_state.final_orchard_tree(),
-                ),
-            );
-
-            // Update the Sapling note commitment tree with all newly read note commitments
-            {
-                let mut sapling_subtrees_iter = sapling_subtrees.into_iter();
-                self.with_sapling_tree_mut::<_, _, Self::Error>(|sapling_tree| {
-                    sapling_tree.insert_frontier(
-                        from_state.final_sapling_tree().clone(),
-                        Retention::Checkpoint {
-                            id: from_state.block_height(),
-                            marking: Marking::Reference,
-                        },
-                    )?;
-
-                    for (tree, checkpoints) in &mut sapling_subtrees_iter {
-                        sapling_tree.insert_tree(tree, checkpoints)?;
-                    }
-
-                    // Ensure we have a Sapling checkpoint for each checkpointed Orchard block height.
-                    // We skip all checkpoints below the minimum retained checkpoint in the
-                    // Sapling tree, because branches below this height may be pruned.
-                    #[cfg(feature = "orchard")]
-                    {
-                        let min_checkpoint_height = sapling_tree
-                            .store()
-                            .min_checkpoint_id()
-                            .map_err(ShardTreeError::Storage)?
-                            .expect("At least one checkpoint was inserted (by insert_frontier)");
-
-                        for (height, checkpoint) in &missing_sapling_checkpoints {
-                            if *height > min_checkpoint_height {
-                                sapling_tree
-                                    .store_mut()
-                                    .add_checkpoint(*height, checkpoint.clone())
-                                    .map_err(ShardTreeError::Storage)?;
-                            }
-                        }
-                    }
-
-                    Ok(())
-                })?;
-            }
-
-            // Update the Orchard note commitment tree with all newly read note commitments
-            #[cfg(feature = "orchard")]
-            {
-                let mut orchard_subtrees = orchard_subtrees.into_iter();
-                self.with_orchard_tree_mut::<_, _, Self::Error>(|orchard_tree| {
-                    orchard_tree.insert_frontier(
-                        from_state.final_orchard_tree().clone(),
-                        Retention::Checkpoint {
-                            id: from_state.block_height(),
-                            marking: Marking::Reference,
-                        },
-                    )?;
-
-                    for (tree, checkpoints) in &mut orchard_subtrees {
-                        orchard_tree.insert_tree(tree, checkpoints)?;
-                    }
-
-                    // Ensure we have an Orchard checkpoint for each checkpointed Sapling block height.
-                    // We skip all checkpoints below the minimum retained checkpoint in the
-                    // Orchard tree, because branches below this height may be pruned.
-                    {
-                        let min_checkpoint_height = orchard_tree
-                            .store()
-                            .min_checkpoint_id()
-                            .map_err(ShardTreeError::Storage)?
-                            .expect("At least one checkpoint was inserted (by insert_frontier)");
-
-                        for (height, checkpoint) in &missing_orchard_checkpoints {
-                            if *height > min_checkpoint_height {
-                                orchard_tree
-                                    .store_mut()
-                                    .add_checkpoint(*height, checkpoint.clone())
-                                    .map_err(ShardTreeError::Storage)?;
-                            }
-                        }
-                    }
-                    Ok(())
-                })?;
-            }
-
-            self.scan_complete(
-                Range {
-                    start: start_positions.height,
-                    end: last_scanned_height + 1,
-                },
-                &note_positions,
-            )?;
-        }
-
-        Ok(())
-    }
-
-    /// Adds a transparent UTXO received by the wallet to the data store.
-    fn put_received_transparent_utxo(
-        &mut self,
-        _output: &WalletTransparentOutput,
-    ) -> Result<Self::UtxoRef, Self::Error> {
-        tracing::debug!("put_received_transparent_utxo");
-        #[cfg(feature = "transparent-inputs")]
-        {
-            let address = _output.recipient_address();
-            if let Some(account_id) = self.find_account_for_transparent_address(address)? {
-                self.put_transparent_output(_output, &account_id, false)
-            } else {
-                Err(Error::AddressNotRecognized(*address))
-            }
-        }
-        #[cfg(not(feature = "transparent-inputs"))]
-        panic!(
-            "The wallet must be compiled with the transparent-inputs feature to use this method."
-        );
-    }
-
-    fn store_decrypted_tx(
-        &mut self,
-        d_tx: DecryptedTransaction<Self::AccountId>,
-    ) -> Result<(), Self::Error> {
-        tracing::debug!("store_decrypted_tx");
-        self.tx_table.put_tx_data(d_tx.tx(), None, None);
-        if let Some(height) = d_tx.mined_height() {
-            self.set_transaction_status(d_tx.tx().txid(), TransactionStatus::Mined(height))?
-        }
-
-        let funding_accounts = self.get_funding_accounts(d_tx.tx())?;
-        // TODO(#1305): Correctly track accounts that fund each transaction output.
-        let funding_account = funding_accounts.iter().next().copied();
-        if funding_accounts.len() > 1 {
-            tracing::warn!(
-                "More than one wallet account detected as funding transaction {:?}, selecting {:?}",
-                d_tx.tx().txid(),
-                funding_account.unwrap()
-            )
-        }
-
-        // A flag used to determine whether it is necessary to query for transactions that
-        // provided transparent inputs to this transaction, in order to be able to correctly
-        // recover transparent transaction history.
-        #[cfg(feature = "transparent-inputs")]
-        let mut tx_has_wallet_outputs = false;
-
-        for output in d_tx.sapling_outputs() {
-            #[cfg(feature = "transparent-inputs")]
-            {
-                tx_has_wallet_outputs = true;
-            }
-
-            match output.transfer_type() {
-                TransferType::Outgoing => {
-                    let recipient = {
-                        let receiver = Receiver::Sapling(output.note().recipient());
-                        let wallet_address = self
-                            .accounts
-                            .get(*output.account())
-                            .map(|acc| {
-                                acc.select_receiving_address(self.params.network_type(), &receiver)
-                            })
-                            .transpose()?
-                            .flatten()
-                            .unwrap_or_else(|| {
-                                receiver.to_zcash_address(self.params.network_type())
-                            });
-
-                        Recipient::External {
-                            recipient_address: wallet_address,
-                            output_pool: PoolType::SAPLING,
-                        }
-                    };
-
-                    let sent_tx_output = SentTransactionOutput::from_parts(
-                        output.index(),
-                        recipient,
-                        output.note_value(),
-                        Some(output.memo().clone()),
-                    );
-                    self.sent_notes.put_sent_output(
-                        d_tx.tx().txid(),
-                        *output.account(),
-                        &sent_tx_output,
-                    );
-                }
-                TransferType::WalletInternal => {
-                    let recipient = Recipient::InternalAccount {
-                        receiving_account: *output.account(),
-                        external_address: None,
-                        note: Box::new(Note::Sapling(output.note().clone())),
-                    };
-                    let sent_tx_output = SentTransactionOutput::from_parts(
-                        output.index(),
-                        recipient,
-                        output.note_value(),
-                        Some(output.memo().clone()),
-                    );
-
-                    self.received_notes
-                        .insert_received_note(ReceivedNote::from_sent_tx_output(
-                            d_tx.tx().txid(),
-                            &sent_tx_output,
-                        )?);
-
-                    self.sent_notes.put_sent_output(
-                        d_tx.tx().txid(),
-                        *output.account(),
-                        &sent_tx_output,
-                    );
-                }
-                TransferType::Incoming => {
-                    // Store incoming Sapling note
-                    let received_note = ReceivedNote::from_decrypted_sapling_output(
-                        d_tx.tx().txid(),
-                        output,
-                    )?;
-                    self.received_notes.insert_received_note(received_note);
-                }
-            }
-        }
-
-        #[cfg(feature = "orchard")]
-        for output in d_tx.orchard_outputs() {
-            #[cfg(feature = "transparent-inputs")]
-            {
-                tx_has_wallet_outputs = true;
-            }
-            match output.transfer_type() {
-                TransferType::Outgoing => {
-                    let recipient = {
-                        let receiver = Receiver::Orchard(output.note().recipient());
-                        let wallet_address = self
-                            .accounts
-                            .get(*output.account())
-                            .map(|acc| {
-                                acc.select_receiving_address(self.params.network_type(), &receiver)
-                            })
-                            .transpose()?
-                            .flatten()
-                            .unwrap_or_else(|| {
-                                receiver.to_zcash_address(self.params.network_type())
-                            });
-
-                        Recipient::External {
-                            recipient_address: wallet_address,
-                            output_pool: PoolType::ORCHARD,
-                        }
-                    };
-
-                    let sent_tx_output = SentTransactionOutput::from_parts(
-                        output.index(),
-                        recipient,
-                        output.note_value(),
-                        Some(output.memo().clone()),
-                    );
-                    self.sent_notes.put_sent_output(
-                        d_tx.tx().txid(),
-                        *output.account(),
-                        &sent_tx_output,
-                    );
-                }
-                TransferType::WalletInternal => {
-                    let recipient = Recipient::InternalAccount {
-                        receiving_account: *output.account(),
-                        external_address: None,
-                        note: Box::new(Note::Orchard(*output.note())),
-                    };
-                    let sent_tx_output = SentTransactionOutput::from_parts(
-                        output.index(),
-                        recipient,
-                        output.note_value(),
-                        Some(output.memo().clone()),
-                    );
-
-                    self.received_notes
-                        .insert_received_note(ReceivedNote::from_sent_tx_output(
-                            d_tx.tx().txid(),
-                            &sent_tx_output,
-                        )?);
-
-                    self.sent_notes.put_sent_output(
-                        d_tx.tx().txid(),
-                        *output.account(),
-                        &sent_tx_output,
-                    );
-                }
-                TransferType::Incoming => {
-                    // Store incoming Orchard note
-                    let received_note = ReceivedNote::from_decrypted_orchard_output(
-                        d_tx.tx().txid(),
-                        output,
-                    )?;
-                    self.received_notes.insert_received_note(received_note);
-                }
-            }
-        }
-
-        // If any of the utxos spent in the transaction are ours, mark them as spent.
-        #[cfg(feature = "transparent-inputs")]
-        for txin in d_tx
-            .tx()
-            .transparent_bundle()
+    /// `min_shared_checkpoint_height`: the least checkpoint height present in every tree
+    /// that has checkpoints.
+    fn min_shared_checkpoint_height(&self) -> Option<BlockHeight> {
+        let sets: Vec<Vec<BlockHeight>> = Self::shielded_pools()
             .iter()
-            .flat_map(|b| b.vin.iter())
-        {
-            self.mark_transparent_output_spent(&d_tx.tx().txid(), txin.prevout())?;
-        }
+            .map(|p| self.pool_checkpoint_ids(*p))
+            .collect();
+        let mut all: Vec<BlockHeight> = sets.iter().flatten().copied().collect();
+        all.sort();
+        all.dedup();
+        all.into_iter()
+            .find(|h| sets.iter().all(|s| s.is_empty() || s.contains(h)))
+    }
 
-        // This `if` is just an optimization for cases where we would do nothing in the loop.
-        if funding_account.is_some() || cfg!(feature = "transparent-inputs") {
-            for (output_index, txout) in d_tx
-                .tx()
-                .transparent_bundle()
-                .iter()
-                .flat_map(|b| b.vout.iter())
-                .enumerate()
-            {
-                if let Some(address) = txout.recipient_address() {
-                    tracing::debug!(
-                        "{:?} output {} has recipient {}",
-                        d_tx.tx().txid(),
-                        output_index,
-                        address.encode(self.params())
-                    );
+    /// `pool_truncation_tolerance_sql`: whether truncating to `height` is acceptable for
+    /// `pool`.
+    fn pool_tolerates_truncation(&self, pool: ShieldedPool, height: BlockHeight) -> bool {
+        let ids = self.pool_checkpoint_ids(pool);
+        ids.contains(&height)
+            || !ids.iter().any(|c| *c > height)
+            || (!ids.iter().any(|c| *c < height) && !self.has_positioned_note_mined_at_or_below(pool, height))
+    }
 
-                    // The transaction is not necessarily mined yet, but we want to record
-                    // that an output to the address was seen in this tx anyway. This will
-                    // advance the gap regardless of whether it is mined, but an output in
-                    // an unmined transaction won't advance the range of safe indices.
-                    #[cfg(feature = "transparent-inputs")]
-                    self.accounts
-                        .mark_ephemeral_address_as_seen(&address, d_tx.tx().txid())?;
+    fn has_positioned_note_mined_at_or_below(&self, pool: ShieldedPool, height: BlockHeight) -> bool {
+        self.received_notes.iter().any(|rn| {
+            rn.pool() == pool
+                && rn.commitment_tree_position().is_some()
+                && self
+                    .tx_table
+                    .get(&rn.txid())
+                    .and_then(|t| t.mined_height())
+                    .is_some_and(|h| h <= height)
+        })
+    }
 
-                    // If the output belongs to the wallet, add it to `transparent_received_outputs`.
-                    #[cfg(feature = "transparent-inputs")]
-                    if let Some(account_id) = self
-                        .accounts
-                        .find_account_for_transparent_address(&address)?
-                    {
-                        tracing::debug!(
-                            "{:?} output {} belongs to account {:?}",
-                            d_tx.tx().txid(),
-                            output_index,
-                            account_id
-                        );
-                        let wallet_transparent_output = WalletTransparentOutput::from_parts(
-                            OutPoint::new(
-                                d_tx.tx().txid().into(),
-                                u32::try_from(output_index).unwrap(),
-                            ),
-                            txout.clone(),
-                            d_tx.mined_height(),
-                        )
-                        .unwrap();
-                        self.put_transparent_output(
-                            &wallet_transparent_output,
-                            &account_id,
-                            false,
-                        )?;
+    /// `select_truncation_height`.
+    fn select_truncation_height(&self, requested: BlockHeight) -> Result<BlockHeight, Error> {
+        self.blocks
+            .keys()
+            .rev()
+            .copied()
+            .find(|h| {
+                *h <= requested
+                    && Self::shielded_pools()
+                        .iter()
+                        .all(|p| self.pool_tolerates_truncation(*p, *h))
+            })
+            .ok_or_else(|| {
+                Error::RequestedRewindInvalid(self.min_shared_checkpoint_height(), requested)
+            })
+    }
 
-                        // Since the wallet created the transparent output, we need to ensure
-                        // that any transparent inputs belonging to the wallet will be
-                        // discovered.
-                        tx_has_wallet_outputs = true;
-                    } else {
-                        tracing::debug!(
-                            "Address {} is not recognized as belonging to any of our accounts.",
-                            address.encode(self.params())
-                        );
-                    }
-
-                    // If a transaction we observe contains spends from our wallet, we will
-                    // store its transparent outputs in the same way they would be stored by
-                    // create_spend_to_address.
-                    if let Some(account_id) = funding_account {
-                        let receiver = Receiver::Transparent(address);
-
-                        #[cfg(feature = "transparent-inputs")]
-                        let recipient_addr = self
-                            .accounts
-                            .get(account_id)
-                            .map(|acc| {
-                                acc.select_receiving_address(self.params.network_type(), &receiver)
-                            })
-                            .transpose()?
-                            .flatten()
-                            .unwrap_or_else(|| {
-                                receiver.to_zcash_address(self.params.network_type())
-                            });
-
-                        #[cfg(not(feature = "transparent-inputs"))]
-                        let recipient_addr = receiver.to_zcash_address(self.params.network_type());
-
-                        let recipient = Recipient::External {
-                            recipient_address: recipient_addr,
-                            output_pool: PoolType::TRANSPARENT,
-                        };
-
-                        let sent_tx_output = SentTransactionOutput::from_parts(
-                            output_index,
-                            recipient,
-                            txout.value(),
-                            None,
-                        );
-                        self.sent_notes.put_sent_output(
-                            d_tx.tx().txid(),
-                            account_id,
-                            &sent_tx_output,
-                        );
-                        // Even though we know the funding account, we don't know that we have
-                        // information for all of the transparent inputs to the transaction.
-                        #[cfg(feature = "transparent-inputs")]
-                        {
-                            tx_has_wallet_outputs = true;
-                        }
-                    }
+    /// `plan_tree_truncation`.
+    fn plan_tree_truncation(
+        &self,
+        pool: ShieldedPool,
+        truncation_height: BlockHeight,
+        rescan_floor: BlockHeight,
+    ) -> TreeTruncation {
+        let ids = self.pool_checkpoint_ids(pool);
+        let has_at = ids.contains(&truncation_height);
+        let has_above = ids.iter().any(|c| *c > truncation_height);
+        let has_below = ids.iter().any(|c| *c < truncation_height);
+        match (has_at, has_above, has_below) {
+            (true, _, _) => TreeTruncation::ToCheckpoint,
+            (false, false, _) => TreeTruncation::Unaffected,
+            (false, true, false) => {
+                if self.has_positioned_note_mined_at_or_below(pool, rescan_floor) {
+                    TreeTruncation::WouldDestroyWitnesses
                 } else {
-                    tracing::warn!(
-                        "Unable to determine recipient address for tx {:?} output {}",
-                        d_tx.tx().txid(),
-                        output_index
-                    );
+                    TreeTruncation::ResetToSubtreeRoots
                 }
             }
+            (false, true, true) => TreeTruncation::DivergedCheckpoints,
         }
+    }
 
-        // If the transaction has outputs that belong to the wallet as well as transparent
-        // inputs, we may need to download the transactions corresponding to the transparent
-        // prevout references to determine whether the transaction was created (at least in
-        // part) by this wallet.
-        #[cfg(feature = "transparent-inputs")]
-        if tx_has_wallet_outputs && d_tx.tx().transparent_bundle().is_some() {
-            // queue the transparent inputs for enhancement
-            self.transaction_data_request_queue
-                .queue_status_retrieval(&d_tx.tx().txid());
-        }
-
-        #[cfg(feature = "transparent-inputs")]
-        {
-            let detectable_via_scanning = d_tx.tx().sapling_bundle().is_some();
-            #[cfg(feature = "orchard")]
-            let detectable_via_scanning =
-                detectable_via_scanning | d_tx.tx().orchard_bundle().is_some();
-
-            if d_tx.mined_height().is_none() && !detectable_via_scanning {
-                self.transaction_data_request_queue
-                    .queue_status_retrieval(&d_tx.tx().txid());
+    /// `truncate_tree_to_subtree_roots`: rebuilds a tree from the server-provided roots of
+    /// the leading run of complete subtrees ending at or below `truncation_height`.
+    fn reset_pool_to_subtree_roots<H, const DEPTH: u8, const SHARD_HEIGHT: u8>(
+        pool_tree: &mut PoolTree<ShardTree<MemoryShardStore<H, BlockHeight>, DEPTH, SHARD_HEIGHT>, H>,
+        truncation_height: BlockHeight,
+        max_checkpoints: usize,
+    ) -> Result<(), Error>
+    where
+        H: incrementalmerkletree::Hashable + Clone + PartialEq,
+    {
+        let mut roots = vec![];
+        for (index, info) in pool_tree.subtrees.iter() {
+            if *index != roots.len() as u64 || info.end_height > truncation_height {
+                break;
             }
+            roots.push(info.clone());
+        }
+        pool_tree.tree = ShardTree::new(MemoryShardStore::empty(), max_checkpoints);
+        pool_tree.subtrees.clear();
+        for (index, info) in roots.into_iter().enumerate() {
+            let index = index as u64;
+            pool_tree.tree.insert(
+                incrementalmerkletree::Address::from_parts(SHARD_HEIGHT.into(), index),
+                info.root.clone(),
+            )?;
+            pool_tree.subtrees.insert(index, SubtreeInfo { root: info.root, end_height: info.end_height });
         }
         Ok(())
     }
 
-    fn set_tx_trust(&mut self, _txid: TxId, _trusted: bool) -> Result<(), Self::Error> {
-        todo!()
+    fn truncate_pool(
+        &mut self,
+        pool: ShieldedPool,
+        truncation_height: BlockHeight,
+        rescan_floor: BlockHeight,
+    ) -> Result<(), Error> {
+        match self.plan_tree_truncation(pool, truncation_height, rescan_floor) {
+            TreeTruncation::Unaffected => Ok(()),
+            TreeTruncation::ToCheckpoint => {
+                let truncated = match pool {
+                    ShieldedPool::Sapling => self.sapling.tree.truncate_to_checkpoint(&truncation_height)?,
+                    #[cfg(feature = "orchard")]
+                    ShieldedPool::Orchard => self.orchard.tree.truncate_to_checkpoint(&truncation_height)?,
+                    #[cfg(feature = "orchard")]
+                    ShieldedPool::Ironwood => self.ironwood.tree.truncate_to_checkpoint(&truncation_height)?,
+                    #[cfg(not(feature = "orchard"))]
+                    _ => true,
+                };
+                if truncated {
+                    Ok(())
+                } else {
+                    Err(Error::CorruptedData(format!(
+                        "the {pool:?} note commitment tree has no checkpoint at height {truncation_height} to truncate to"
+                    )))
+                }
+            }
+            TreeTruncation::ResetToSubtreeRoots => {
+                let max_checkpoints = self.max_checkpoints;
+                match pool {
+                    ShieldedPool::Sapling => Self::reset_pool_to_subtree_roots(&mut self.sapling, truncation_height, max_checkpoints),
+                    #[cfg(feature = "orchard")]
+                    ShieldedPool::Orchard => Self::reset_pool_to_subtree_roots(&mut self.orchard, truncation_height, max_checkpoints),
+                    #[cfg(feature = "orchard")]
+                    ShieldedPool::Ironwood => Self::reset_pool_to_subtree_roots(&mut self.ironwood, truncation_height, max_checkpoints),
+                    #[cfg(not(feature = "orchard"))]
+                    _ => Ok(()),
+                }
+            }
+            TreeTruncation::WouldDestroyWitnesses => Err(Error::RequestedRewindInvalid(
+                self.min_shared_checkpoint_height(),
+                rescan_floor,
+            )),
+            TreeTruncation::DivergedCheckpoints => Err(Error::CorruptedData(format!(
+                "the {pool:?} note commitment tree's checkpoints have diverged at height {truncation_height}"
+            ))),
+        }
     }
 
-    /// Truncates the database to the given height.
-    ///
-    /// If the requested height is greater than or equal to the height of the last scanned
-    /// block, this function does nothing.
-    ///
-    /// This should only be executed inside a transactional context.
-    fn truncate_to_height(&mut self, max_height: BlockHeight) -> Result<BlockHeight, Self::Error> {
-        let truncation_height = {
-            // This is the intersection of all the checkpoint heights from the sapling and orchard tree.
-            let mut checkpoint_heights = BTreeSet::new();
-            self.sapling_tree.store().for_each_checkpoint(
-                self.sapling_tree.store().checkpoint_count()?,
-                |height, _| {
-                    checkpoint_heights.insert(u32::from(*height));
-                    Ok(())
-                },
-            )?;
-            #[cfg(feature = "orchard")]
-            {
-                let mut orchard_checkpoint_heights = BTreeSet::new();
-                self.orchard_tree.store().for_each_checkpoint(
-                    self.orchard_tree.store().checkpoint_count()?,
-                    |height, _| {
-                        orchard_checkpoint_heights.insert(u32::from(*height));
-                        Ok(())
-                    },
-                )?;
-
-                checkpoint_heights = checkpoint_heights
-                    .intersection(&orchard_checkpoint_heights)
-                    .copied()
-                    .collect();
-            }
-            // All the checkpoints that are greater than the truncation height
-            let over = checkpoint_heights.split_off(&(u32::from(max_height + 1)));
-            if let Some(height) = checkpoint_heights.last().copied() {
-                Ok(BlockHeight::from(height))
-            } else {
-                // If there are no checkpoints that are less than or equal to the truncation height
-                // then we can't truncate the tree.
-                Err(Error::RequestedRewindInvalid(
-                    over.first().copied().map(Into::into),
-                    max_height,
-                ))
-            }
-        }?;
-
-        // Recall where we synced up to previously.
-        let last_scanned_height = self.blocks.keys().max().copied().unwrap_or_else(|| {
+    /// `truncate_to_height_internal`.
+    fn truncate_to_height_internal(
+        &mut self,
+        truncation_height: BlockHeight,
+        rescan_floor: BlockHeight,
+    ) -> Result<BlockHeight, Error> {
+        let last_scanned_height = self.max_scanned_height().unwrap_or_else(|| {
             self.params
                 .activation_height(NetworkUpgrade::Sapling)
-                .expect("Sapling activation height must be available.")
-                - 1
+                .map_or(BlockHeight::from_u32(0), |h| h - 1)
         });
 
-        // Delete from the scanning queue any range with a start height greater than the
-        // truncation height, and then truncate any remaining range by setting the end
-        // equal to the truncation height + 1. This sets our view of the chain tip back
-        // to the retained height.
-        self.scan_queue
-            .delete_starts_greater_than_equal_to(truncation_height + 1);
-        self.scan_queue.truncate_ends_to(truncation_height + 1);
+        self.scan_queue.trim_to(truncation_height);
 
-        // Mark transparent utxos as un-mined. Since the TXO is now not mined, it would ideally be
-        // considered to have been returned to the mempool; it _might_ be spendable in this state, but
-        // we must also set its max_observed_unspent_height field to NULL because the transaction may
-        // be rendered entirely invalid by a reorg that alters anchor(s) used in constructing shielded
-        // spends in the transaction.
-        self.transparent_received_outputs
-            .iter_mut()
-            .for_each(|(_, txo)| {
-                if let Some(mined_height) = self
+        // Observations of unspent outputs above the truncation height are forgotten.
+        let unspent_updates: Vec<_> = self
+            .transparent
+            .iter()
+            .filter(|o| o.max_observed_unspent_height.is_some_and(|h| h > truncation_height))
+            .map(|o| {
+                let mined_below = self
                     .tx_table
-                    .get(&txo.transaction_id)
-                    .and_then(|tx| tx.mined_height())
-                {
-                    if mined_height <= truncation_height {
-                        txo.max_observed_unspent_height = Some(truncation_height)
-                    } else {
-                        txo.max_observed_unspent_height = None
-                    }
-                }
-            });
+                    .get(o.outpoint.txid())
+                    .and_then(|t| t.mined_height())
+                    .is_some_and(|h| h <= truncation_height);
+                (o.outpoint.clone(), mined_below.then_some(truncation_height))
+            })
+            .collect();
+        for (op, h) in unspent_updates {
+            if let Some(o) = self.transparent.outputs.get_mut(&op) {
+                o.max_observed_unspent_height = h;
+            }
+        }
 
-        // Un-mine transactions. This must be done outside of the last_scanned_height check because
-        // transaction entries may be created as a consequence of receiving transparent TXOs.
-        self.tx_table
-            .unmine_transactions_greater_than(truncation_height);
+        self.tx_table.unmine_above(truncation_height);
 
-        // If we're removing scanned blocks, we need to truncate the note commitment tree and remove
-        // affected block records from the database.
         if truncation_height < last_scanned_height {
-            self.with_sapling_tree_mut(|tree| {
-                tree.truncate_to_checkpoint(&truncation_height).map(|_| ())
-            })?;
-            #[cfg(feature = "orchard")]
-            self.with_orchard_tree_mut(|tree| {
-                tree.truncate_to_checkpoint(&truncation_height).map(|_| ())
-            })?;
-
-            // Do not delete sent notes; this can contain data that is not recoverable
-            // from the chain. Wallets must continue to operate correctly in the
-            // presence of stale sent notes that link to unmined transactions.
-            // Also, do not delete received notes; they may contain memo data that is
-            // not recoverable; balance APIs must ensure that un-mined received notes
-            // do not count towards spendability or transaction balalnce.
-
-            // Now that they aren't depended on, delete un-mined blocks.
-            self.blocks.retain(|height, _| *height <= truncation_height);
-
-            // Delete from the nullifier map any entries with a locator referencing a block
-            // height greater than the truncation height.
-            // Willem: We don't need to do this I think..
+            for pool in Self::shielded_pools() {
+                self.truncate_pool(*pool, truncation_height, rescan_floor)?;
+            }
+            self.blocks.retain(|h, _| *h <= truncation_height);
+            self.spend_maps.truncate_above(truncation_height);
         }
         Ok(truncation_height)
     }
 
+    /// The least checkpoint of `pool`'s tree at or above `height` (`min_checkpoint_id_at_or_above`).
+    fn min_checkpoint_at_or_above(&self, pool: ShieldedPool, height: BlockHeight) -> Option<BlockHeight> {
+        self.pool_checkpoint_ids(pool).into_iter().find(|c| *c >= height)
+    }
+
+    /// `rewind_to_chain_state`.
+    fn rewind_to_chain_state_internal(
+        &mut self,
+        chain_state: &ChainState,
+        reset_account_birthdays: HashSet<AccountId>,
+    ) -> Result<(), RewindError<AccountId, Error>> {
+        let account_birthdays: HashMap<AccountId, BlockHeight> = self
+            .accounts
+            .iter()
+            .map(|a| (a.id(), a.birthday().height()))
+            .collect();
+        if !reset_account_birthdays
+            .iter()
+            .all(|id| account_birthdays.contains_key(id))
+        {
+            return Err(RewindError::DataSource(Error::CorruptedData(
+                "Account ids provided for birthday reset do not exist in the wallet.".to_string(),
+            )));
+        }
+        let target_height = chain_state.block_height();
+        let new_birthday = target_height + 1;
+        if account_birthdays.values().all(|b| b > &new_birthday) && reset_account_birthdays.is_empty() {
+            return Err(RewindError::RewindBeyondBirthdays(account_birthdays));
+        }
+
+        let chain_tip = self.chain_tip_height();
+        if let Some(max_scanned) = self.max_scanned_height() {
+            if target_height < max_scanned {
+                let pruning_floor = max_scanned.saturating_sub(PRUNING_DEPTH - 1);
+                let truncation_target = target_height.max(pruning_floor);
+                let window_floor = Self::shielded_pools()
+                    .iter()
+                    .filter_map(|p| self.min_checkpoint_at_or_above(*p, truncation_target))
+                    .min();
+                let truncation_height = window_floor.unwrap_or(pruning_floor);
+                self.truncate_to_height_internal(truncation_height, target_height)
+                    .map_err(RewindError::DataSource)?;
+            }
+        }
+
+        if let Some(t) = chain_tip {
+            if target_height < t {
+                let rescan_range = (target_height + 1)..(t + 1);
+                self.scan_queue
+                    .replace_queue_entries(
+                        &rescan_range,
+                        std::iter::once(ScanRange::from_parts(
+                            rescan_range.clone(),
+                            ScanPriority::Historic,
+                        )),
+                        true,
+                    )
+                    .map_err(RewindError::DataSource)?;
+            }
+        }
+
+        for id in &reset_account_birthdays {
+            if let Some(account) = self.accounts.get_mut(*id) {
+                if account.birthday.height() > new_birthday {
+                    account.birthday = AccountBirthday::from_parts(
+                        chain_state.clone(),
+                        account.birthday.recover_until(),
+                    );
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// `truncate_to_chain_state`.
+    fn truncate_to_chain_state_internal(&mut self, chain_state: ChainState) -> Result<(), Error> {
+        let target_height = chain_state.block_height();
+        let truncate_trees = self.max_scanned_height().is_some_and(|h| h > target_height);
+        if truncate_trees {
+            match self.select_truncation_height(target_height) {
+                Ok(h) => {
+                    if h == target_height {
+                        return self.truncate_to_height_internal(h, h).map(|_| ());
+                    }
+                }
+                Err(Error::RequestedRewindInvalid(safe, _)) => {
+                    if let Some(min_checkpoint_height) = safe {
+                        self.truncate_to_height_internal(min_checkpoint_height, min_checkpoint_height)?;
+                    }
+                }
+                Err(e) => return Err(e),
+            }
+            let checkpoint = Retention::Checkpoint {
+                id: target_height,
+                marking: Marking::None,
+            };
+            self.sapling
+                .tree
+                .insert_frontier(chain_state.final_sapling_tree().clone(), checkpoint)?;
+            #[cfg(feature = "orchard")]
+            self.orchard
+                .tree
+                .insert_frontier(chain_state.final_orchard_tree().clone(), checkpoint)?;
+            #[cfg(feature = "orchard")]
+            self.ironwood
+                .tree
+                .insert_frontier(chain_state.final_ironwood_tree().clone(), checkpoint)?;
+        }
+        let truncated = self.truncate_to_height_internal(target_height, target_height)?;
+        if truncated != target_height {
+            return Err(Error::CorruptedData(format!(
+                "truncation to the chain state at {target_height} stopped at {truncated}"
+            )));
+        }
+        Ok(())
+    }
+
+    /// `delete_account`.
+    fn delete_account_internal(&mut self, account: AccountId) -> Result<(), Error> {
+        if self.accounts.get(account).is_none() {
+            return Err(Error::AccountUnknown(account));
+        }
+        // Outputs sent to the account keep their recipient address.
+        let sent_to_account: Vec<_> = self
+            .sent_notes
+            .iter()
+            .filter(|(_, o)| o.to_account_id() == Some(account))
+            .map(|(id, _)| *id)
+            .collect();
+        for id in sent_to_account {
+            let address = match id.pool() {
+                zcash_protocol::PoolType::Shielded(pool) => u16::try_from(id.output_index())
+                    .ok()
+                    .and_then(|idx| {
+                        self.received_notes
+                            .get(&zcash_client_backend::wallet::NoteId::new(*id.txid(), pool, idx))
+                    })
+                    .and_then(|rn| rn.address_id())
+                    .and_then(|a| self.addresses.get(a))
+                    .map(|a| a.address.encode(&self.params)),
+                zcash_protocol::PoolType::Transparent => self
+                    .transparent
+                    .get(&::transparent::bundle::OutPoint::new(*id.txid().as_ref(), id.output_index()))
+                    .map(|o| zcash_keys::encoding::AddressCodec::encode(&o.address, &self.params)),
+            };
+            if let Some(o) = self.sent_notes.0.get_mut(&id) {
+                if let Some(address) = address {
+                    o.to_address = Some(address);
+                    o.to_account_id = None;
+                }
+            }
+        }
+
+        // Transactions involving only this account are deleted.
+        let involves = |db: &Self, txid: &TxId, pred: &dyn Fn(AccountId) -> bool| -> bool {
+            db.received_notes.iter().any(|rn| {
+                pred(rn.account_id())
+                    && (rn.txid() == *txid || db.received_notes.spends_of(&rn.note_id()).any(|t| t == txid))
+            }) || db.transparent.iter().any(|o| {
+                pred(o.account_id)
+                    && (o.outpoint.txid() == txid || db.transparent.spends_of(&o.outpoint).any(|t| t == txid))
+            })
+        };
+        let to_delete: Vec<TxId> = self
+            .tx_table
+            .iter()
+            .map(|(txid, _)| *txid)
+            .filter(|txid| {
+                involves(self, txid, &|a| a == account) && !involves(self, txid, &|a| a != account)
+            })
+            .collect();
+        for txid in to_delete {
+            self.remove_transaction(&txid);
+        }
+
+        self.received_notes.remove_account(account);
+        self.transparent.remove_account(account);
+        self.sent_notes.remove_account(account);
+        self.addresses.remove_account(account);
+        self.accounts.remove(account);
+        Ok(())
+    }
+
+    /// Deletes a transaction row and the rows that cascade from it.
+    fn remove_transaction(&mut self, txid: &TxId) {
+        self.tx_table.0.remove(txid);
+        self.received_notes.remove_notes_of(txid);
+        self.received_notes.remove_spends_by(txid);
+        self.sent_notes.remove_tx(txid);
+        self.transparent.remove_tx(txid);
+        self.tx_retrieval_queue.remove(txid, crate::types::data_requests::TxQueryType::Enhancement);
+        self.tx_retrieval_queue.remove(txid, crate::types::data_requests::TxQueryType::Status);
+        self.tx_retrieval_queue.remove_dependent_on(txid);
+        #[cfg(feature = "transparent-inputs")]
+        self.transparent_spend_search_queue.remove_tx(txid);
+        self.output_locks.0.retain(|(t, _, _), _| t != txid);
+    }
+
+    /// `get_next_available_address`.
+    fn next_available_address(
+        &mut self,
+        account_id: AccountId,
+        request: UnifiedAddressRequest,
+    ) -> Result<Option<(UnifiedAddress, DiversifierIndex)>, Error> {
+        let Some(account) = self.accounts.get(account_id).cloned() else {
+            return Ok(None);
+        };
+        let uivk = account.uivk();
+        let requirements = uivk.receiver_requirements(request)?;
+
+        let (addr, diversifier_index) = if requirements.p2pkh() == ReceiverRequirement::Require {
+            #[cfg(not(feature = "transparent-inputs"))]
+            {
+                return Err(Error::AddressGeneration(
+                    AddressGenerationError::ReceiverTypeNotSupported(
+                        zcash_address::unified::Typecode::P2PKH,
+                    ),
+                ));
+            }
+            #[cfg(feature = "transparent-inputs")]
+            {
+                let gap_limits = self.gap_limits;
+                generate_gap_addresses(
+                    self,
+                    &gap_limits,
+                    account_id,
+                    &uivk,
+                    Some(&account.ufvk),
+                    TransparentKeyScope::EXTERNAL,
+                    UnifiedAddressRequest::unsafe_custom(Allow, Allow, Require),
+                    true,
+                )?;
+                // `select_addrs_to_reserve` with n = gap limit: the unexposed addresses of
+                // the current gap, lowest index first.
+                let gap_limit = self.gap_limits.external();
+                let gap_start = self
+                    .gap_start(account_id, KeyScope::External, gap_limit)
+                    .ok_or(Error::AddressGeneration(
+                        AddressGenerationError::DiversifierSpaceExhausted,
+                    ))?;
+                let gap_end = gap_start.index().saturating_add(gap_limit);
+                let mut candidates: Vec<NonHardenedChildIndex> = self
+                    .addresses
+                    .for_account(account_id)
+                    .filter(|(_, a)| a.key_scope == KeyScope::External && a.exposed_at_height.is_none())
+                    .filter_map(|(_, a)| a.transparent_child_index)
+                    .filter(|i| i.index() >= gap_start.index() && i.index() < gap_end)
+                    .collect();
+                candidates.sort_by_key(|i| i.index());
+                candidates
+                    .into_iter()
+                    .find_map(|i| {
+                        let j = DiversifierIndex::from(i);
+                        uivk.address(j, request).ok().map(|ua| (ua, j))
+                    })
+                    .ok_or(Error::ReachedGapLimit(account_id, gap_end))?
+            }
+        } else {
+            // Start from a time-derived index, skipping indices already handed out.
+            let mut j = DiversifierIndex::from(
+                unix_time_now().saturating_add(MIN_SHIELDED_DIVERSIFIER_OFFSET),
+            );
+            loop {
+                let found = uivk.find_address(j, request)?;
+                let exposed = self
+                    .addresses
+                    .find(account_id, KeyScope::External, &found.1)
+                    .and_then(|id| self.addresses.get(id))
+                    .and_then(|row| row.exposed_at_height);
+                if exposed.is_none() {
+                    break found;
+                }
+                j = found.1;
+                j.increment()
+                    .map_err(|_| Error::AddressGeneration(AddressGenerationError::DiversifierSpaceExhausted))?;
+            }
+        };
+
+        let chain_tip = self.chain_tip_height().ok_or(Error::ChainHeightUnknown)?;
+        self.addresses.upsert_unified(
+            account_id,
+            diversifier_index,
+            &addr,
+            Some(chain_tip),
+            true,
+        )?;
+        Ok(Some((addr, diversifier_index)))
+    }
+
+    /// `store_transaction_to_be_sent`.
+    fn store_transaction_to_be_sent(
+        &mut self,
+        sent_tx: &SentTransaction<AccountId>,
+    ) -> Result<TxId, Error> {
+        let tx_ref = self.put_tx_data(
+            sent_tx.tx(),
+            Some(sent_tx.fee_amount()),
+            Some(sent_tx.created()),
+            Some(sent_tx.target_height()),
+            sent_tx.target_height().into(),
+        )?;
+
+        let mut detectable_via_scanning = false;
+        if let Some(bundle) = sent_tx.tx().sapling_bundle() {
+            for spend in bundle.shielded_spends() {
+                detectable_via_scanning |= self.mark_sapling_note_spent(spend.nullifier(), tx_ref)?;
+            }
+        }
+        if let Some(_bundle) = sent_tx.tx().orchard_bundle() {
+            #[cfg(feature = "orchard")]
+            for action in _bundle.actions() {
+                detectable_via_scanning |= self.mark_orchard_note_spent(action.nullifier(), tx_ref)?;
+            }
+            #[cfg(not(feature = "orchard"))]
+            return Err(Error::OrchardNotEnabled);
+        }
+        if let Some(_bundle) = sent_tx.tx().ironwood_bundle() {
+            #[cfg(feature = "orchard")]
+            for action in _bundle.actions() {
+                detectable_via_scanning |= self.mark_ironwood_note_spent(action.nullifier(), tx_ref)?;
+            }
+            #[cfg(not(feature = "orchard"))]
+            return Err(Error::OrchardNotEnabled);
+        }
+        #[cfg(feature = "transparent-inputs")]
+        for utxo_outpoint in sent_tx.utxos_spent() {
+            self.mark_transparent_utxo_spent(utxo_outpoint, tx_ref)?;
+        }
+
+        // `unlock_spent_notes`: the locks of the outputs this transaction spends are
+        // released (they are now spent).
+        let spent_keys: Vec<_> = self
+            .received_notes
+            .spent_by(&tx_ref)
+            .map(Self::note_lock_key)
+            .chain(
+                self.transparent
+                    .spends
+                    .iter()
+                    .filter(|(_, txs)| txs.contains(&tx_ref))
+                    .map(|(op, _)| (*op.txid(), zcash_protocol::PoolType::TRANSPARENT, op.n())),
+            )
+            .collect();
+        for key in spent_keys {
+            self.output_locks.clear(&key);
+        }
+
+        for output in sent_tx.outputs() {
+            self.put_sent_output(
+                *sent_tx.funding_account(),
+                tx_ref,
+                output.output_index(),
+                output.recipient(),
+                output.value(),
+                output.memo(),
+            )?;
+
+            match output.recipient() {
+                Recipient::External {
+                    recipient_address: _zaddr,
+                    output_pool: _pool,
+                } => {
+                    #[cfg(feature = "transparent-inputs")]
+                    if _pool == &PoolType::Transparent {
+                        let address = Address::try_from_zcash_address(&self.params, _zaddr.clone())
+                            .map_err(|e| Error::Other(format!("recipient address: {e}")))?;
+                        if let Some(taddr) = address.to_transparent_address() {
+                            use zcash_client_backend::data_api::ll::LowLevelWalletRead as _;
+                            if self.find_account_for_transparent_address(&taddr)?.is_some() {
+                                let wto = WalletTransparentOutput::from_parts(
+                                    OutPoint::new(
+                                        sent_tx.tx().txid().into(),
+                                        u32::try_from(output.output_index())?,
+                                    ),
+                                    TxOut::new(output.value(), taddr.script().into()),
+                                    None,
+                                    None,
+                                    Some(TransparentKeyScope::EXTERNAL),
+                                    Some(*sent_tx.funding_account()),
+                                )
+                                .ok_or_else(|| Error::CorruptedData("transparent output script".into()))?;
+                                self.put_transparent_output(&wto, sent_tx.target_height().into(), true)?;
+                            }
+                        }
+                    }
+                }
+                Recipient::InternalShielded {
+                    receiving_account,
+                    note,
+                    ..
+                } => {
+                    detectable_via_scanning = true;
+                    let memo = output.memo().map_or_else(MemoBytes::empty, |m| m.clone());
+                    match note.as_ref() {
+                        Note::Sapling(note) => {
+                            self.put_received_sapling_note(
+                                &DecryptedOutput::new(
+                                    output.output_index(),
+                                    note.clone(),
+                                    ShieldedPool::Sapling,
+                                    *receiving_account,
+                                    memo,
+                                    TransferType::AccountInternal,
+                                ),
+                                tx_ref,
+                                Some(sent_tx.target_height().into()),
+                                None,
+                            )?;
+                        }
+                        #[cfg(feature = "orchard")]
+                        orchard_note @ Note::Orchard { note, pool } => {
+                            let shielded_pool = orchard_note.pool();
+                            let decrypted = DecryptedOutput::new(
+                                output.output_index(),
+                                (*note, *pool),
+                                shielded_pool,
+                                *receiving_account,
+                                memo,
+                                TransferType::AccountInternal,
+                            );
+                            match shielded_pool {
+                                ShieldedPool::Ironwood => self.put_received_ironwood_note(
+                                    &decrypted,
+                                    tx_ref,
+                                    Some(sent_tx.target_height().into()),
+                                    None,
+                                )?,
+                                _ => self.put_received_orchard_note(
+                                    &decrypted,
+                                    tx_ref,
+                                    Some(sent_tx.target_height().into()),
+                                    None,
+                                )?,
+                            }
+                        }
+                    }
+                }
+                #[cfg(feature = "transparent-inputs")]
+                Recipient::EphemeralTransparent {
+                    ephemeral_address,
+                    outpoint,
+                    ..
+                } => {
+                    self.check_ephemeral_address_reuse(ephemeral_address)?;
+                    use zcash_client_backend::data_api::ll::LowLevelWalletRead as _;
+                    let (recipient_account, _) = self
+                        .find_account_for_transparent_address(ephemeral_address)?
+                        .ok_or_else(|| {
+                            Error::CorruptedData(
+                                "ephemeral address does not belong to any wallet account".into(),
+                            )
+                        })?;
+                    let wto = WalletTransparentOutput::from_parts(
+                        outpoint.clone(),
+                        TxOut::new(output.value(), ephemeral_address.script().into()),
+                        None,
+                        Some(recipient_account),
+                        Some(TransparentKeyScope::EPHEMERAL),
+                        Some(*sent_tx.funding_account()),
+                    )
+                    .ok_or_else(|| Error::CorruptedData("ephemeral output script".into()))?;
+                    self.put_transparent_output(&wto, sent_tx.target_height().into(), true)?;
+                }
+                #[cfg(feature = "transparent-inputs")]
+                Recipient::InternalTransparent {
+                    receiving_account,
+                    recipient_address,
+                } => {
+                    let wto = WalletTransparentOutput::from_parts(
+                        OutPoint::new(
+                            sent_tx.tx().txid().into(),
+                            u32::try_from(output.output_index())?,
+                        ),
+                        TxOut::new(output.value(), recipient_address.script().into()),
+                        None,
+                        Some(*receiving_account),
+                        None,
+                        Some(*sent_tx.funding_account()),
+                    )
+                    .ok_or_else(|| Error::CorruptedData("transparent output script".into()))?;
+                    self.put_transparent_output(&wto, sent_tx.target_height().into(), true)?;
+                }
+            }
+        }
+
+        if !detectable_via_scanning {
+            self.queue_tx_status(sent_tx.tx().txid())?;
+        }
+        Ok(tx_ref)
+    }
+
+    /// `check_ephemeral_address_reuse`: an ephemeral address may receive only once, except
+    /// in the transaction being stored again.
+    #[cfg(feature = "transparent-inputs")]
+    fn check_ephemeral_address_reuse(&self, address: &TransparentAddress) -> Result<(), Error> {
+        let Some((id, row)) = self.addresses.find_by_transparent_receiver(address) else {
+            return Ok(());
+        };
+        if row.key_scope != KeyScope::Ephemeral {
+            return Ok(());
+        }
+        let used_in: Vec<TxId> = self
+            .transparent
+            .iter()
+            .filter(|o| o.address_id == id)
+            .map(|o| *o.outpoint.txid())
+            .collect();
+        if used_in.is_empty() {
+            Ok(())
+        } else {
+            Err(Error::Other(format!(
+                "ephemeral address {} was already used in transaction(s) {:?}",
+                zcash_keys::encoding::AddressCodec::encode(address, &self.params),
+                used_in
+            )))
+        }
+    }
+}
+
+impl<P: consensus::Parameters> WalletWrite for MemoryWalletDb<P> {
+    #[cfg(feature = "transparent-inputs")]
+    type UtxoRef = OutPoint;
+    #[cfg(not(feature = "transparent-inputs"))]
+    type UtxoRef = ();
+
+    fn create_account(
+        &mut self,
+        account_name: &str,
+        seed: &SecretVec<u8>,
+        birthday: &AccountBirthday,
+        key_source: Option<&str>,
+    ) -> Result<(AccountId, UnifiedSpendingKey), Error> {
+        let seed_fingerprint =
+            SeedFingerprint::from_seed(seed.expose_secret()).ok_or(Error::InvalidSeedLength)?;
+        let account_index = self
+            .max_zip32_account_index(&seed_fingerprint)
+            .map(|a| a.next().ok_or(Error::AccountOutOfRange))
+            .transpose()?
+            .unwrap_or(zip32::AccountId::ZERO);
+        let usk = UnifiedSpendingKey::from_seed(&self.params, seed.expose_secret(), account_index)?;
+        let ufvk = usk.to_unified_full_viewing_key();
+        let account = self.transactionally(|db| {
+            db.add_account_full(
+                account_name,
+                AccountSource::Derived {
+                    derivation: Zip32Derivation::new(seed_fingerprint, account_index),
+                    key_source: key_source.map(str::to_owned),
+                },
+                ufvk,
+                birthday,
+            )
+        })?;
+        Ok((account.id(), usk))
+    }
+
     fn import_account_hd(
         &mut self,
-        _account_name: &str,
-        _seed: &SecretVec<u8>,
-        _account_index: zip32::AccountId,
-        _birthday: &AccountBirthday,
-        _key_source: Option<&str>,
-    ) -> Result<(Self::Account, UnifiedSpendingKey), Self::Error> {
-        unimplemented!(
-            "Memwallet does not support adding accounts from seed phrases. 
-Instead derive the ufvk in the calling code and import it using `import_account_ufvk`"
-        )
+        account_name: &str,
+        seed: &SecretVec<u8>,
+        account_index: zip32::AccountId,
+        birthday: &AccountBirthday,
+        key_source: Option<&str>,
+    ) -> Result<(Self::Account, UnifiedSpendingKey), Error> {
+        let seed_fingerprint =
+            SeedFingerprint::from_seed(seed.expose_secret()).ok_or(Error::InvalidSeedLength)?;
+        let usk = UnifiedSpendingKey::from_seed(&self.params, seed.expose_secret(), account_index)?;
+        let ufvk = usk.to_unified_full_viewing_key();
+        let account = self.transactionally(|db| {
+            db.add_account_full(
+                account_name,
+                AccountSource::Derived {
+                    derivation: Zip32Derivation::new(seed_fingerprint, account_index),
+                    key_source: key_source.map(str::to_owned),
+                },
+                ufvk,
+                birthday,
+            )
+        })?;
+        Ok((account, usk))
     }
 
     fn import_account_ufvk(
@@ -1091,241 +1203,366 @@ Instead derive the ufvk in the calling code and import it using `import_account_
         birthday: &AccountBirthday,
         purpose: AccountPurpose,
         key_source: Option<&str>,
-    ) -> Result<Self::Account, Self::Error> {
-        tracing::debug!("import_account_ufvk");
-        let (_id, account) = self.add_account(
-            account_name,
-            AccountSource::Imported {
-                purpose,
-                key_source: key_source.map(str::to_owned),
-            },
-            unified_key.to_owned(),
-            birthday.clone(),
-        )?;
-        Ok(account)
+    ) -> Result<Self::Account, Error> {
+        self.transactionally(|db| {
+            db.add_account_full(
+                account_name,
+                AccountSource::Imported {
+                    purpose,
+                    key_source: key_source.map(str::to_owned),
+                },
+                unified_key.clone(),
+                birthday,
+            )
+        })
+    }
+
+    fn delete_account(&mut self, account: AccountId) -> Result<(), Error> {
+        self.transactionally(|db| db.delete_account_internal(account))
+    }
+
+    fn set_account_name(&mut self, account: AccountId, name: &str) -> Result<(), Error> {
+        let a = self
+            .accounts
+            .get_mut(account)
+            .ok_or(Error::AccountUnknown(account))?;
+        a.name = Some(name.to_owned());
+        Ok(())
+    }
+
+    #[cfg(feature = "transparent-key-import")]
+    fn import_standalone_transparent_address(
+        &mut self,
+        _account: AccountId,
+        _address: TransparentAddress,
+    ) -> Result<(), Error> {
+        Err(Error::Other(
+            "importing standalone transparent addresses is not supported by this backend".into(),
+        ))
+    }
+
+    #[cfg(feature = "transparent-key-import")]
+    fn import_standalone_transparent_pubkey(
+        &mut self,
+        _account: AccountId,
+        _pubkey: secp256k1::PublicKey,
+    ) -> Result<(), Error> {
+        Err(Error::Other(
+            "importing standalone transparent keys is not supported by this backend".into(),
+        ))
+    }
+
+    #[cfg(feature = "transparent-key-import")]
+    fn import_standalone_transparent_script(
+        &mut self,
+        _account: AccountId,
+        _script: zcash_script::script::Redeem,
+    ) -> Result<(), Error> {
+        Err(Error::Other(
+            "importing standalone transparent scripts is not supported by this backend".into(),
+        ))
+    }
+
+    fn get_next_available_address(
+        &mut self,
+        account: AccountId,
+        request: UnifiedAddressRequest,
+    ) -> Result<Option<(UnifiedAddress, DiversifierIndex)>, Error> {
+        self.transactionally(|db| db.next_available_address(account, request))
+    }
+
+    fn get_address_for_index(
+        &mut self,
+        account: AccountId,
+        diversifier_index: DiversifierIndex,
+        request: UnifiedAddressRequest,
+    ) -> Result<Option<UnifiedAddress>, Error> {
+        let acct = self
+            .accounts
+            .get(account)
+            .cloned()
+            .ok_or(Error::AccountUnknown(account))?;
+        match acct.uivk().address(diversifier_index, request) {
+            Ok(address) => {
+                let exposed = self.chain_tip_height().unwrap_or(acct.birthday().height());
+                self.addresses.upsert_unified(
+                    account,
+                    diversifier_index,
+                    &address,
+                    Some(exposed),
+                    true,
+                )?;
+                Ok(Some(address))
+            }
+            #[cfg(feature = "transparent-inputs")]
+            Err(AddressGenerationError::InvalidTransparentChildIndex(_)) => Ok(None),
+            Err(AddressGenerationError::InvalidSaplingDiversifierIndex(_)) => Ok(None),
+            Err(e) => Err(Error::AddressGeneration(e)),
+        }
+    }
+
+    fn update_chain_tip(&mut self, tip_height: BlockHeight) -> Result<(), Error> {
+        self.transactionally(|db| db.update_chain_tip_internal(tip_height))
+    }
+
+    fn prune_scan_queue_below(
+        &mut self,
+        height: BlockHeight,
+        retain_with_priority: Option<ScanPriority>,
+    ) -> Result<u64, Error> {
+        let mut queue = self.scan_queue.clone();
+        let n = queue.prune_below(height, retain_with_priority)?;
+        self.scan_queue = queue;
+        Ok(n)
+    }
+
+    fn queue_rescan(&mut self, range: Range<BlockHeight>) -> Result<(), Error> {
+        let mut queue = self.scan_queue.clone();
+        queue.queue_rescan(range)?;
+        self.scan_queue = queue;
+        Ok(())
+    }
+
+    fn put_blocks(
+        &mut self,
+        from_state: &ChainState,
+        blocks: Vec<ScannedBlock<AccountId>>,
+    ) -> Result<(), Error> {
+        let anchor_retention = self.anchor_retention();
+        #[cfg(feature = "transparent-inputs")]
+        let gap_limits = self.gap_limits;
+        self.transactionally(|db| {
+            ll_wallet::put_blocks::<_, Error, std::convert::Infallible>(
+                db,
+                #[cfg(feature = "transparent-inputs")]
+                gap_limits,
+                from_state,
+                blocks,
+                anchor_retention.as_ref(),
+            )
+            .map_err(|e| match e {
+                ll_wallet::PutBlocksError::NonSequentialBlocks {
+                    prev_height,
+                    block_height,
+                } => Error::Other(format!(
+                    "blocks are non-sequential: {block_height} follows {prev_height}"
+                )),
+                ll_wallet::PutBlocksError::Storage(e) => e,
+                ll_wallet::PutBlocksError::ShardTree(e) => Error::ShardTree(e),
+                ll_wallet::PutBlocksError::ShardTreeForBlockRange {
+                    pool,
+                    block_range,
+                    error,
+                } => Error::Other(format!(
+                    "{pool:?} note commitment tree update for blocks {block_range:?} failed: {error}"
+                )),
+                #[cfg(feature = "transparent-inputs")]
+                ll_wallet::PutBlocksError::GapAddresses(e) => Error::from(e),
+                // `PutBlocksError` is non-exhaustive.
+                other => Error::Other(format!("put_blocks failed: {other:?}")),
+            })
+        })
+    }
+
+    fn put_received_transparent_utxo(
+        &mut self,
+        _output: &WalletTransparentOutput<AccountId>,
+    ) -> Result<Self::UtxoRef, Error> {
+        #[cfg(feature = "transparent-inputs")]
+        return self.transactionally(|db| {
+            let observed_height = db.mempool_height().ok_or(Error::ChainHeightUnknown)?;
+            let (account_id, key_scope) =
+                db.put_transparent_output(_output, observed_height.into(), true)?;
+            if let Some(t_key_scope) = key_scope {
+                let account = db
+                    .accounts
+                    .get(account_id)
+                    .cloned()
+                    .ok_or(Error::AccountUnknown(account_id))?;
+                let gap_limits = db.gap_limits;
+                generate_gap_addresses(
+                    db,
+                    &gap_limits,
+                    account_id,
+                    &account.uivk(),
+                    Some(&account.ufvk),
+                    t_key_scope,
+                    UnifiedAddressRequest::unsafe_custom(Allow, Allow, Require),
+                    true,
+                )?;
+            }
+            Ok(_output.outpoint().clone())
+        });
+
+        #[cfg(not(feature = "transparent-inputs"))]
+        Err(Error::Other(
+            "transparent outputs require the transparent-inputs feature".into(),
+        ))
+    }
+
+    fn store_decrypted_tx(
+        &mut self,
+        d_tx: DecryptedTransaction<zcash_primitives::transaction::Transaction, AccountId>,
+    ) -> Result<(), Error> {
+        let chain_tip = self.chain_tip_height().ok_or(Error::ChainHeightUnknown)?;
+        let params = self.params.clone();
+        #[cfg(feature = "transparent-inputs")]
+        let gap_limits = self.gap_limits;
+        self.transactionally(|db| {
+            ll_wallet::store_decrypted_tx(
+                db,
+                &params,
+                #[cfg(feature = "transparent-inputs")]
+                gap_limits,
+                chain_tip,
+                d_tx,
+            )
+        })
+    }
+
+    fn set_tx_trust(&mut self, txid: TxId, trusted: bool) -> Result<(), Error> {
+        // As zcash_client_sqlite's UPDATE: an unknown transaction is not an error.
+        if self.tx_table.contains(&txid) {
+            self.tx_table.set_trusted(&txid, trusted)?;
+        }
+        Ok(())
     }
 
     fn store_transactions_to_be_sent(
         &mut self,
-        transactions: &[SentTransaction<Self::AccountId>],
-    ) -> Result<(), Self::Error> {
-        tracing::debug!("store_transactions_to_be_sent");
-        for sent_tx in transactions {
-            self.tx_table.put_tx_data(
-                sent_tx.tx(),
-                Some(sent_tx.fee_amount()),
-                Some(sent_tx.target_height()),
-            );
-            let mut detectable_via_scanning = false;
-            // Mark sapling notes as spent
-            if let Some(bundle) = sent_tx.tx().sapling_bundle() {
-                detectable_via_scanning = true;
-                for spend in bundle.shielded_spends() {
-                    self.mark_sapling_note_spent(*spend.nullifier(), sent_tx.tx().txid())?;
-                }
-            }
-            // Mark orchard notes as spent
-            if let Some(_bundle) = sent_tx.tx().orchard_bundle() {
+        transactions: &[SentTransaction<AccountId>],
+    ) -> Result<(), Error> {
+        // As zcash_client_sqlite, the ZIP 318 classification of each stored transaction is
+        // recorded from the same trial decryption the enhance path uses.
+        #[cfg(feature = "orchard")]
+        let ufvks = self.get_unified_full_viewing_keys()?;
+        #[cfg(feature = "orchard")]
+        let zip318 = self.pool_migration_params(&self.params);
+        #[cfg(feature = "orchard")]
+        let chain_tip = self.chain_tip_height();
+        self.transactionally(|db| {
+            for sent_tx in transactions {
+                #[cfg_attr(not(feature = "orchard"), allow(unused_variables))]
+                let tx_ref = db.store_transaction_to_be_sent(sent_tx)?;
                 #[cfg(feature = "orchard")]
                 {
-                    detectable_via_scanning = true;
-                    for action in _bundle.actions() {
-                        match self.mark_orchard_note_spent(*action.nullifier(), sent_tx.tx().txid())
-                        {
-                            Ok(()) => {}
-                            Err(Error::NoteNotFound) => {
-                                // This is expected as some of the actions will be new outputs we don't have notes for
-                                // The ones we do recognize will be marked as spent
-                            }
-                            Err(e) => return Err(e),
-                        }
-                    }
-                }
-
-                #[cfg(not(feature = "orchard"))]
-                panic!("Sent a transaction with Orchard Actions without `orchard` enabled?");
-            }
-            // Mark transparent UTXOs as spent
-            #[cfg(feature = "transparent-inputs")]
-            for utxo_outpoint in sent_tx.utxos_spent() {
-                self.mark_transparent_output_spent(&sent_tx.tx().txid(), utxo_outpoint)?;
-            }
-
-            for output in sent_tx.outputs() {
-                self.sent_notes.insert_sent_output(sent_tx, output);
-
-                match output.recipient() {
-                    Recipient::InternalAccount { .. } => {
-                        self.received_notes.insert_received_note(
-                            ReceivedNote::from_sent_tx_output(sent_tx.tx().txid(), output)?,
-                        );
-                    }
-                    #[cfg(feature = "transparent-inputs")]
-                    Recipient::EphemeralTransparent {
-                        receiving_account,
-                        ephemeral_address,
-                        outpoint,
-                    } => {
-                        let txo = WalletTransparentOutput::from_parts(
-                            outpoint.clone(),
-                            TxOut::new(output.value(), ephemeral_address.script().into()),
-                            None,
-                        )
-                        .unwrap();
-                        self.put_transparent_output(&txo, receiving_account, true)?;
-                        if let Some(account) = self.accounts.get_mut(*receiving_account) {
-                            account.mark_ephemeral_address_as_used(
-                                ephemeral_address,
-                                sent_tx.tx().txid(),
-                            )?
-                        }
-                    }
-                    _ => {}
+                    let decrypted = zcash_client_backend::decrypt_transaction(
+                        &db.params,
+                        None,
+                        chain_tip,
+                        sent_tx.tx(),
+                        &ufvks,
+                    );
+                    let classification = zcash_client_backend::data_api::zip318::classify_decrypted_tx(
+                        sent_tx.tx(),
+                        decrypted.orchard_outputs(),
+                        decrypted.ironwood_outputs(),
+                        &zip318,
+                    );
+                    db.put_zip318_classification(tx_ref, classification)?;
                 }
             }
+            Ok(())
+        })
+    }
 
-            // Add the transaction to the set to be queried for transaction status. This is only necessary
-            // at present for fully transparent transactions, because any transaction with a shielded
-            // component will be detected via ordinary chain scanning and/or nullifier checking.
-            if !detectable_via_scanning {
-                self.transaction_data_request_queue
-                    .queue_status_retrieval(&sent_tx.tx().txid());
+    fn truncate_to_height(&mut self, max_height: BlockHeight) -> Result<BlockHeight, Error> {
+        self.transactionally(|db| {
+            let h = db.select_truncation_height(max_height)?;
+            db.truncate_to_height_internal(h, h)
+        })
+    }
+
+    fn truncate_to_chain_state(&mut self, chain_state: ChainState) -> Result<(), Error> {
+        self.transactionally(|db| db.truncate_to_chain_state_internal(chain_state))
+    }
+
+    fn rewind_to_chain_state(
+        &mut self,
+        chain_state: ChainState,
+        reset_account_birthdays: HashSet<AccountId>,
+    ) -> Result<(), RewindError<AccountId, Error>> {
+        let backup = self.snapshot();
+        match self.rewind_to_chain_state_internal(&chain_state, reset_account_birthdays) {
+            Ok(()) => Ok(()),
+            Err(e) => {
+                *self = backup;
+                Err(e)
             }
         }
+    }
 
-        Ok(())
+    #[cfg(feature = "transparent-inputs")]
+    fn reserve_next_n_ephemeral_addresses(
+        &mut self,
+        account_id: AccountId,
+        n: usize,
+    ) -> Result<Vec<(TransparentAddress, TransparentAddressMetadata)>, Error> {
+        let gap_limit = self.gap_limits.ephemeral();
+        self.transactionally(|db| db.reserve_next_n_addresses(account_id, KeyScope::Ephemeral, gap_limit, n))
+    }
+
+    #[cfg(feature = "transparent-inputs")]
+    fn reserve_next_n_internal_addresses(
+        &mut self,
+        account_id: AccountId,
+        n: usize,
+    ) -> Result<Vec<(TransparentAddress, TransparentAddressMetadata)>, Error> {
+        let gap_limit = self.gap_limits.internal();
+        self.transactionally(|db| db.reserve_next_n_addresses(account_id, KeyScope::Internal, gap_limit, n))
     }
 
     fn set_transaction_status(
         &mut self,
         txid: TxId,
         status: TransactionStatus,
-    ) -> Result<(), Self::Error> {
-        tracing::debug!("set_transaction_status");
-        self.tx_table.set_transaction_status(&txid, status)
+    ) -> Result<(), Error> {
+        self.transactionally(|db| LowLevelWalletWrite::set_transaction_status(db, txid, status))
     }
 
     #[cfg(feature = "transparent-inputs")]
-    fn reserve_next_n_ephemeral_addresses(
+    fn schedule_next_check(
         &mut self,
-        account_id: Self::AccountId,
-        n: usize,
-    ) -> Result<Vec<(TransparentAddress, TransparentAddressMetadata)>, Self::Error> {
-        use zcash_keys::keys::AddressGenerationError;
-        // TODO: We need to implement first_unsafe_index to make sure we dont violate gap invarient
-
-        use transparent::keys::NonHardenedChildIndex;
-        let first_unsafe = self.first_unsafe_index(account_id)?;
-        if let Some(account) = self.accounts.get_mut(account_id) {
-            let first_unreserved = account.first_unreserved_index()?;
-
-            let allocation = range_from(first_unreserved, u32::try_from(n).unwrap());
-
-            if allocation.len() < n {
-                return Err(AddressGenerationError::DiversifierSpaceExhausted.into());
-            }
-            if allocation.end > first_unsafe {
-                return Err(Error::ReachedGapLimit(
-                    account_id,
-                    core::cmp::max(first_unreserved, first_unsafe),
-                ));
-            }
-            let _reserved = account.reserve_until(allocation.end)?;
-            self.get_known_ephemeral_addresses(
-                account_id,
-                Some(
-                    NonHardenedChildIndex::from_index(allocation.start).expect("Bad Index")
-                        ..NonHardenedChildIndex::from_index(allocation.end).expect("Bad Index"),
-                ),
-            )
-        } else {
-            Err(Self::Error::AccountUnknown(account_id))
-        }
+        _address: &TransparentAddress,
+        _offset_seconds: u32,
+    ) -> Result<Option<std::time::SystemTime>, Error> {
+        // Scheduling needs a randomness source and a clock this backend does not hold;
+        // Celari does not use privacy-preserving UTXO checks.
+        Err(Error::Other(
+            "schedule_next_check is not supported by this backend".into(),
+        ))
     }
 
-    fn get_address_for_index(
+    #[cfg(feature = "transparent-inputs")]
+    fn mark_transparent_addresses_exposed(
         &mut self,
-        _account: Self::AccountId,
-        _diversifier_index: DiversifierIndex,
-        _request: UnifiedAddressRequest,
-    ) -> Result<Option<UnifiedAddress>, Self::Error> {
-        todo!()
+        exposures: &[(TransparentAddress, BlockHeight)],
+    ) -> Result<(), Error> {
+        self.transactionally(|db| {
+            for (address, height) in exposures {
+                let (id, _) = db
+                    .addresses
+                    .find_by_transparent_receiver(address)
+                    .ok_or(Error::AddressNotRecognized(*address))?;
+                db.addresses.mark_exposed(id, *height);
+            }
+            Ok(())
+        })
     }
 
     #[cfg(feature = "transparent-inputs")]
     fn notify_address_checked(
         &mut self,
-        _request: TransactionsInvolvingAddress,
-        _as_of_height: BlockHeight,
-    ) -> Result<(), Self::Error> {
-        // No-op for now - this notifies that an address range was checked for transactions.
-        // In the sqlite implementation, this updates address metadata tracking.
-        // For the memory wallet, we don't need to track this state.
-        Ok(())
+        request: TransactionsInvolvingAddress,
+        as_of_height: BlockHeight,
+    ) -> Result<(), Error> {
+        if let Some(requested_end) = request.block_range_end() {
+            if as_of_height != requested_end - 1 {
+                return Err(Error::Other(format!(
+                    "address check notification at {as_of_height} does not match the requested range end {requested_end}"
+                )));
+            }
+        }
+        self.update_observed_unspent_heights(request.address(), as_of_height)
     }
-
-    #[cfg(feature = "transparent-key-import")]
-    fn import_standalone_transparent_pubkey(
-        &mut self,
-        _account: Self::AccountId,
-        _pubkey: secp256k1::PublicKey,
-    ) -> Result<(), Self::Error> {
-        todo!()
-    }
-}
-
-#[cfg(feature = "transparent-inputs")]
-fn range_from(i: u32, n: u32) -> Range<u32> {
-    let first = core::cmp::min(1 << 31, i);
-    let last = core::cmp::min(1 << 31, i.saturating_add(n));
-    first..last
-}
-
-use zcash_client_backend::wallet::Note;
-use zcash_keys::address::Receiver;
-use zcash_keys::encoding::AddressCodec;
-#[cfg(feature = "orchard")]
-use {incrementalmerkletree::frontier::Frontier, shardtree::store::Checkpoint};
-
-#[cfg(feature = "orchard")]
-fn ensure_checkpoints<'a, H, I: Iterator<Item = &'a BlockHeight>, const DEPTH: u8>(
-    // An iterator of checkpoints heights for which we wish to ensure that
-    // checkpoints exists.
-    ensure_heights: I,
-    // The map of checkpoint positions from which we will draw note commitment tree
-    // position information for the newly created checkpoints.
-    existing_checkpoint_positions: &BTreeMap<BlockHeight, Position>,
-    // The frontier whose position will be used for an inserted checkpoint when
-    // there is no preceding checkpoint in existing_checkpoint_positions.
-    state_final_tree: &Frontier<H, DEPTH>,
-) -> Vec<(BlockHeight, Checkpoint)> {
-    ensure_heights
-        .flat_map(|ensure_height| {
-            existing_checkpoint_positions
-                .range::<BlockHeight, _>(..=*ensure_height)
-                .last()
-                .map_or_else(
-                    || {
-                        Some((
-                            *ensure_height,
-                            state_final_tree
-                                .value()
-                                .map_or_else(Checkpoint::tree_empty, |t| {
-                                    Checkpoint::at_position(t.position())
-                                }),
-                        ))
-                    },
-                    |(existing_checkpoint_height, position)| {
-                        if *existing_checkpoint_height < *ensure_height {
-                            Some((*ensure_height, Checkpoint::at_position(*position)))
-                        } else {
-                            // The checkpoint already exists, so we don't need to
-                            // do anything.
-                            None
-                        }
-                    },
-                )
-                .into_iter()
-        })
-        .collect::<Vec<_>>()
 }

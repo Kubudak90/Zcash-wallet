@@ -1,6 +1,8 @@
 use async_trait::async_trait;
 use std::collections::BTreeMap;
 use std::convert::Infallible;
+use std::future::Future;
+use std::pin::Pin;
 use wasm_sync::RwLock;
 use zcash_client_backend::data_api::chain::{BlockCache, BlockSource};
 use zcash_client_backend::data_api::scanning::ScanRange;
@@ -101,12 +103,94 @@ impl BlockCache for MemBlockCache {
         Ok(())
     }
 
-    async fn delete(&self, range: ScanRange) -> Result<(), Self::Error> {
+    /// Removes the blocks of `range` when called, not when the returned future is polled.
+    ///
+    /// `zcash_client_backend::sync::run` keeps the futures `delete` returns and awaits them
+    /// only when the pass ends (or drops them on an error), so an `async fn` here would keep
+    /// every block of the pass in memory until then: on a restore, the whole range from the
+    /// birthday to the tip (review finding R3). `run` calls `delete` right after scanning a
+    /// range and never reads that range again without downloading it again.
+    fn delete<'life0, 'async_trait>(
+        &'life0 self,
+        range: ScanRange,
+    ) -> Pin<Box<dyn Future<Output = Result<(), Self::Error>> + Send + 'async_trait>>
+    where
+        'life0: 'async_trait,
+        Self: 'async_trait,
+    {
+        self.remove_range(&range);
+        Box::pin(std::future::ready(Ok(())))
+    }
+}
+
+impl MemBlockCache {
+    /// Removes the blocks of `range` from the cache.
+    pub fn remove_range(&self, range: &ScanRange) {
         let mut inner = self.0.write().unwrap();
         let range = range.block_range();
-        for height in u32::from(range.start)..u32::from(range.end) {
-            inner.remove(&height.into());
+        if range.start >= range.end {
+            return;
         }
-        Ok(())
+        // Everything at or above `range.start`, minus what is at or above `range.end`.
+        let mut tail = inner.split_off(&range.start);
+        let mut keep = tail.split_off(&range.end);
+        inner.append(&mut keep);
+        drop(tail);
+    }
+
+    /// The number of blocks in the cache.
+    pub fn len(&self) -> usize {
+        self.0.read().unwrap().len()
+    }
+
+    /// Whether the cache holds no block.
+    pub fn is_empty(&self) -> bool {
+        self.0.read().unwrap().is_empty()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::pin::pin;
+    use std::task::{Context, Poll, Waker};
+    use zcash_client_backend::data_api::scanning::ScanPriority;
+
+    fn block(height: u32) -> CompactBlock {
+        CompactBlock {
+            height: height.into(),
+            ..Default::default()
+        }
+    }
+
+    fn poll_once<F: Future>(f: F) -> Poll<F::Output> {
+        let mut cx = Context::from_waker(Waker::noop());
+        pin!(f).poll(&mut cx)
+    }
+
+    /// `zcash_client_backend::sync::run` collects the futures `delete` returns and awaits them
+    /// only when the pass ends, so the blocks of a scanned batch must leave the cache when
+    /// `delete` is called, not when its future is polled (review finding R3: otherwise a pass
+    /// keeps every block it downloaded in memory until it ends).
+    #[test]
+    fn delete_frees_the_blocks_when_called() {
+        let cache = MemBlockCache::new();
+        assert!(poll_once(cache.insert((100..110).map(block).collect())).is_ready());
+        assert_eq!(cache.0.read().unwrap().len(), 10);
+
+        let range = ScanRange::from_parts(BlockHeight::from(100)..BlockHeight::from(105), ScanPriority::Historic);
+        let pending = cache.delete(range);
+        assert_eq!(
+            cache.0.read().unwrap().keys().map(|h| u32::from(*h)).collect::<Vec<_>>(),
+            (105..110).collect::<Vec<_>>(),
+            "the deleted range is gone before the future is awaited"
+        );
+        assert!(poll_once(pending).is_ready());
+        assert_eq!(cache.0.read().unwrap().len(), 5);
+
+        // A future that is dropped without being awaited (as `run` drops them on an error)
+        // has still deleted its range.
+        drop(cache.delete(ScanRange::from_parts(BlockHeight::from(105)..BlockHeight::from(110), ScanPriority::Historic)));
+        assert!(cache.0.read().unwrap().is_empty());
     }
 }

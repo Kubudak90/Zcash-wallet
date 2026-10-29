@@ -1,226 +1,129 @@
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    ops::{Deref, DerefMut},
-};
+//! Transparent outputs received by the wallet, and their spends.
+//!
+//! Mirrors the `transparent_received_outputs`, `transparent_received_output_spends` and
+//! `transparent_spend_map` tables of zcash_client_sqlite 0.23 (`wallet/db.rs`). The spend
+//! locator map for out-of-order scanning lives in [`crate::types::nullifier::SpendMaps`].
+
+use std::collections::{BTreeMap, BTreeSet};
 
 use ::transparent::{
     address::TransparentAddress,
     bundle::{OutPoint, TxOut},
+    keys::TransparentKeyScope,
 };
-use transparent::keys::TransparentKeyScope;
-use zcash_client_backend::wallet::WalletTransparentOutput;
+use zcash_primitives::transaction::TxId;
+use zcash_protocol::consensus::BlockHeight;
 
-use zcash_protocol::{TxId, consensus::BlockHeight};
+use crate::{AccountId, types::address::AddressId};
 
-use super::AccountId;
-use crate::Error;
-
-/// Stores the transparent outputs received by the wallet.
-#[derive(Debug, Default, Clone, PartialEq)]
-pub struct TransparentReceivedOutputs(pub(crate) BTreeMap<OutPoint, ReceivedTransparentOutput>);
-
-impl TransparentReceivedOutputs {
-    pub fn new() -> Self {
-        Self(BTreeMap::new())
-    }
-
-    #[cfg(feature = "transparent-inputs")]
-    pub fn detect_spending_accounts<'a>(
-        &self,
-        spent: impl Iterator<Item = &'a OutPoint>,
-    ) -> Result<BTreeSet<AccountId>, Error> {
-        let mut acc = BTreeSet::new();
-        for prevout in spent {
-            if let Some(output) = self.0.get(prevout) {
-                acc.insert(output.account_id);
-            }
-        }
-        Ok(acc)
-    }
-}
-
-impl Deref for TransparentReceivedOutputs {
-    type Target = BTreeMap<OutPoint, ReceivedTransparentOutput>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl DerefMut for TransparentReceivedOutputs {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
-/// A junction table between received transparent outputs and the transactions that spend them.
-#[derive(Debug, Default, PartialEq)]
-pub struct TransparentReceivedOutputSpends(pub(crate) BTreeMap<OutPoint, TxId>);
-
-impl TransparentReceivedOutputSpends {
-    pub fn new() -> Self {
-        Self(BTreeMap::new())
-    }
-
-    #[cfg(feature = "transparent-inputs")]
-    pub fn get(&self, outpoint: &OutPoint) -> Option<&TxId> {
-        self.0.get(outpoint)
-    }
-
-    pub fn insert(&mut self, outpoint: OutPoint, txid: TxId) {
-        self.0.insert(outpoint, txid);
-    }
-}
-
-impl Deref for TransparentReceivedOutputSpends {
-    type Target = BTreeMap<OutPoint, TxId>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-// transparent_received_outputs
+/// A transparent output paying one of the wallet's addresses.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReceivedTransparentOutput {
-    // Reference to the transaction in which this TXO was created
-    pub(crate) transaction_id: TxId,
-    // The account that controls spend authority for this TXO
+    pub(crate) outpoint: OutPoint,
+    /// The account that controls spend authority for this output.
     pub(crate) account_id: AccountId,
-    // The address to which this TXO was sent
+    /// The address the output pays.
     pub(crate) address: TransparentAddress,
-    // The key scope at which the address was derived
-    pub(crate) key_scope: TransparentKeyScope,
-    // script, value_zat
+    /// The address row of `address`.
+    pub(crate) address_id: AddressId,
+    /// The key scope the address was derived at; `None` for an imported standalone address.
+    pub(crate) key_scope: Option<TransparentKeyScope>,
     pub(crate) txout: TxOut,
-    /// The maximum block height at which this TXO was either
-    /// observed to be a member of the UTXO set at the start of the block, or observed
-    /// to be an output of a transaction mined in the block. This is intended to be used to
-    /// determine when the TXO is no longer a part of the UTXO set, in the case that the
-    /// transaction that spends it is not detected by the wallet.
+    /// The greatest height at which the output was observed to be in the UTXO set as of
+    /// the end of the block.
     pub(crate) max_observed_unspent_height: Option<BlockHeight>,
 }
 
 impl ReceivedTransparentOutput {
-    pub fn new(
-        transaction_id: TxId,
-        account_id: AccountId,
-        address: TransparentAddress,
-        key_scope: TransparentKeyScope,
-        txout: TxOut,
-        max_observed_unspent_height: BlockHeight,
-    ) -> Self {
-        Self {
-            transaction_id,
-            account_id,
-            address,
-            key_scope,
-            txout,
-            max_observed_unspent_height: Some(max_observed_unspent_height),
-        }
+    pub fn outpoint(&self) -> &OutPoint {
+        &self.outpoint
     }
-
-    pub fn to_wallet_transparent_output(
-        &self,
-        outpoint: &OutPoint,
-        mined_height: Option<BlockHeight>,
-    ) -> Option<WalletTransparentOutput> {
-        WalletTransparentOutput::from_parts(outpoint.clone(), self.txout.clone(), mined_height)
+    pub fn account_id(&self) -> AccountId {
+        self.account_id
+    }
+    pub fn address(&self) -> &TransparentAddress {
+        &self.address
+    }
+    pub fn key_scope(&self) -> Option<TransparentKeyScope> {
+        self.key_scope
+    }
+    pub fn txout(&self) -> &TxOut {
+        &self.txout
+    }
+    pub fn max_observed_unspent_height(&self) -> Option<BlockHeight> {
+        self.max_observed_unspent_height
     }
 }
 
-/// A cache of the relationship between a transaction and the prevout data of its
-/// transparent inputs.
-///
-/// Output may be attempted to be spent in multiple transactions, even though only one will ever be mined
-/// which is why can cannot just rely on TransparentReceivedOutputSpends or implement this as as map
-#[derive(Debug, Default, PartialEq)]
-pub struct TransparentSpendCache(pub(crate) BTreeSet<(TxId, OutPoint)>);
-
-impl TransparentSpendCache {
-    pub fn new() -> Self {
-        Self(BTreeSet::new())
-    }
-
-    /// Get all the outpoints for a given transaction ID.
-    #[cfg(feature = "transparent-inputs")]
-    pub fn contains(&self, txid: &TxId, outpoint: &OutPoint) -> bool {
-        self.0.contains(&(*txid, outpoint.clone()))
-    }
+/// The wallet's transparent outputs and the transactions spending them.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct TransparentOutputs {
+    /// `transparent_received_outputs`, keyed by outpoint.
+    pub(crate) outputs: BTreeMap<OutPoint, ReceivedTransparentOutput>,
+    /// `transparent_received_output_spends`: every transaction known to spend the output
+    /// (only one of them can be mined).
+    pub(crate) spends: BTreeMap<OutPoint, BTreeSet<TxId>>,
+    /// `transparent_spend_map`: the prevouts spent by transactions the wallet stores, so a
+    /// spend seen before its output can be linked once the output is found.
+    pub(crate) spend_map: BTreeSet<(TxId, OutPoint)>,
 }
 
-impl Deref for TransparentSpendCache {
-    type Target = BTreeSet<(TxId, OutPoint)>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
+impl TransparentOutputs {
+    pub(crate) fn new() -> Self {
+        Self::default()
     }
-}
 
-mod serialization {
-    use super::*;
-    use bip32::ChildNumber;
-    use crate::{proto::memwallet as proto, read_optional, Error};
-    use transparent::address::Script;
-    use zcash_keys::encoding::AddressCodec;
-    use zcash_protocol::{consensus::Network::MainNetwork as EncodingParams, value::Zatoshis};
+    pub fn get(&self, outpoint: &OutPoint) -> Option<&ReceivedTransparentOutput> {
+        self.outputs.get(outpoint)
+    }
 
-    impl From<ReceivedTransparentOutput> for proto::ReceivedTransparentOutput {
-        fn from(output: ReceivedTransparentOutput) -> Self {
-            // Convert TransparentKeyScope to u32 via ChildNumber (the only public API)
-            let key_scope_child: ChildNumber = output.key_scope.into();
-            Self {
-                transaction_id: output.transaction_id.as_ref().to_vec(),
-                account_id: *output.account_id,
-                address: output.address.encode(&EncodingParams),
-                txout: Some(output.txout.into()),
-                max_observed_unspent_height: output.max_observed_unspent_height.map(|h| h.into()),
-                key_scope: Some(key_scope_child.index()),
-            }
+    pub fn iter(&self) -> impl Iterator<Item = &ReceivedTransparentOutput> {
+        self.outputs.values()
+    }
+
+    pub fn spends_of(&self, outpoint: &OutPoint) -> impl Iterator<Item = &TxId> {
+        self.spends.get(outpoint).into_iter().flatten()
+    }
+
+    /// The transactions recorded in `transparent_spend_map` as spending `outpoint`.
+    pub(crate) fn spend_map_spenders<'a>(
+        &'a self,
+        outpoint: &'a OutPoint,
+    ) -> impl Iterator<Item = TxId> + 'a {
+        self.spend_map
+            .iter()
+            .filter(move |(_, op)| op == outpoint)
+            .map(|(txid, _)| *txid)
+    }
+
+    /// Records that `spending_tx` spends `outpoint`. Returns whether the record is new.
+    pub(crate) fn record_spend(&mut self, outpoint: &OutPoint, spending_tx: TxId) -> bool {
+        self.spends
+            .entry(outpoint.clone())
+            .or_default()
+            .insert(spending_tx)
+    }
+
+    pub(crate) fn remove_tx(&mut self, txid: &TxId) {
+        self.outputs.retain(|op, _| op.txid() != txid);
+        self.spends.retain(|op, _| op.txid() != txid);
+        for txs in self.spends.values_mut() {
+            txs.remove(txid);
         }
+        self.spends.retain(|_, txs| !txs.is_empty());
+        self.spend_map.retain(|(spender, _)| spender != txid);
     }
 
-    impl TryFrom<proto::ReceivedTransparentOutput> for ReceivedTransparentOutput {
-        type Error = crate::Error;
-
-        fn try_from(output: proto::ReceivedTransparentOutput) -> Result<Self, Self::Error> {
-            // Handle key_scope with backwards compatibility
-            let key_scope = match output.key_scope {
-                Some(scope_value) => TransparentKeyScope::custom(scope_value)
-                    .ok_or_else(|| Error::CorruptedData(
-                        format!("Invalid TransparentKeyScope value: {} (must be < 2^31)", scope_value)
-                    ))?,
-                None => TransparentKeyScope::EXTERNAL,  // Default for old data without key_scope
-            };
-
-            Ok(Self {
-                transaction_id: TxId::from_bytes(output.transaction_id.clone().try_into()?),
-                account_id: output.account_id.into(),
-                address: TransparentAddress::decode(&EncodingParams, &output.address)?,
-                key_scope,
-                txout: read_optional!(output, txout)?.try_into()?,
-                max_observed_unspent_height: output.max_observed_unspent_height.map(|h| h.into()),
-            })
-        }
-    }
-
-    impl From<TxOut> for proto::TxOut {
-        fn from(txout: TxOut) -> Self {
-            Self {
-                script: txout.script_pubkey().0.0.clone(),
-                value: u64::from(txout.value()),
-            }
-        }
-    }
-
-    impl TryFrom<proto::TxOut> for TxOut {
-        type Error = crate::Error;
-
-        fn try_from(txout: proto::TxOut) -> Result<Self, Self::Error> {
-            Ok(Self::new(
-                Zatoshis::try_from(txout.value)?,
-                Script(zcash_script::script::Code(txout.script)),
-            ))
+    pub(crate) fn remove_account(&mut self, account: AccountId) {
+        let ops: Vec<OutPoint> = self
+            .outputs
+            .values()
+            .filter(|o| o.account_id == account)
+            .map(|o| o.outpoint.clone())
+            .collect();
+        for op in ops {
+            self.outputs.remove(&op);
+            self.spends.remove(&op);
         }
     }
 }
