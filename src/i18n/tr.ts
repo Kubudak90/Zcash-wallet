@@ -212,6 +212,19 @@ export const tr = {
   'send.sentTitle': '{amount} ZEC gönderildi',
   'send.stageDone': 'tamamlandı',
   'send.failedRetry': 'Hiçbir şey gönderilmedi. Tekrar deneyebilirsin.',
+  'send.refused.funds':
+    'Hiçbir şey gönderilmedi: harcanabilir bakiye bu ödemeyi karşılamıyor. Gereken (ağ ücreti dahil) {required} ZEC, harcanabilir {available} ZEC.',
+  'send.refused.upgrade':
+    'Hiçbir şey gönderilmedi. Bir ağ yükseltmesi sırasında gönderim yaklaşık {minutes} dakika duraklar: {upgrade} {height} numaralı blokta, {blocks} blok sonra etkinleşiyor. Etkinleşince tekrar dene.',
+  'send.refused.upgradeNext':
+    'Hiçbir şey gönderilmedi. Bir ağ yükseltmesi sırasında gönderim yaklaşık {minutes} dakika duraklar: {upgrade} bir sonraki blokta ({height}) etkinleşiyor. Birkaç dakika sonra tekrar dene.',
+  'send.refused.upgradeSoon':
+    'Hiçbir şey gönderilmedi. Bir ağ yükseltmesi sırasında gönderim yaklaşık {minutes} dakika duraklar. Birkaç dakika sonra tekrar dene.',
+  'send.refused.theUpgrade': 'yükseltme',
+  'send.refused.wrongBranch':
+    'Hiçbir şey gönderilmedi: işlem hazırlanırken bir ağ yükseltmesi etkinleşti, bu yüzden bu işlem hiçbir bloğa giremezdi. Tekrar dene; yeni kurallarla yeni bir işlem oluşturulur.',
+  'send.refused.expired':
+    'Hiçbir şey gönderilmedi: işlemin süresi bir bloğa giremeden dolacaktı. Tekrar dene; yeni bir işlem oluşturulur.',
   'send.maybeSent': 'İşlem yine de ağa ulaşmış olabilir. Tekrar denemeden önce Geçmiş’e bak.',
   'send.shieldFirst':
     '{amount} ZEC şeffaf bakiyen de var. Yalnızca gizli bakiye gönderilebilir; göndermek için önce gizliye aktar.',

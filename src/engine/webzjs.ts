@@ -36,7 +36,7 @@ import type {
   ZcashEngine,
 } from './types';
 import { balancesFrom, type RawBalance } from './webzjs-balances';
-import { openError } from './webzjs-errors';
+import { buildError, openError, sendError } from './webzjs-errors';
 import { historyFrom, type RawHistoryEntry } from './webzjs-history';
 import { webzjsLocalStatus, webzjsNetworkStatus } from './webzjs-upgrades';
 
@@ -293,13 +293,18 @@ export class WebzjsEngine implements ZcashEngine {
     if (memo?.includes('\u0000')) throw new Error('a memo cannot contain NUL characters');
     // WebZjs encodes the memo and rejects one that is too long or goes to a
     // transparent or TEX address, before it touches the network.
-    const pczt = await this.guarded(() => this.open_.pczt_create(account, to.trim(), zats, memo || undefined));
+    // A refusal (UpgradePending, a balance that does not cover the payment) means nothing was built.
+    const pczt = await this.guarded(() => this.open_.pczt_create(account, to.trim(), zats, memo || undefined)).catch((e) => {
+      throw buildError(e);
+    });
     await this.signProveSend(pczt, auth);
   }
 
   async shield(account: number, auth: SpendAuthority): Promise<void> {
     auth.onStage?.('building');
-    const pczt = await this.guarded(() => this.open_.pczt_shield(account));
+    const pczt = await this.guarded(() => this.open_.pczt_shield(account)).catch((e) => {
+      throw buildError(e);
+    });
     await this.signProveSend(pczt, auth);
   }
 
@@ -323,6 +328,10 @@ export class WebzjsEngine implements ZcashEngine {
       throw e;
     }
     auth.onStage?.('broadcasting');
-    await this.guarded(() => this.open_.pczt_send(proved));
+    // UpgradePending, PcztWrongBranch and PcztExpired are raised before the transaction is stored
+    // or broadcast (SpendRefusedError: nothing was sent); after any other error it may be out.
+    await this.guarded(() => this.open_.pczt_send(proved)).catch((e) => {
+      throw sendError(e);
+    });
   }
 }

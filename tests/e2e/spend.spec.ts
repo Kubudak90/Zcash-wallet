@@ -24,7 +24,14 @@ async function review(page: Page, to: string, amount: string) {
 
 const sendButton = (page: Page) => page.locator('form').getByRole('button', { name: 'Send', exact: true });
 
-type Knobs = { holdStage?: string; holdPass?: boolean; chainGrowth?: number; failPass?: boolean };
+type Knobs = {
+  holdStage?: string;
+  holdPass?: boolean;
+  chainGrowth?: number;
+  failPass?: boolean;
+  engineFee?: number;
+  refuseSpend?: 'UpgradePending' | 'PcztWrongBranch' | 'PcztExpired';
+};
 
 /** Changes the fake engine's knobs (src/engine/fake.ts) on the running page. */
 async function setKnobs(page: Page, knobs: Knobs) {
@@ -122,6 +129,85 @@ test('a failed spend says whether it is safe to try again', async ({ page }) => 
   await page.getByRole('button', { name: 'Unlock' }).click();
   await page.getByRole('button', { name: 'History', exact: true }).click();
   await expect(sent).toHaveCount(1);
+});
+
+test('a balance that does not cover the real fee is explained in ZEC, without the engine text (en, tr)', async ({ page }) => {
+  // The engine asks more than the typical fee the form assumes, as for a TEX payment (ZIP 317:
+  // 20,000 zatoshis), so "Max" passes the form and the engine refuses it (final review E2E-2).
+  await page.addInitScript(() => {
+    (globalThis as { __fakeEngine?: Knobs }).__fakeEngine = { engineFee: 20_000 };
+  });
+  await createWallet(page);
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await page.getByLabel('Recipient address').fill(UA);
+  await page.getByRole('button', { name: 'Max' }).click();
+  await expect(page.getByLabel('Amount (ZEC)')).toHaveValue('1.2499');
+  await page.getByRole('button', { name: 'Review' }).click();
+  await page.getByLabel('Enter your password to confirm').fill(PASSWORD);
+  await sendButton(page).click();
+  await expect(page.getByTestId('spend-failure')).toHaveText(
+    'Nothing was sent: the spendable balance does not cover this payment. It needs 1.2501 ZEC including the network fee; 1.25 ZEC is spendable.',
+    { timeout: 10_000 },
+  );
+  await expect(page.getByText('Sending failed.')).toBeVisible();
+  // No English engine text in zatoshis, collapsed or not; the retry form stays.
+  await expect(page.getByText('Details')).toHaveCount(0);
+  await expect(page.getByText(/InsufficientFunds|Zatoshis/)).toHaveCount(0);
+  await expect(sendButton(page)).toBeVisible();
+
+  await page.getByRole('button', { name: /Back/ }).click();
+  await page.getByRole('button', { name: 'Settings' }).click();
+  await page.getByRole('button', { name: 'Türkçe' }).click();
+  await page.getByRole('button', { name: 'Gönder', exact: true }).click();
+  await page.getByLabel('Alıcı adresi').fill(UA);
+  await page.getByRole('button', { name: 'Tümü' }).click();
+  await page.getByRole('button', { name: 'Gözden geçir' }).click();
+  await page.getByLabel('Onaylamak için şifreni gir').fill(PASSWORD);
+  await page.locator('form').getByRole('button', { name: 'Gönder', exact: true }).click();
+  await expect(page.getByTestId('spend-failure')).toHaveText(
+    'Hiçbir şey gönderilmedi: harcanabilir bakiye bu ödemeyi karşılamıyor. Gereken (ağ ücreti dahil) 1,2501 ZEC, harcanabilir 1,25 ZEC.',
+    { timeout: 10_000 },
+  );
+  await expect(page.getByText(/InsufficientFunds|Zatoshis/)).toHaveCount(0);
+});
+
+test('a send the engine refuses around a network upgrade says that nothing was sent', async ({ page }) => {
+  await createWallet(page);
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  const history = page.getByTestId('history').locator('.tx-sent');
+
+  // While building: the pause before NU7 (the fake's tip is 9,605 blocks below it).
+  await setKnobs(page, { refuseSpend: 'UpgradePending' });
+  await review(page, UA, '0.1');
+  await sendButton(page).click();
+  await expect(page.getByTestId('spend-failure')).toHaveText(
+    'Nothing was sent. Sending pauses for about 14 minutes around a network upgrade: NU7 activates at block 3,543,405, 9,604 blocks from now. Try again once it is active.',
+    { timeout: 10_000 },
+  );
+  await expect(sendButton(page)).toBeVisible();
+
+  // In pczt_send, after the broadcasting stage began: refused before anything was stored, so
+  // this is not "may have reached the network", and trying again is offered.
+  for (const [code, line] of [
+    ['PcztWrongBranch', 'Nothing was sent: a network upgrade activated while the transaction was being prepared, so it could never be mined. Try again; a new one is built under the new rules.'],
+    ['PcztExpired', 'Nothing was sent: the transaction would have expired before it could be mined. Try again; a new one is built.'],
+  ] as const) {
+    await setKnobs(page, { refuseSpend: code });
+    await page.getByLabel('Enter your password to confirm').fill(PASSWORD);
+    await sendButton(page).click();
+    await expect(page.getByTestId('spend-failure')).toHaveText(line, { timeout: 10_000 });
+    await expect(page.getByText('may have reached the network')).toHaveCount(0);
+    await expect(page.getByText('Details')).toHaveCount(0);
+    await expect(sendButton(page)).toBeVisible();
+  }
+
+  // Trying again once the engine accepts it sends it, once.
+  await setKnobs(page, { refuseSpend: undefined });
+  await page.getByLabel('Enter your password to confirm').fill(PASSWORD);
+  await sendButton(page).click();
+  await expect(page.getByRole('heading', { name: '0.10 ZEC sent' })).toBeVisible({ timeout: 10_000 });
+  await page.getByRole('button', { name: 'View in history' }).click();
+  await expect(history).toHaveCount(1);
 });
 
 test('a failed pass keeps spending closed while the wallet is known to be behind', async ({ page }) => {

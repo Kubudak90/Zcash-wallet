@@ -211,6 +211,19 @@ export const en: Record<MessageKey, string> = {
   'send.sentTitle': '{amount} ZEC sent',
   'send.stageDone': 'done',
   'send.failedRetry': 'Nothing was sent. You can try again.',
+  'send.refused.funds':
+    'Nothing was sent: the spendable balance does not cover this payment. It needs {required} ZEC including the network fee; {available} ZEC is spendable.',
+  'send.refused.upgrade':
+    'Nothing was sent. Sending pauses for about {minutes} minutes around a network upgrade: {upgrade} activates at block {height}, {blocks} blocks from now. Try again once it is active.',
+  'send.refused.upgradeNext':
+    'Nothing was sent. Sending pauses for about {minutes} minutes around a network upgrade: {upgrade} activates with the next block ({height}). Try again in a few minutes.',
+  'send.refused.upgradeSoon':
+    'Nothing was sent. Sending pauses for about {minutes} minutes around a network upgrade. Try again in a few minutes.',
+  'send.refused.theUpgrade': 'the upgrade',
+  'send.refused.wrongBranch':
+    'Nothing was sent: a network upgrade activated while the transaction was being prepared, so it could never be mined. Try again; a new one is built under the new rules.',
+  'send.refused.expired':
+    'Nothing was sent: the transaction would have expired before it could be mined. Try again; a new one is built.',
   'send.maybeSent': 'The transaction may have reached the network anyway. Check History before you try again.',
   'send.shieldFirst':
     'You also have {amount} ZEC of transparent funds. Only shielded funds can be sent, so shield them first.',

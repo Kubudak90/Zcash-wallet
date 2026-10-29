@@ -9,6 +9,7 @@ import { sha256 } from '@noble/hashes/sha256';
 
 import { acceptsMemo, checkAddress } from '../lib/address';
 import { CrashWatch } from './webzjs-crash';
+import { buildError, sendError } from './webzjs-errors';
 import type {
   Addresses,
   Balances,
@@ -37,6 +38,26 @@ const encoder = new TextEncoder();
 const OLD_FORMAT = 'old-engine:';
 const NEWER_FORMAT = 'newer-engine:';
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** The JS Error the ported WebZjs throws for a send refusal (webzjs-wallet error.rs, round 6). */
+function engineRefusal(code: NonNullable<FakeKnobs['refuseSpend']>, tip: number): Error {
+  const [message, numbers]: [string, Record<string, number>] =
+    code === 'UpgradePending'
+      ? [
+          `UpgradePending: Network upgrade at height 3543405 in ${3_543_405 - tip - 1} blocks: no transaction is built or sent from 10 blocks before an upgrade until the upgrade's first block is mined, so that none is made for a consensus branch (0x37a5165b) it could then never be mined in. Try again after the upgrade.`,
+          { activation_height: 3_543_405, blocks_left: 3_543_405 - tip - 1, branch: 0x37a5165b },
+        ]
+      : code === 'PcztWrongBranch'
+        ? [
+            `PcztWrongBranch: Refusing to send: the transaction was built for consensus branch 0x37a5165b, but the next block (${tip + 1}) is in branch 0x77190ad9 (a network upgrade activated). Create the transaction again.`,
+            { pczt_branch: 0x37a5165b, network_branch: 0x77190ad9, next_height: tip + 1 },
+          ]
+        : [
+            `PcztExpired: Refusing to send: the transaction expires at height ${tip + 2} and the network is at ${tip}, too late for it to be mined. Create the transaction again.`,
+            { expiry_height: tip + 2, network_tip: tip },
+          ];
+  return Object.assign(new Error(message), { code, ...numbers });
+}
 
 /**
  * Set by UI tests (page.addInitScript) to reach behaviour the default fake does not show.
@@ -120,6 +141,20 @@ export interface FakeKnobs {
    * left, also between passes and right after a reload). Set by the fake: `passesRun`.
    */
   budgetedPasses?: { passBlocks: number; batchBlocks?: number; passesRun?: number };
+  /**
+   * The fee the engine really asks for a send, in zatoshis (default TYPICAL_FEE_ZATS, which the
+   * Send form assumes). Above it, a send the form let through can still exceed the balance, as
+   * a TEX payment does with the real engine (ZIP 317: 20,000); the fake then refuses it the way
+   * WebZjs does (InsufficientFunds in pczt_create's text).
+   */
+  engineFee?: number;
+  /**
+   * The engine refuses the next spends with this code, as the ported WebZjs does around a network
+   * upgrade (round 6, docs/engine-port.md Decision 23): UpgradePending while building,
+   * PcztWrongBranch and PcztExpired in pczt_send, before anything is stored. The error has the
+   * engine's text, `code` and numbers.
+   */
+  refuseSpend?: 'UpgradePending' | 'PcztWrongBranch' | 'PcztExpired';
 }
 const knobs = (): FakeKnobs => (globalThis as { __fakeEngine?: FakeKnobs }).__fakeEngine ?? {};
 const chainTip = () => TIP + (knobs().chainGrowth ?? 0);
@@ -566,7 +601,18 @@ export class FakeEngine implements ZcashEngine {
       if (stage === 'broadcasting') await auth.beforeBroadcast();
       auth.onStage?.(stage);
       while (knobs().holdStage === stage) await sleep(50);
-      if (stage === 'building') check?.();
+      const refuse = knobs().refuseSpend;
+      // Through the adapter's own mapping (./webzjs-errors.ts), as WebzjsEngine does.
+      if (stage === 'building' && refuse === 'UpgradePending') throw buildError(engineRefusal(refuse, chainTip()));
+      if (stage === 'building') {
+        try {
+          check?.();
+        } catch (e) {
+          throw buildError(e);
+        }
+      }
+      // pczt_send checks the branch and the expiry before it stores the transaction.
+      if (stage === 'broadcasting' && refuse && refuse !== 'UpgradePending') throw sendError(engineRefusal(refuse, chainTip()));
       if (stage === 'broadcasting') store();
       await sleep(stage === 'proving' ? 600 : 150);
       while (stage === 'proving' && knobs().holdSpend) await sleep(50);
@@ -582,8 +628,14 @@ export class FakeEngine implements ZcashEngine {
     // The ported engine spends Orchard and Ironwood notes alike; the old one saw Orchard only.
     const spendable = BigInt(a.balances.orchard) + (ironwood ? BigInt(a.balances.ironwood) : 0n);
     if (zats + TYPICAL_FEE_ZATS > spendable) throw new Error('Insufficient balance');
+    const fee = BigInt(knobs().engineFee ?? TYPICAL_FEE_ZATS);
     // The errors WebZjs (patches/webzjs/0002-memo.patch) and the adapter give.
     const check = () => {
+      if (zats + fee > spendable) {
+        throw new Error(
+          `An generic error occurred: Failed to propose the transfer (possibly insufficient balance): InsufficientFunds { available: Zatoshis(${spendable}), required: Zatoshis(${zats + fee}) }`,
+        );
+      }
       if (!memo) return;
       if (memo.includes('\u0000')) throw new Error('a memo cannot contain NUL characters');
       const length = encoder.encode(memo).length;
