@@ -172,6 +172,13 @@ export interface ZcashEngine {
   syncProgress?(): Promise<SyncProgress | null>;
   summary(account: number): Promise<Summary | null>;
   addresses(account: number): Promise<Addresses>;
+  /**
+   * A unified address with shielded receivers only (Orchard, which also receives
+   * Ironwood funds, and Sapling), never handed out before. The engine records it, so
+   * funds sent to it, and to every earlier one, are the account's; `addresses()` is
+   * unaffected. WebZjs answers once a running sync pass lets go of the database.
+   */
+  nextShieldedAddress(account: number): Promise<string>;
   history(account: number, limit: number): Promise<HistoryItem[]>;
 
   /**

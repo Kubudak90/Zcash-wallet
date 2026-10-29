@@ -4,6 +4,7 @@
 // checks accept them. Production builds do not include this file.
 
 import { base58check, bech32m } from '@scure/base';
+import { blake2b } from '@noble/hashes/blake2';
 import { sha256 } from '@noble/hashes/sha256';
 
 import { acceptsMemo, checkAddress } from '../lib/address';
@@ -95,6 +96,12 @@ export interface FakeKnobs {
   newerDbFormat?: boolean;
   /** open() of a stored database throws this, like a corrupted database or a wasm trap while decoding it. */
   openFails?: string;
+  /**
+   * Payments of 0.1 ZEC to these addresses arrive in the next pass. Each is the account's if it
+   * is its full unified address, its transparent one or any shielded address it handed out
+   * (they all keep working); others are someone else's and are ignored.
+   */
+  incoming?: string[];
 }
 const knobs = (): FakeKnobs => (globalThis as { __fakeEngine?: FakeKnobs }).__fakeEngine ?? {};
 const chainTip = () => TIP + (knobs().chainGrowth ?? 0);
@@ -108,6 +115,8 @@ interface FakeAccount {
   tip: number;
   scanned: number;
   funded: boolean;
+  /** Shielded-only addresses handed out by nextShieldedAddress(), oldest first. */
+  shieldedAddresses?: string[];
   balances: Record<keyof Balances, string>;
   history: (Omit<HistoryItem, 'valueZats' | 'feeZats'> & { valueZats: string; feeZats: string | null })[];
 }
@@ -119,6 +128,44 @@ const hex = (b: Uint8Array) => [...b].map((x) => x.toString(16).padStart(2, '0')
 function fakeUnified(seed: string, hrp = 'u'): string {
   const bytes = new Uint8Array([...hash(seed + hrp), ...hash(seed + hrp + '2'), ...hash(seed + hrp + '3')]);
   return bech32m.encode(hrp, bech32m.toWords(bytes), false);
+}
+
+/** F4Jumble (ZIP 316), so the fake's unified addresses decode like real ones (src/lib/address.ts). */
+function f4jumble(m: Uint8Array): Uint8Array {
+  const tag = (name: string, i: number, j = 0) => {
+    const p = new Uint8Array(16);
+    p.set(encoder.encode(`UA_F4Jumble_${name}`));
+    p.set([i, j & 0xff, j >> 8], 13);
+    return p;
+  };
+  const left = Math.min(64, Math.floor(m.length / 2));
+  const right = m.length - left;
+  const h = (i: number, u: Uint8Array) => blake2b(u, { dkLen: left, personalization: tag('H', i) });
+  const g = (i: number, u: Uint8Array) => {
+    const out: number[] = [];
+    for (let j = 0; out.length < right; j++) out.push(...blake2b(u, { dkLen: 64, personalization: tag('G', i, j) }));
+    return out.slice(0, right);
+  };
+  const xor = (a: Uint8Array, b: ArrayLike<number>) => a.map((v, k) => v ^ b[k]!);
+  const x = xor(m.subarray(left), g(0, m.subarray(0, left)));
+  const y = xor(m.subarray(0, left), h(0, x));
+  const d = xor(x, g(1, y));
+  const c = xor(y, h(1, d));
+  return new Uint8Array([...c, ...d]);
+}
+
+/**
+ * A mainnet unified address derived from `seed`: P2PKH (0x00, 20 bytes), Sapling (0x02, 43)
+ * and Orchard (0x03, 43) receivers as WebZjs gives them, in typecode order.
+ */
+function fakeUa(seed: string, receivers: (0x00 | 0x02 | 0x03)[]): string {
+  const body = receivers.flatMap((typecode) => {
+    const length = typecode === 0x00 ? 20 : 43;
+    const data = [...hash(`${seed}/${typecode}`), ...hash(`${seed}/${typecode}/2`)].slice(0, length);
+    return [typecode, length, ...data];
+  });
+  const padding = [...encoder.encode('u'), ...new Array<number>(15).fill(0)];
+  return bech32m.encode('u', bech32m.toWords(f4jumble(new Uint8Array([...body, ...padding]))), false);
 }
 
 function fakeTransparent(seed: string): string {
@@ -310,6 +357,31 @@ export class FakeEngine implements ZcashEngine {
         pool,
       });
     }
+    const k = knobs();
+    for (const to of k.incoming ?? []) {
+      const a = this.accounts.find(
+        (x) =>
+          to === fakeUa(x.keyHash, [0x00, 0x02, 0x03]) ||
+          to === fakeTransparent(x.keyHash) ||
+          (x.shieldedAddresses ?? []).includes(to),
+      );
+      if (!a) continue;
+      const pool = to.startsWith('t1') ? 'transparent' : this.ironwood ? 'ironwood' : 'orchard';
+      a.balances[pool] = (BigInt(a.balances[pool]) + 10_000_000n).toString();
+      a.history.unshift({
+        txid: hex(hash(a.keyHash + 'rx' + to + Date.now())),
+        type: 'received',
+        valueZats: '10000000',
+        feeZats: null,
+        height: tip,
+        confirmations: 1,
+        status: 'confirmed',
+        memo: null,
+        timestamp: Math.floor(Date.now() / 1000),
+        pool,
+      });
+    }
+    if (k.incoming) k.incoming = [];
     this.counters = { ...this.counters, running: false };
   }
 
@@ -339,7 +411,17 @@ export class FakeEngine implements ZcashEngine {
 
   async addresses(id: number): Promise<Addresses> {
     const a = this.account(id);
-    return { unified: fakeUnified(a.keyHash), transparent: fakeTransparent(a.keyHash) };
+    return { unified: fakeUa(a.keyHash, [0x00, 0x02, 0x03]), transparent: fakeTransparent(a.keyHash) };
+  }
+
+  async nextShieldedAddress(id: number): Promise<string> {
+    // WebZjs takes the database's write lock, which a running pass holds until it ends.
+    await this.pass;
+    const a = this.account(id);
+    a.shieldedAddresses ??= [];
+    const address = fakeUa(`${a.keyHash}/shielded/${a.shieldedAddresses.length}`, [0x02, 0x03]);
+    a.shieldedAddresses.push(address);
+    return address;
   }
 
   async history(id: number, limit: number): Promise<HistoryItem[]> {

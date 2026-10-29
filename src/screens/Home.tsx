@@ -131,9 +131,19 @@ export function Home({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
         </Notice>
       )}
 
-      {/* NU6.3 (Ironwood) lets nothing new into Orchard; this engine cannot move funds out of it yet. */}
-      {b && b.orchard > 0n && !ironwood && (
-        <Notice tone="info">{t(viewOnly ? 'home.orchardMigrateNoticeViewOnly' : 'home.orchardMigrateNotice')}</Notice>
+      {/*
+        NU6.3 (Ironwood) lets nothing new into Orchard. An engine with Ironwood spends Orchard
+        notes and puts the change in Ironwood, visibly crossing pools (ZIP 318); one without it
+        cannot move them at all.
+      */}
+      {b && b.orchard > 0n && (
+        <Notice tone="info">
+          <p data-testid="orchard-note">
+            {ironwood
+              ? t(viewOnly ? 'home.orchardNoteViewOnly' : 'home.orchardNote', { amount: balances.fmt(b.orchard) })
+              : t(viewOnly ? 'home.orchardMigrateNoticeViewOnly' : 'home.orchardMigrateNotice')}
+          </p>
+        </Notice>
       )}
     </section>
   );

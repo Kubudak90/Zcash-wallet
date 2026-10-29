@@ -133,6 +133,10 @@ export const en: Record<MessageKey, string> = {
   'home.shieldButton': 'Shield funds',
   'home.shieldBelowThreshold': 'At least {amount} ZEC is needed to shield.',
   'home.outdatedBalance': 'Payments sent to you through the new Ironwood pool are not in this balance yet.',
+  'home.orchardNote':
+    '{amount} ZEC of your shielded balance is in the Orchard pool and can be spent as usual. Spending from it moves the change into Ironwood, the new shielded pool, and the amount that crosses from Orchard into Ironwood is visible on chain (the ZIP 318 turnstile). Celari does not offer a private, gradual migration to Ironwood yet.',
+  'home.orchardNoteViewOnly':
+    '{amount} ZEC of this balance is in the Orchard pool. New shielded funds now go to the Ironwood pool; when Orchard funds move into it, the amount that crosses is visible on chain (the ZIP 318 turnstile).',
   'home.orchardMigrateNoticeViewOnly':
     'This wallet watches a balance in the Orchard pool, which Zcash is retiring. Only a wallet that holds the recovery phrase can move it to the new Ironwood pool.',
   'home.orchardMigrateNotice':
@@ -148,6 +152,11 @@ export const en: Record<MessageKey, string> = {
   'receive.showTransparent': 'Show transparent address',
   'receive.showUnified': 'Back to shielded address',
   'receive.noTransparent': 'This key has no transparent address.',
+  'receive.preparing': 'Preparing a new address…',
+  'receive.freshNote':
+    'For your privacy, Celari shows a new address each time you open this screen. Earlier addresses keep working.',
+  'receive.previousNote':
+    'This address was shown before and keeps working. Celari shows a new one when it can, usually the next time you open this screen.',
   'receive.outdatedWarn':
     'Payments sent to this address from up-to-date wallets go to the new Ironwood pool, which this version of Celari cannot see yet. They are not lost: they will show up after the update. Do not ask the sender to pay again.',
 
@@ -219,7 +228,9 @@ export const en: Record<MessageKey, string> = {
   'send.err.memo.nul': 'The memo contains an invisible NUL character (usually from a paste). Type it again.',
 
   'shield.title': 'Shield funds',
-  'shield.intro': '{amount} ZEC of transparent funds will move to your shielded Orchard balance. The network fee is deducted.',
+  'shield.intro':
+    '{amount} ZEC of transparent funds will move to your shielded balance, into the Ironwood pool. The network fee is deducted.',
+  'shield.introOrchard': '{amount} ZEC of transparent funds will move to your shielded Orchard balance. The network fee is deducted.',
   'shield.confirm': 'Shield',
   'shield.success': 'It will appear in your shielded balance once confirmed.',
   'shield.sentTitle': '{amount} ZEC is being shielded',

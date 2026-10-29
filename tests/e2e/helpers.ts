@@ -43,7 +43,13 @@ export async function fillVerification(page: Page, words: string[]): Promise<voi
  * Restores a seed wallet from this month's start and returns its birthday.
  * Its first pass is a catch-up of thousands of blocks, like a real restore.
  */
-export async function restoreFromThisMonth(page: Page, lang: 'en' | 'tr' = 'en'): Promise<number> {
+export function restoreFromThisMonth(page: Page, lang: 'en' | 'tr' = 'en'): Promise<number> {
+  // The local month, as the app checks it: the UTC one is a month ahead west of UTC at a month's end.
+  return restoreFrom(page, currentMonth(), lang);
+}
+
+/** Restores a seed wallet from the start of `month` ('YYYY-MM') and returns its birthday. */
+export async function restoreFrom(page: Page, month: string, lang: 'en' | 'tr' = 'en'): Promise<number> {
   const s =
     lang === 'en'
       ? { restore: 'Restore an existing wallet', next: 'Continue', month: 'Month', start: /Sync will start at block/ }
@@ -58,8 +64,7 @@ export async function restoreFromThisMonth(page: Page, lang: 'en' | 'tr' = 'en')
   await page.getByRole('button', { name: s.restore }).click();
   await page.getByRole('textbox').fill(generateMnemonic(wordlist, 256));
   await page.getByRole('button', { name: s.next }).click();
-  // The local month, as the app checks it: the UTC one is a month ahead west of UTC at a month's end.
-  await page.getByLabel(s.month, { exact: true }).fill(currentMonth());
+  await page.getByLabel(s.month, { exact: true }).fill(month);
   await page.getByRole('button', { name: s.next }).click();
   const start = await page.getByText(s.start).textContent();
   await page.getByLabel(pw.first, { exact: true }).fill(PASSWORD);
