@@ -116,13 +116,19 @@ describe('refusalText', () => {
   });
 
   it('says that sending pauses around an upgrade, for about 14 minutes before NU7', () => {
+    // blocks_left 4: the refused transaction targeted the wallet's tip + 1 = 3,543,401, so the
+    // tip is 3,543,400 and the activation block is the fifth from now (final review V2-2).
     const r = refusalOf(buildError(UPGRADE_PENDING));
     expect(text(r, 'en')).toBe(
-      'Nothing was sent. Sending pauses for about 14 minutes around a network upgrade: NU7 activates at block 3,543,405, 4 blocks from now. Try again once it is active.',
+      'Nothing was sent. Sending pauses for about 14 minutes around a network upgrade: NU7 activates at block 3,543,405, 5 blocks from now. Try again once it is active.',
     );
     expect(text(r, 'tr')).toBe(
-      'Hiçbir şey gönderilmedi. Bir ağ yükseltmesi sırasında gönderim yaklaşık 14 dakika duraklar: NU7 3.543.405 numaralı blokta, 4 blok sonra etkinleşiyor. Etkinleşince tekrar dene.',
+      'Hiçbir şey gönderilmedi. Bir ağ yükseltmesi sırasında gönderim yaklaşık 14 dakika duraklar: NU7 3.543.405 numaralı blokta, 5 blok sonra etkinleşiyor. Etkinleşince tekrar dene.',
     );
+    // Tip 3,543,403 (blocks_left 1): two blocks to go, then one (blocks_left 0: the next block).
+    const two = { reason: 'upgradePending', activationHeight: 3_543_405, blocksLeft: 1, upgrade: 'NU7' } as const;
+    expect(text(two, 'en')).toContain('NU7 activates at block 3,543,405, 2 blocks from now.');
+    expect(text(two, 'tr')).toContain('NU7 3.543.405 numaralı blokta, 2 blok sonra etkinleşiyor.');
     const next = { reason: 'upgradePending', activationHeight: 3_543_405, blocksLeft: 0, upgrade: 'NU7' } as const;
     expect(text(next, 'en')).toContain('NU7 activates with the next block (3,543,405)');
     // An upgrade after NU7: 25 s blocks.
