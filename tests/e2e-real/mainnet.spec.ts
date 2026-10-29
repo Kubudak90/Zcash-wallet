@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 
+import { isShieldedOnlyUnified } from '../../src/lib/address';
+
 const PASSWORD = 'Gizli-Parola-2026';
 
 test('real engine: create a wallet, sync from the tip, lock and unlock', async ({ page }) => {
@@ -75,10 +77,25 @@ test('real engine: create a wallet, sync from the tip, lock and unlock', async (
     await expect(page.getByLabel('Recipient address')).toHaveCount(0);
   }
 
-  await page.getByRole('button', { name: 'Receive' }).click();
-  await expect(page.getByTestId('receive-address')).toHaveText(/^u1[0-9a-z]{100,}$/);
-  await page.getByRole('button', { name: 'Show transparent address' }).click();
-  await expect(page.getByTestId('receive-address')).toHaveText(/^t1[1-9A-HJ-NP-Za-km-z]{33}$/);
+  // Each opening of Receive shows a fresh unified address with shielded receivers only
+  // (get_next_shielded_address); the transparent address stays the same.
+  const shown = page.getByTestId('receive-address');
+  async function receive(): Promise<{ shielded: string; transparent: string }> {
+    await page.getByRole('button', { name: 'Balance', exact: true }).click();
+    await page.getByRole('button', { name: 'Receive' }).click();
+    await expect(shown).toHaveText(/^u1[0-9a-z]{100,}$/, { timeout: 60_000 });
+    const shielded = (await shown.textContent())!;
+    await page.getByRole('button', { name: 'Show transparent address' }).click();
+    await expect(shown).toHaveText(/^t1[1-9A-HJ-NP-Za-km-z]{33}$/);
+    return { shielded, transparent: (await shown.textContent())! };
+  }
+  const first = await receive();
+  const second = await receive();
+  for (const { shielded } of [first, second]) {
+    expect(isShieldedOnlyUnified(shielded), `${shielded} has shielded receivers only`).toBe(true);
+  }
+  expect(second.shielded).not.toBe(first.shielded);
+  expect(second.transparent).toBe(first.transparent);
 
   await page.getByRole('button', { name: 'Settings' }).click();
   await page.getByRole('button', { name: 'Show viewing key' }).click();
@@ -95,5 +112,9 @@ test('real engine: create a wallet, sync from the tip, lock and unlock', async (
   await page.getByLabel('Password').fill(PASSWORD);
   await page.getByRole('button', { name: 'Unlock' }).click();
   await synced(5 * 60_000);
+  // The addresses handed out were saved with the database: the next one is new again.
+  const third = await receive();
+  expect([first.shielded, second.shielded]).not.toContain(third.shielded);
+  expect(third.transparent).toBe(first.transparent);
   expect(failures).toEqual([]);
 });

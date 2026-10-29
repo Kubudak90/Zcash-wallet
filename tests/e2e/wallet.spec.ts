@@ -161,9 +161,10 @@ test('restore view-only wallet from a viewing key', async ({ page }) => {
 
   await expect(page.getByText('View only', { exact: true })).toBeVisible();
   await expect(page.getByText('You have a transparent balance')).toBeHidden();
-  // Born before NU6.3, the wallet holds Orchard funds. The notice written for the engine that
-  // stopped at NU6.1 (move them with another wallet) is gone with the ported engine.
-  await expect(page.getByText('This wallet watches a balance in the Orchard pool')).toHaveCount(0);
+  // Born before NU6.3, the wallet holds Orchard funds: what that means, without spending advice.
+  await expect(page.getByTestId('orchard-note')).toHaveText(
+    '1.25 ZEC of this balance is in the Orchard pool. New shielded funds now go to the Ironwood pool; when Orchard funds move into it, the amount that crosses is visible on chain (the ZIP 318 turnstile).',
+  );
   await expect(page.getByText('restore your recovery phrase')).toHaveCount(0);
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   await expect(page.getByText('You are in view-only mode')).toBeVisible();

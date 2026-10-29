@@ -68,7 +68,10 @@ export function checkAddress(raw: string): AddressCheck {
   return { ok: false, reason: 'invalid' };
 }
 
-// Unified address typecodes (ZIP 316) of the receivers that can take a memo.
+// Unified address receiver typecodes (ZIP 316).
+const P2PKH_RECEIVER = 0x00;
+const P2SH_RECEIVER = 0x01;
+// The receivers that can take a memo.
 const SAPLING_RECEIVER = 0x02;
 const ORCHARD_RECEIVER = 0x03;
 
@@ -113,7 +116,7 @@ function f4Unjumble(m: Uint8Array): Uint8Array {
 }
 
 /** The receiver typecodes of a mainnet unified address, or null if it does not decode. */
-function unifiedReceivers(address: string): number[] | null {
+export function unifiedReceivers(address: string): number[] | null {
   const decoded = bech32m.decodeUnsafe(address, false);
   const bytes = decoded && bech32m.fromWordsUnsafe(decoded.words);
   if (!decoded || !bytes || bytes.length < 48) return null;
@@ -145,6 +148,23 @@ function unifiedReceivers(address: string): number[] | null {
     at += length;
   }
   return typecodes;
+}
+
+/**
+ * Whether this is a mainnet unified address with shielded receivers only: at least
+ * one Sapling or Orchard receiver (Ironwood funds arrive at the Orchard one), and
+ * no transparent receiver, which would let a sender pay where everyone can see.
+ */
+export function isShieldedOnlyUnified(raw: string): boolean {
+  const address = raw.trim();
+  const check = checkAddress(address);
+  if (!check.ok || check.kind !== 'unified') return false;
+  const receivers = unifiedReceivers(address);
+  if (receivers === null) return false;
+  return (
+    receivers.some((t) => t === SAPLING_RECEIVER || t === ORCHARD_RECEIVER) &&
+    !receivers.some((t) => t === P2PKH_RECEIVER || t === P2SH_RECEIVER)
+  );
 }
 
 /**

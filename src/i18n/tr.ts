@@ -134,6 +134,10 @@ export const tr = {
   'home.shieldButton': 'Gizliye aktar',
   'home.shieldBelowThreshold': 'Gizliye aktarmak için en az {amount} ZEC gerekir.',
   'home.outdatedBalance': 'Yeni Ironwood havuzu üzerinden sana gönderilen ödemeler henüz bu bakiyede yok.',
+  'home.orchardNote':
+    'Gizli bakiyenin {amount} ZEC’lik kısmı Orchard havuzunda ve her zamanki gibi harcanabilir. Ondan harcadığında para üstü yeni gizli havuz Ironwood’a geçer; Orchard’dan Ironwood’a geçen tutar zincirde görünür (ZIP 318 turnike kuralı). Celari henüz Ironwood’a gizli ve kademeli bir taşıma sunmuyor.',
+  'home.orchardNoteViewOnly':
+    'Bu bakiyenin {amount} ZEC’lik kısmı Orchard havuzunda. Yeni gizli para artık Ironwood havuzuna gidiyor; Orchard’daki para Ironwood’a geçtiğinde geçen tutar zincirde görünür (ZIP 318 turnike kuralı).',
   'home.orchardMigrateNoticeViewOnly':
     'Bu cüzdan, Zcash’in kullanımdan kaldırdığı Orchard havuzundaki bir bakiyeyi izliyor. Onu yeni Ironwood havuzuna yalnızca kurtarma kelimelerini tutan bir cüzdan taşıyabilir.',
   'home.orchardMigrateNotice':
@@ -149,6 +153,11 @@ export const tr = {
   'receive.showTransparent': 'Şeffaf adresi göster',
   'receive.showUnified': 'Gizli adrese dön',
   'receive.noTransparent': 'Bu anahtarın şeffaf adresi yok.',
+  'receive.preparing': 'Yeni bir adres hazırlanıyor…',
+  'receive.freshNote':
+    'Gizliliğin için Celari bu ekranı her açtığında yeni bir adres gösterir. Önceki adreslerin de çalışmaya devam eder.',
+  'receive.previousNote':
+    'Bu adres daha önce gösterildi ve çalışmaya devam ediyor. Celari yeni bir adresi gösterebildiğinde gösterir; genelde bu ekranı bir sonraki açışında.',
   'receive.outdatedWarn':
     'Güncel cüzdanlardan bu adrese gönderilen ödemeler yeni Ironwood havuzuna düşer; Celari’nin bu sürümü onları henüz göremez. Para kaybolmaz, güncellemeden sonra görünür. Gönderenden tekrar ödeme isteme.',
 
@@ -220,7 +229,8 @@ export const tr = {
   'send.err.memo.nul': 'Notta görünmeyen bir NUL karakteri var (genelde yapıştırınca gelir). Notu yeniden yaz.',
 
   'shield.title': 'Gizliye aktar',
-  'shield.intro': '{amount} ZEC şeffaf bakiyen gizli Orchard bakiyene aktarılacak. Ağ ücreti bu tutardan düşülür.',
+  'shield.intro': '{amount} ZEC şeffaf bakiyen gizli bakiyene, Ironwood havuzuna aktarılacak. Ağ ücreti bu tutardan düşülür.',
+  'shield.introOrchard': '{amount} ZEC şeffaf bakiyen gizli Orchard bakiyene aktarılacak. Ağ ücreti bu tutardan düşülür.',
   'shield.confirm': 'Aktar',
   'shield.success': 'Onaylanınca gizli bakiyende görünecek.',
   'shield.sentTitle': '{amount} ZEC gizliye aktarılıyor',

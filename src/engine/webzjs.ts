@@ -243,6 +243,11 @@ export class WebzjsEngine implements ZcashEngine {
     return { unified, transparent };
   }
 
+  nextShieldedAddress(account: number): Promise<string> {
+    // Waits for the database write lock, which a sync pass holds until it ends.
+    return this.open_.get_next_shielded_address(account);
+  }
+
   async history(account: number, limit: number): Promise<HistoryItem[]> {
     const response = await this.open_.get_transaction_history(account, limit, 0);
     const entries = (response.transactions ?? []) as RawHistoryEntry[];

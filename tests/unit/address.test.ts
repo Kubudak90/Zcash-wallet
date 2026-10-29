@@ -3,7 +3,14 @@ import { blake2b } from '@noble/hashes/blake2';
 import { sha256 } from '@noble/hashes/sha256';
 import { describe, expect, it } from 'vitest';
 
-import { acceptsMemo, checkAddress, parsePaymentInput, shortAddress } from '../../src/lib/address';
+import {
+  acceptsMemo,
+  checkAddress,
+  isShieldedOnlyUnified,
+  parsePaymentInput,
+  shortAddress,
+  unifiedReceivers,
+} from '../../src/lib/address';
 
 const bytes = (n: number, fill = 7) => new Uint8Array(n).fill(fill);
 const b58 = base58check(sha256);
@@ -201,6 +208,45 @@ describe('acceptsMemo', () => {
     // A receiver type it does not know is no promise of a memo.
     expect(acceptsMemo(unified([[P2PKH, 20], [0x05, 32]]))).toBe(false);
     expect(acceptsMemo(unified([[0x05, 32], [ORCHARD, 43]]))).toBe(true);
+  });
+});
+
+describe('isShieldedOnlyUnified', () => {
+  // A throwaway mainnet account of the vendored engine (it owns nothing; engine-port
+  // smoke/errors-run.mjs, logs/round4/errors.json): get_current_address, and two
+  // get_next_shielded_address answers.
+  const ENGINE_FULL =
+    'u1f7a0d9844ulfk5lhw7c8yym68fcvwy7w4ztswv789xcn7e3strlfvdynq2ra80p75c83df79kcm2e23f4rg5wgxudd35npz5nllt59zmcfwcu5l33a0pz7w2l080xegff06flwzx3ypeeum3fmddlpr0mla7jkwspawdfcapxhtqqnpfzsarar54gup37ysyz55pjf0vzru22qtxxq3';
+  const ENGINE_FRESH = [
+    'u1uhaun9qtnjcucezz6eyk700hyp8xqfg9h22elczhtney9nry9yyl7hqxnaavn7h6qj49pfeaj9j3lwvwlas34xrqyltusxz7g2qsld308tx2s4cp4xgtwaezt2dyeql53x3atyskds0jy3qn69wncug00xgqf4r97gdqdketaqmh8dkg',
+    'u198c4a60gthf6vk5u7dez9tvfegvjh9m0dl99wehywnlnpvqmmq9u4lhdjgrw396wv7gjynr4ddrcdm5g87stwk06keqp7x5zrzzllhvfdzsh0slkjr6c7c6hdjc4dfwajhlm4u2vffz9pksuncymkjwmn9h6fps9r9rcp8a60vse63r3',
+  ];
+
+  it("reads the engine's addresses: the full one has a transparent receiver, the fresh ones do not", () => {
+    expect(unifiedReceivers(ENGINE_FULL)?.sort()).toEqual([P2PKH, SAPLING_RX, ORCHARD]);
+    for (const address of ENGINE_FRESH) expect(unifiedReceivers(address)?.sort()).toEqual([SAPLING_RX, ORCHARD]);
+    expect(isShieldedOnlyUnified(ENGINE_FULL)).toBe(false);
+    for (const address of ENGINE_FRESH) expect(isShieldedOnlyUnified(address)).toBe(true);
+  });
+
+  it('needs a Sapling or Orchard receiver and no transparent one', () => {
+    expect(isShieldedOnlyUnified(unified([[ORCHARD, 43]]))).toBe(true);
+    expect(isShieldedOnlyUnified(unified([[SAPLING_RX, 43]]))).toBe(true);
+    expect(isShieldedOnlyUnified(unified([[0x05, 32], [ORCHARD, 43]]))).toBe(true);
+    for (const address of [
+      unified([[P2PKH, 20], [ORCHARD, 43]]),
+      unified([[P2SH, 20], [SAPLING_RX, 43]]),
+      TRANSPARENT_ONLY_UA,
+      unified([[0x05, 32], ...EXPIRY]),
+      // Valid bech32m without F4Jumble padding: nothing can be said about its receivers.
+      bech32m.encode('u', bech32m.toWords(bytes(96)), false),
+      SAPLING,
+      T1,
+      TEX,
+      '',
+    ]) {
+      expect(isShieldedOnlyUnified(address), address).toBe(false);
+    }
   });
 });
 

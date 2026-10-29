@@ -74,6 +74,8 @@ declare module '@chainsafe/webzjs-wallet' {
     db_to_bytes(): Promise<Uint8Array>;
     get_current_address(account_id: number): Promise<string>;
     get_current_address_transparent(account_id: number): Promise<string>;
+    /** patches/webzjs/0004: a fresh unified address with shielded receivers only. */
+    get_next_shielded_address(account_id: number): Promise<string>;
     get_transaction_history(
       account_id: number,
       limit?: number | null,

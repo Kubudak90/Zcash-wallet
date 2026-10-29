@@ -13,7 +13,7 @@ import { SpendConfirm } from './SpendSteps';
 export function Shield({ onNavigate, onClose }: { onNavigate: (tab: Tab) => void; onClose: () => void }) {
   const { t, lang } = useI18n();
   const controller = useController();
-  const { summary, spending } = useWallet();
+  const { summary, spending, ironwood } = useWallet();
   const network = useNetworkView();
   // Kept from before the spend: the live transparent balance drops to zero once it is sent.
   const [shielded, setShielded] = useState<bigint | null>(null);
@@ -51,7 +51,10 @@ export function Shield({ onNavigate, onClose }: { onNavigate: (tab: Tab) => void
       ) : (
         <>
           {/* While shielding is disabled SpendConfirm says so in place of the form. */}
-          {!spendingDisabled(network) && <p>{t('shield.intro', { amount: fmt(transparent) })}</p>}
+          {/* Since NU6.3 shielded funds go to Ironwood; an engine without it shielded into Orchard. */}
+          {!spendingDisabled(network) && (
+            <p>{t(ironwood ? 'shield.intro' : 'shield.introOrchard', { amount: fmt(transparent) })}</p>
+          )}
           <SpendConfirm
             submitLabel={t('shield.confirm')}
             disabledText={t('shield.disabledOutdated')}

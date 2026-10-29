@@ -19,6 +19,7 @@ import {
   type Summary,
   type ZcashEngine,
 } from '../engine';
+import { isShieldedOnlyUnified } from '../lib/address';
 import { canSpend, nextCheck, type NetworkCheck } from '../lib/network';
 import { storage, type Settings, type WalletMeta } from '../lib/storage';
 import { CATCH_UP_BLOCKS, catchUpFor, type SyncInfo } from '../lib/syncView';
@@ -57,6 +58,20 @@ const PROGRESS_POLL_MS = 2_000;
 /** How often the engine's pass counters are read while a catch-up pass runs. */
 const PASS_PROGRESS_POLL_MS = 1_000;
 const HISTORY_LIMIT = 100;
+/**
+ * How long Receive waits for a fresh address before it shows the last one it showed.
+ * WebZjs hands one out only between sync passes, and a catch-up pass lasts minutes.
+ */
+const RECEIVE_WAIT_MS = 1_500;
+
+/** The shielded address one opening of the Receive screen shows. */
+export interface ReceiveAddress {
+  address: string;
+  /** Never shown before; false for the last one shown (or the full address), which still works. */
+  fresh: boolean;
+}
+
+const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 export class NotASeedWalletError extends Error {
   constructor() {
@@ -107,6 +122,12 @@ export class WalletController {
   private networkCheck: Promise<void> | null = null;
   /** The last persist(); each waits for the one before, so an older export never lands last. */
   private persisting: Promise<unknown> = Promise.resolve();
+  /** A fresh shielded address asked for ahead of the next opening of Receive, not shown to anyone yet. */
+  private nextAddress: Promise<string> | null = null;
+  /** The last shielded address Receive showed. */
+  private shownAddress: string | null = null;
+  /** One answer per opening of Receive (React may run its effect twice for the same one). */
+  private receiveVisits = new WeakMap<object, Promise<ReceiveAddress>>();
   private state: WalletState;
 
   constructor(settings: Settings) {
@@ -310,7 +331,79 @@ export class WalletController {
       sync: { ...this.state.sync, status: 'starting', error: null, catchUp: null, progress: null },
     });
     await this.refresh();
+    // Asked for before the first pass takes the database, so Receive has one at once.
+    this.prepareAddress();
     void this.syncLoop();
+  }
+
+  // --- receive ------------------------------------------------------------------
+
+  /** Asks the engine for the next fresh address, unless one is on its way or waiting. */
+  private prepareAddress(): Promise<string> {
+    if (this.nextAddress) return this.nextAddress;
+    const account = this.requireAccount();
+    const next = this.eng.nextShieldedAddress(account).then((address) => {
+      // The engine checks this; a transparent receiver must never show as the private address.
+      if (!isShieldedOnlyUnified(address)) throw new Error('the engine handed out an address with a transparent receiver');
+      // Recorded in the database, so this address is never handed out again after a reload.
+      void this.persist().catch((e) => console.warn('saving the new address failed', e));
+      return address;
+    });
+    next.catch((e) => {
+      console.warn('no fresh shielded address', e);
+      // Asked again at the next opening.
+      if (this.nextAddress === next) this.nextAddress = null;
+    });
+    this.nextAddress = next;
+    return next;
+  }
+
+  /**
+   * The shielded address for one opening of the Receive screen (`visit` stands for that
+   * opening): a fresh one, never shown before, so payers cannot link their payments
+   * through the address. Earlier addresses keep receiving. If none is ready within
+   * RECEIVE_WAIT_MS (a sync pass holds the database) the last one shown comes back
+   * instead, marked not fresh; the fresh one then waits for the next opening.
+   */
+  receiveAddress(visit: object): Promise<ReceiveAddress> {
+    let answer = this.receiveVisits.get(visit);
+    if (!answer) {
+      answer = this.claimAddress();
+      this.receiveVisits.set(visit, answer);
+    }
+    return answer;
+  }
+
+  private async claimAddress(): Promise<ReceiveAddress> {
+    const deadline = Date.now() + RECEIVE_WAIT_MS;
+    for (;;) {
+      let pending: Promise<string>;
+      try {
+        pending = this.prepareAddress();
+      } catch (e) {
+        console.warn('no fresh shielded address', e);
+        break;
+      }
+      const left = deadline - Date.now();
+      if (left <= 0) break;
+      const got = await Promise.race([
+        pending.then(
+          (address) => ({ address }),
+          () => null,
+        ),
+        sleep(left).then(() => null),
+      ]);
+      if (got === null) break;
+      // Taken by another opening meanwhile: wait for the next one, within the same time.
+      if (this.nextAddress !== pending) continue;
+      this.nextAddress = null;
+      this.shownAddress = got.address;
+      void this.prepareAddress();
+      return { address: got.address, fresh: true };
+    }
+    const fallback = this.shownAddress ?? this.state.addresses?.unified;
+    if (!fallback) throw new Error('no address to show');
+    return { address: fallback, fresh: false };
   }
 
   /** Decrypts the secret again; used to confirm sensitive actions. */
