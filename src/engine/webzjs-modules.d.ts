@@ -24,7 +24,7 @@ declare module '@chainsafe/webzjs-wallet' {
     fully_scanned_height: number;
   }
 
-  /** From patches/webzjs/0001-sync-progress.patch. */
+  /** From patches/webzjs/0001-sync-progress.patch; the per-pool counts from 0004. */
   export class SyncProgress {
     free(): void;
     running: boolean;
@@ -33,6 +33,11 @@ declare module '@chainsafe/webzjs-wallet' {
     revisited: number;
     scanned: number;
     scanned_to: number;
+    sapling_outputs: number;
+    orchard_actions: number;
+    ironwood_actions: number;
+    ironwood_tree_start: number;
+    ironwood_tree_end: number;
   }
 
   export class TransactionHistoryResponse {

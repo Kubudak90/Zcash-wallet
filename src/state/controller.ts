@@ -373,7 +373,10 @@ export class WalletController {
   private gapTo(networkTip: number | null): Partial<SyncInfo> {
     // The pass itself reports connection problems; until then the last error stands.
     if (networkTip === null) return { catchUp: null };
-    const scanned = this.state.summary?.scannedHeight;
+    // Before a pass has set its chain tip, WebZjs's wallet (like zcash_client_sqlite)
+    // has no summary; it starts scanning at the birthday, so it has scanned to birthday - 1.
+    const birthday = this.state.meta?.birthday;
+    const scanned = this.state.summary?.scannedHeight ?? (birthday === undefined ? undefined : birthday - 1);
     return { error: null, networkTip, catchUp: scanned === undefined ? null : catchUpFor(scanned, networkTip) };
   }
 

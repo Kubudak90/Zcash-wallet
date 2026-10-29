@@ -236,8 +236,11 @@ export function localStatus(rules: EngineRules, floorHeight: number): NetworkSta
  * - The engine is outdated (behind: 'engine') once a spend built now could be
  *   mined under rules it lacks: one of `rules.missing`, an upgrade the server
  *   announces that the engine does not expect at that height, or a branch the
- *   engine has never heard of. Likewise when the engine expects an upgrade
- *   the server announces at another height: the network moved it.
+ *   engine has never heard of. Likewise when the network moved an upgrade the
+ *   engine expects: the server announces it at another height, reports its
+ *   branch before the engine's activation height (moved earlier), or, past
+ *   that height, still reports the branch before it while announcing an
+ *   upgrade at a height the engine does not know (postponed).
  * - Otherwise the server must report the branch the engine applies at the
  *   server's tip, from a tip no lower than the floor. An older branch, a tip
  *   under the floor or no word of the upgrade the engine expects next means
@@ -270,6 +273,9 @@ export function networkStatusFor(info: LightdInfo, rules: EngineRules, chain: st
   if (status.upcoming && !status.upcoming.supported && status.upcoming.height <= target) {
     return { ...engine, lacks: [status.upcoming.name] };
   }
+  const reported = rules.known.find((u) => u.branchId === info.consensusBranchId);
+  // A branch the engine applies only from a later height: the network activated it earlier.
+  if (reported && reported.activation > info.blockHeight) return engine;
   // The engine switches rules before the target: the network must be switching there too.
   const next = rules.known.find((u) => u.activation > info.blockHeight && u.activation <= target);
   if (next && !announced) return server;
@@ -279,7 +285,11 @@ export function networkStatusFor(info: LightdInfo, rules: EngineRules, chain: st
   if (expected?.branchId === info.consensusBranchId) {
     return info.blockHeight + LAG_BLOCKS < floorHeight ? server : { ...status, supported: true };
   }
-  const reported = rules.known.find((u) => u.branchId === info.consensusBranchId);
-  if (reported && expected && reported.activation < expected.activation) return server;
+  if (reported && expected && reported.activation < expected.activation) {
+    // Still on an older branch but announcing an upgrade at a height the engine does not know:
+    // the network postponed the upgrade the engine applies (moved it, as above). With no such
+    // announcement the server's node missed the upgrade.
+    return status.upcoming && !status.upcoming.supported ? engine : server;
+  }
   return engine;
 }

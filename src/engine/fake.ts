@@ -20,7 +20,10 @@ import type {
 } from './types';
 import { MEMO_MAX_BYTES, TYPICAL_FEE_ZATS } from './types';
 
-const TIP = 3_100_000;
+// A mainnet height under NU6.3 (Ironwood) rules, before NU7 (3,543,405).
+const TIP = 3_533_800;
+/** NU6.3 (Ironwood) activation: from it on nothing new enters Orchard. */
+const NU6_3_ACTIVATION = 3_428_143;
 // Send amounts that fail at a given stage, so UI tests can reach the error views.
 const FAIL_AT = new Map<bigint, SendStage>([
   [3_330_000n, 'proving'], // 0.0333 ZEC
@@ -29,7 +32,13 @@ const FAIL_AT = new Map<bigint, SendStage>([
 const encoder = new TextEncoder();
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** Set by UI tests (page.addInitScript) to reach behaviour WebZjs does not show today. */
+/**
+ * Set by UI tests (page.addInitScript) to reach behaviour the default fake does not show.
+ * By default the fake behaves like the ported WebZjs Celari ships (zcash_client_backend 0.25,
+ * patches/webzjs/0003-0004): it sees Ironwood, supports the network's NU6.3 rules, and has no
+ * summary before a pass has set the chain tip. `ironwood: false`, `networkOutdated`,
+ * `localOutdated` and `summaryBeforePass` bring back the engine that stopped at NU6.1.
+ */
 export interface FakeKnobs {
   /** Report scan progress mid-pass. */
   midPassProgress?: boolean;
@@ -50,7 +59,7 @@ export interface FakeKnobs {
   holdStage?: SendStage;
   /** Keep a send or shield at its proving stage until this is cleared. */
   holdSpend?: boolean;
-  /** The network runs NU6.3 (Ironwood), which this engine does not support, like the WebZjs Celari ships today. */
+  /** The network runs NU6.3 (Ironwood), which the engine does not support, like the WebZjs that stopped at NU6.1. */
   networkOutdated?: boolean;
   /** The server reports NU5 rules, older than the network's, like a node that missed upgrades. */
   networkServerBehind?: boolean;
@@ -58,10 +67,16 @@ export interface FakeKnobs {
   networkLag?: number;
   /** networkStatus() fails, like a server that does not answer GetLightdInfo. */
   networkUnreachable?: boolean;
-  /** localNetworkStatus() says the engine lacks NU6.3 without asking, as WebZjs does today. */
+  /** localNetworkStatus() says the engine lacks NU6.3 without asking, as the WebZjs that stopped at NU6.1 did. */
   localOutdated?: boolean;
-  /** The engine sees the NU6.3 Ironwood pool, as a ported engine will; WebZjs today does not. */
+  /** Whether the engine sees the NU6.3 Ironwood pool; default true (the ported WebZjs). false: the WebZjs that stopped at NU6.1. */
   ironwood?: boolean;
+  /**
+   * summary() answers for an account before any pass has run (scanned to birthday - 1), as the
+   * WebZjs that stopped at NU6.1 did. By default, like the ported WebZjs (zcash_client_sqlite
+   * rules), it answers null until a pass has set the chain tip.
+   */
+  summaryBeforePass?: boolean;
   /** Set by the fake: how many times networkStatus() has answered, so tests can wait for the next check. */
   networkChecks?: number;
   /** Keep networkStatus() from answering until this is cleared. */
@@ -100,14 +115,16 @@ function fakeTransparent(seed: string): string {
 
 /**
  * The pool WebZjs reports for a payment: the recipient's pool and that of the
- * change (always Orchard), 'mixed' when they differ. WebZjs pays a unified
- * address's Orchard receiver.
+ * change, 'mixed' when they differ. WebZjs pays a unified address's Orchard
+ * receiver; the ported engine pays it through Ironwood and puts the change
+ * there too (no new value enters Orchard since NU6.3), the old one used Orchard.
  */
-function sentPool(to: string, change: bigint): string {
+function sentPool(to: string, change: bigint, ironwood: boolean): string {
+  const shielded = ironwood ? 'ironwood' : 'orchard';
   const check = checkAddress(to);
   const kind = check.ok ? check.kind : 'transparent';
-  const recipient = kind === 'sapling' ? 'sapling' : kind === 'unified' && acceptsMemo(to) ? 'orchard' : 'transparent';
-  return change > 0n && recipient !== 'orchard' ? 'mixed' : recipient;
+  const recipient = kind === 'sapling' ? 'sapling' : kind === 'unified' && acceptsMemo(to) ? shielded : 'transparent';
+  return change > 0n && recipient !== shielded ? 'mixed' : recipient;
 }
 
 export class FakeEngine implements ZcashEngine {
@@ -127,7 +144,7 @@ export class FakeEngine implements ZcashEngine {
   }
 
   get ironwood(): boolean {
-    return knobs().ironwood ?? false;
+    return knobs().ironwood ?? true;
   }
 
   localNetworkStatus(): NetworkStatus | null {
@@ -141,13 +158,14 @@ export class FakeEngine implements ZcashEngine {
     const k = knobs();
     k.networkChecks = (k.networkChecks ?? 0) + 1;
     if (k.networkUnreachable) throw new Error('fake GetLightdInfo failure');
-    // NU6 rules at the fake tip by default; NU6.3 (Ironwood) when outdated.
+    // NU6.3 (Ironwood) rules at the fake tip, which the ported engine supports; an engine that
+    // stopped at NU6.1 lacks NU6.2 and NU6.3 (networkOutdated).
     const height = chainTip() + (k.tipAhead ?? 0) - (k.networkLag ?? 0);
     const status: NetworkStatus = k.networkOutdated
       ? { branchId: '37a5165b', height, supported: false, behind: 'engine', lacks: ['NU6.2', 'NU6.3'] }
       : k.networkServerBehind
         ? { branchId: 'c2d6d0b4', height, supported: false, behind: 'server' }
-        : { branchId: 'c8e71055', height, supported: true };
+        : { branchId: '37a5165b', height, supported: true };
     if (k.upcomingUpgrade) status.upcoming = k.upcomingUpgrade;
     return status;
   }
@@ -167,6 +185,8 @@ export class FakeEngine implements ZcashEngine {
 
   async open(db: Uint8Array | null): Promise<number | null> {
     this.accounts = db ? (JSON.parse(new TextDecoder().decode(db)) as FakeAccount[]) : [];
+    // Fake databases saved before the Ironwood balance existed.
+    for (const a of this.accounts) a.balances.ironwood ??= '0';
     this.opened = true;
     return this.accounts[0]?.id ?? null;
   }
@@ -183,7 +203,7 @@ export class FakeEngine implements ZcashEngine {
       tip: birthday - 1,
       scanned: birthday - 1,
       funded: false,
-      balances: { orchard: '0', sapling: '0', transparent: '0', pending: '0' },
+      balances: { orchard: '0', sapling: '0', ironwood: '0', transparent: '0', pending: '0' },
       history: [],
     });
     return id;
@@ -237,19 +257,24 @@ export class FakeEngine implements ZcashEngine {
     for (const a of this.accounts) {
       if (a.funded) continue;
       a.funded = true;
-      a.balances.orchard = '125000000';
+      // A wallet born before NU6.3 holds an Orchard note from then; since NU6.3 shielded
+      // payments land in Ironwood, which an engine that stopped at NU6.1 cannot see (so,
+      // modelling the funds it does see, that engine gets them in Orchard).
+      const pool = this.ironwood && a.birthday >= NU6_3_ACTIVATION ? 'ironwood' : 'orchard';
+      const height = pool === 'orchard' && this.ironwood ? NU6_3_ACTIVATION - 1000 : TIP - 120;
+      a.balances[pool] = '125000000';
       a.balances.transparent = '50000000';
       a.history.unshift({
         txid: hex(hash(a.keyHash + 'rx')),
         type: 'received',
         valueZats: '125000000',
         feeZats: null,
-        height: TIP - 120,
-        confirmations: 121,
+        height,
+        confirmations: TIP - height + 1,
         status: 'confirmed',
         memo: 'Hoş geldin!',
         timestamp: Math.floor(Date.now() / 1000) - 9000,
-        pool: 'orchard',
+        pool,
       });
     }
     this.counters = { ...this.counters, running: false };
@@ -265,12 +290,14 @@ export class FakeEngine implements ZcashEngine {
     await this.pass;
     const a = this.accounts.find((x) => x.id === id);
     if (!a) return null;
+    if (!knobs().summaryBeforePass && a.tip < a.birthday) return null;
     return {
       tipHeight: a.tip,
       scannedHeight: a.scanned,
       balances: {
         orchard: BigInt(a.balances.orchard),
         sapling: BigInt(a.balances.sapling),
+        ironwood: BigInt(a.balances.ironwood),
         transparent: BigInt(a.balances.transparent),
         pending: BigInt(a.balances.pending),
       },
@@ -317,7 +344,9 @@ export class FakeEngine implements ZcashEngine {
   async send(id: number, to: string, zats: bigint, auth: SpendAuthority, memo?: string): Promise<void> {
     const a = this.account(id);
     this.authorize(a, auth);
-    const spendable = BigInt(a.balances.orchard);
+    const ironwood = this.ironwood;
+    // The ported engine spends Orchard and Ironwood notes alike; the old one saw Orchard only.
+    const spendable = BigInt(a.balances.orchard) + (ironwood ? BigInt(a.balances.ironwood) : 0n);
     if (zats + TYPICAL_FEE_ZATS > spendable) throw new Error('Insufficient balance');
     // The errors WebZjs (patches/webzjs/0002-memo.patch) and the adapter give.
     const check = () => {
@@ -333,7 +362,8 @@ export class FakeEngine implements ZcashEngine {
     };
     const store = () => {
       const change = spendable - zats - TYPICAL_FEE_ZATS;
-      a.balances.orchard = change.toString();
+      a.balances.orchard = ironwood ? '0' : change.toString();
+      if (ironwood) a.balances.ironwood = change.toString();
       a.history.unshift({
         txid: hex(hash(a.keyHash + to + zats + Date.now())),
         type: 'sent',
@@ -345,7 +375,7 @@ export class FakeEngine implements ZcashEngine {
         // WebZjs's history reads the memo back from the sent note.
         memo: memo || null,
         timestamp: null,
-        pool: sentPool(to, change),
+        pool: sentPool(to, change, ironwood),
       });
     };
     await this.stages(auth, { store, check, failAt: FAIL_AT.get(zats) });
@@ -368,8 +398,9 @@ export class FakeEngine implements ZcashEngine {
         status: 'pending',
         memo: null,
         timestamp: null,
-        // The shielded note is the wallet's only output; WebZjs does not count the transparent inputs.
-        pool: 'orchard',
+        // The shielded note is the wallet's only output; WebZjs does not count the transparent
+        // inputs. The ported engine shields into Ironwood (nothing new enters Orchard).
+        pool: this.ironwood ? 'ironwood' : 'orchard',
       });
     };
     await this.stages(auth, { store });

@@ -112,7 +112,7 @@ export const tr = {
   'home.total': 'Toplam bakiye',
   'home.hideBalances': 'Bakiyeleri gizle',
   'home.shielded': 'Gizli',
-  'home.shieldedHelp': 'Orchard + Sapling. Tutar ve taraflar zincirde görünmez.',
+  'home.shieldedHelp': 'Ironwood + Orchard + Sapling. Tutar ve taraflar zincirde görünmez.',
   'home.transparent': 'Şeffaf',
   'home.transparentHelp': 'Zincirde herkese açık. Gizliye aktarman önerilir.',
   'home.pending': 'Onay bekleyen',

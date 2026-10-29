@@ -1,10 +1,11 @@
 import { expect, test, type Page } from '@playwright/test';
 
-import { PASSWORD, UA, createWallet, fakeEngine, setKnobs } from './helpers';
+import { OLD_ENGINE, PASSWORD, TIP, UA, createWallet, en, fakeEngine, setKnobs } from './helpers';
 
-// The network guard on the fake engine: by default it reports rules it
-// supports; networkOutdated reports NU6.3 (Ironwood), which it does not, like
-// the WebZjs Celari ships today (src/engine/fake.ts).
+// The network guard on the fake engine: by default it is the ported engine, on a
+// network under NU6.3 (Ironwood) rules, which it supports. OLD_ENGINE with
+// networkOutdated is the WebZjs Celari shipped before the port, which stopped at
+// NU6.1, on that network (src/engine/fake.ts).
 
 const NU7 = { name: 'NU7', height: 3_543_405, supported: false };
 
@@ -33,7 +34,7 @@ async function review(page: Page, amount: string) {
 }
 
 test('an engine behind the network disables sending and shielding on every screen, and says why', async ({ page }) => {
-  await fakeEngine(page, { networkOutdated: true, upcomingUpgrade: NU7 });
+  await fakeEngine(page, { ...OLD_ENGINE, networkOutdated: true, upcomingUpgrade: NU7 });
   await createWallet(page);
   await expect(page.locator('.main')).toHaveAttribute('data-network', 'outdated');
 
@@ -45,7 +46,7 @@ test('an engine behind the network disables sending and shielding on every scree
   // Spending is off already, so the next upgrade adds nothing.
   await expect(banner(page)).not.toContainText('NU7');
   // Scanned to the tip, but not "up to date", and the balance says what it misses.
-  await expect(pill(page)).toHaveText('Scanned to block 3,100,000 · behind the network');
+  await expect(pill(page)).toHaveText(`Scanned to block ${en(TIP)} · behind the network`);
   await expect(pill(page)).toHaveClass(/pill-warn/);
   await expect(page.getByTestId('balance-outdated')).toHaveText(
     'Payments sent to you through the new Ironwood pool are not in this balance yet.',
@@ -93,7 +94,7 @@ test('an engine behind the network disables sending and shielding on every scree
 });
 
 test('the network notices in Turkish', async ({ page }) => {
-  await fakeEngine(page, { networkOutdated: true, upcomingUpgrade: NU7 });
+  await fakeEngine(page, { ...OLD_ENGINE, networkOutdated: true, upcomingUpgrade: NU7 });
   await createWallet(page);
   await page.getByRole('button', { name: 'Settings' }).click();
   await page.getByRole('button', { name: 'Türkçe' }).click();
@@ -102,7 +103,7 @@ test('the network notices in Turkish', async ({ page }) => {
     'Zcash ağı, Celari’nin bu sürümünün henüz desteklemediği kurallara geçti: NU6.2, NU6.3 (Ironwood).',
   );
   await expect(banner(page)).not.toContainText('NU7');
-  await expect(pill(page)).toHaveText('3.100.000. bloğa kadar tarandı · ağın gerisinde');
+  await expect(pill(page)).toHaveText(`${TIP.toLocaleString('tr-TR')}. bloğa kadar tarandı · ağın gerisinde`);
   await page.getByRole('button', { name: 'Gönder', exact: true }).click();
   await expect(disabled(page)).toHaveText('Celari güncel Zcash ağı için güncellenene kadar gönderme kapalı.');
   await page.getByRole('button', { name: 'Al', exact: true }).click();
@@ -126,8 +127,10 @@ test('a server that does not answer the network check keeps spending off until i
   // Not "until Celari is updated": nothing says an update is needed.
   await expect(disabled(page)).toHaveText(unreachable);
   await expect(page.getByLabel('Recipient address')).toHaveCount(0);
+  // An engine that sees Ironwood still sees every payment: Receive warns of nothing.
   await page.getByRole('button', { name: 'Receive' }).click();
-  await expect(page.getByTestId('receive-outdated')).toBeVisible();
+  await expect(page.getByTestId('receive-address')).toHaveText(/^u1/);
+  await expect(page.getByTestId('receive-outdated')).toHaveCount(0);
 
   // Once the server answers (here on the boot after a lock), everything comes back.
   await fakeEngine(page, {});
@@ -198,7 +201,7 @@ test('once the engine is behind the network, a later "supported" answer does not
   page,
 }) => {
   test.setTimeout(90_000);
-  await fakeEngine(page, { networkOutdated: true });
+  await fakeEngine(page, { ...OLD_ENGINE, networkOutdated: true });
   await createWallet(page);
   await expect(page.locator('.main')).toHaveAttribute('data-network', 'outdated');
   // A lagging backend of the same pool answers the next check with rules the engine accepts.
@@ -214,7 +217,7 @@ test('once the engine is behind the network, a later "supported" answer does not
 test('what the engine knows without a server stands before and without an answer', async ({ page }) => {
   // WebZjs knows on its own that NU6.2 and NU6.3 are active: no 'checking', and no
   // 'unverified' that would suggest spending may come back.
-  await fakeEngine(page, { localOutdated: true, holdNetworkCheck: true });
+  await fakeEngine(page, { ...OLD_ENGINE, localOutdated: true, holdNetworkCheck: true });
   await createWallet(page);
   await expect(page.locator('.main')).toHaveAttribute('data-network', 'outdated');
   await expect(banner(page)).toContainText('Celari is behind the Zcash network');
@@ -232,7 +235,7 @@ test('what the engine knows without a server stands before and without an answer
 });
 
 test('the Ironwood notes follow what the engine can see, not the network check', async ({ page }) => {
-  // An engine that sees Ironwood, on a network it supports: no warnings, the usual promise.
+  // An engine that sees Ironwood (the default), on a network it supports: no warnings, the usual promise.
   await fakeEngine(page, { ironwood: true });
   await createWallet(page);
   await expect(page.getByTestId('balance-outdated')).toHaveCount(0);
@@ -241,8 +244,8 @@ test('the Ironwood notes follow what the engine can see, not the network check',
   await expect(page.getByTestId('receive-outdated')).toHaveCount(0);
   await expect(page.getByText('funds land directly in your shielded balance')).toBeVisible();
 
-  // Today's engine, even while the network check has not answered: the warnings, not the promise.
-  await fakeEngine(page, { holdNetworkCheck: true });
+  // The engine that stopped at NU6.1, even while the network check has not answered: the warnings, not the promise.
+  await fakeEngine(page, { ...OLD_ENGINE, holdNetworkCheck: true });
   await page.getByRole('button', { name: 'Lock' }).click();
   await page.getByLabel('Password').fill(PASSWORD);
   await page.getByRole('button', { name: 'Unlock' }).click();
@@ -280,7 +283,7 @@ test('until the first network check answers, a spend waits', async ({ page }) =>
 });
 
 test('a send is stopped before its broadcast if the network moved on meanwhile', async ({ page }) => {
-  await fakeEngine(page, { holdStage: 'proving' });
+  await fakeEngine(page, { ...OLD_ENGINE, holdStage: 'proving' });
   await createWallet(page);
   await review(page, '0.1');
   await sendButton(page).click();
@@ -300,7 +303,7 @@ test('a send is stopped before its broadcast if the network moved on meanwhile',
 });
 
 test('a shield is stopped before its broadcast if the network moved on meanwhile', async ({ page }) => {
-  await fakeEngine(page, { holdStage: 'proving' });
+  await fakeEngine(page, { ...OLD_ENGINE, holdStage: 'proving' });
   await createWallet(page);
   await page.getByRole('button', { name: 'Shield funds' }).click();
   await page.getByLabel('Enter your password to confirm').fill(PASSWORD);
@@ -316,7 +319,7 @@ test('a shield is stopped before its broadcast if the network moved on meanwhile
 
 test('a spend is refused before anything is built once the network has moved on', async ({ page }) => {
   // A spend that got past the check would stop at building and show its stages.
-  await fakeEngine(page, { holdStage: 'building' });
+  await fakeEngine(page, { ...OLD_ENGINE, holdStage: 'building' });
   await createWallet(page);
   await review(page, '0.1');
   // The wallet has not heard yet; the spend itself asks first.
@@ -329,7 +332,7 @@ test('a spend is refused before anything is built once the network has moved on'
 
 test('the network is asked again on every sync pass', async ({ page }) => {
   // Held while broadcasting, after the spend's own last check.
-  await fakeEngine(page, { holdStage: 'broadcasting' });
+  await fakeEngine(page, { ...OLD_ENGINE, holdStage: 'broadcasting' });
   await createWallet(page);
   await review(page, '0.1');
   await sendButton(page).click();

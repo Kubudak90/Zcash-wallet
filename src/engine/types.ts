@@ -5,8 +5,14 @@
 export interface Balances {
   orchard: bigint;
   sapling: bigint;
+  /** The NU6.3 pool where new shielded value lands; 0 for an engine without it (ZcashEngine.ironwood). */
+  ironwood: bigint;
   transparent: bigint;
-  /** Received notes and change still waiting for confirmations. */
+  /**
+   * Received notes and change still waiting for confirmations, transparent funds
+   * included, and value held back for a transaction being built (WebZjs's
+   * `locked`), in every pool.
+   */
   pending: bigint;
 }
 
@@ -32,9 +38,9 @@ export interface HistoryItem {
   /** Seconds since the Unix epoch, estimated from the block height. */
   timestamp: number | null;
   /**
-   * Where the wallet's own outputs went: 'sapling', 'orchard', 'transparent',
-   * 'mixed' (more than one) or 'unknown', as WebZjs reports it; 'ironwood'
-   * once it knows NU6.3. See lib/privacy.ts.
+   * Where the wallet's own outputs went: 'sapling', 'orchard', 'ironwood',
+   * 'transparent', 'mixed' (more than one) or 'unknown', as WebZjs reports it.
+   * See lib/privacy.ts.
    */
   pool: string;
 }
@@ -149,8 +155,9 @@ export interface ZcashEngine {
   shield(account: number, auth: SpendAuthority): Promise<void>;
 }
 
-export const shieldedTotal = (b: Balances) => b.orchard + b.sapling;
-export const grandTotal = (b: Balances) => b.orchard + b.sapling + b.transparent + b.pending;
+/** Spendable shielded value: Sapling + Orchard + Ironwood. */
+export const shieldedTotal = (b: Balances) => b.sapling + b.orchard + b.ironwood;
+export const grandTotal = (b: Balances) => shieldedTotal(b) + b.transparent + b.pending;
 
 /** WebZjs refuses to shield less than this (see SHIELDING_THRESHOLD upstream). */
 export const SHIELDING_THRESHOLD_ZATS = 100_000n;
