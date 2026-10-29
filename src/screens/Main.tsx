@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
+import { Notice } from '../components/ui';
 import { useI18n, type Lang, type MessageKey, type Translate } from '../i18n';
 import { syncView, type SyncView } from '../lib/syncView';
 import { useController, useWallet } from '../state/wallet';
@@ -74,7 +75,7 @@ export function Main() {
   const { t } = useI18n();
   const controller = useController();
   // Leaving the screen mid-spend would hide its outcome, so navigation waits for it.
-  const { spending } = useWallet();
+  const { spending, upgradeRescan } = useWallet();
   const network = useNetworkView();
   const [tab, setTab] = useState<Tab>('home');
   // Shield opens from Balance or from Send: that tab stays marked, and Back and Close return to it.
@@ -130,6 +131,12 @@ export function Main() {
       </header>
       <main className="content">
         <NetworkBanner />
+        {/* On every screen: the balance starts at 0 and History is empty until the rescan gets there. */}
+        {upgradeRescan && (
+          <Notice tone="info">
+            <p data-testid="upgrade-rescan">{t('upgrade.rescanning')}</p>
+          </Notice>
+        )}
         {tab === 'home' && <Home onNavigate={navigate} />}
         {tab === 'receive' && <Receive />}
         {tab === 'send' && <Send onNavigate={navigate} />}

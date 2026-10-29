@@ -34,6 +34,7 @@ import type {
   ZcashEngine,
 } from './types';
 import { balancesFrom, type RawBalance } from './webzjs-balances';
+import { openError } from './webzjs-errors';
 import { historyFrom, type RawHistoryEntry } from './webzjs-history';
 import { webzjsLocalStatus, webzjsNetworkStatus } from './webzjs-upgrades';
 
@@ -175,7 +176,13 @@ export class WebzjsEngine implements ZcashEngine {
   }
 
   async open(db: Uint8Array | null): Promise<number | null> {
-    this.wallet = this.newWallet(db);
+    try {
+      this.wallet = this.newWallet(db);
+    } catch (e) {
+      throw openError(e);
+    }
+    // No summary before a pass has set the chain tip (zcash_client_sqlite's rule), so
+    // a database saved before its first pass ended names no account here.
     const summary = await this.wallet.get_wallet_summary();
     if (!summary) return null;
     const first = (summary.account_balances as [number, RawBalance][])[0];

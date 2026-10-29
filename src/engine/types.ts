@@ -110,6 +110,29 @@ export interface SyncProgress {
 /** A memo holds at most this many bytes of UTF-8 text (ZIP 302). */
 export const MEMO_MAX_BYTES = 512;
 
+/**
+ * open() refused the stored database because it is in a format this engine no
+ * longer reads: written by the engine Celari shipped before (WebZjs's own
+ * format). Rebuilding it from the wallet's secret and rescanning is the way on.
+ */
+export class OldDatabaseFormatError extends Error {
+  constructor(options?: { cause?: unknown }) {
+    super('the wallet database was written by an older engine, in a format this one does not read', options);
+    this.name = 'OldDatabaseFormatError';
+  }
+}
+
+/**
+ * open() refused the stored database because a newer engine (a later Celari)
+ * wrote it, in a format version this one does not know. It must be kept as it is.
+ */
+export class NewerDatabaseFormatError extends Error {
+  constructor(options?: { cause?: unknown }) {
+    super('the wallet database was written by a newer engine than this one', options);
+    this.name = 'NewerDatabaseFormatError';
+  }
+}
+
 export interface ZcashEngine {
   /** Loads the wasm runtime and connects to the lightwalletd proxy. Call once per page. */
   init(serverUrl: string): Promise<void>;
@@ -132,7 +155,13 @@ export interface ZcashEngine {
   isValidViewingKey(ufvk: string): Promise<boolean>;
   viewingKey(phrase: string): Promise<string>;
 
-  /** Opens the wallet database (or a fresh one) and returns the first account id, if any. */
+  /**
+   * Opens the wallet database (or a fresh one) and returns the first account id,
+   * or null if the engine cannot name one yet (WebZjs gives no summary, and so no
+   * account list, before a pass has set the chain tip). Throws
+   * OldDatabaseFormatError or NewerDatabaseFormatError for a database in another
+   * format; any other error means the database could not be read.
+   */
   open(db: Uint8Array | null): Promise<number | null>;
   addSeedAccount(phrase: string, birthday: number): Promise<number>;
   addViewAccount(ufvk: string, birthday: number): Promise<number>;

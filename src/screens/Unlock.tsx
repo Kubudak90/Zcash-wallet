@@ -1,9 +1,11 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 
 import { ErrorDetails, Notice, PasswordField, Spinner } from '../components/ui';
-import { useI18n } from '../i18n';
+import { NewerDatabaseFormatError } from '../engine';
+import { useI18n, type MessageKey } from '../i18n';
 import { WrongPasswordError } from '../lib/vault';
 import { clearAutoLocked, useAutoLockReason } from '../state/autoLockNotice';
+import { WalletDataError } from '../state/controller';
 import { useController, useWallet } from '../state/wallet';
 import { LanguageSwitch } from './LanguageSwitch';
 import { NetworkBanner } from './NetworkBanner';
@@ -16,7 +18,7 @@ export function Unlock() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [forgot, setForgot] = useState(false);
-  const { meta, softLocked } = useWallet();
+  const { meta, softLocked, upgradeRescan } = useWallet();
   const autoLocked = useAutoLockReason();
   const field = useRef<HTMLInputElement>(null);
   const errorId = useId();
@@ -44,6 +46,15 @@ export function Unlock() {
   }
 
   const wrongPassword = error instanceof WrongPasswordError;
+  // Unlocking changed nothing stored in these cases; say so rather than only that it failed.
+  const openFailure: MessageKey | null =
+    error instanceof NewerDatabaseFormatError
+      ? 'unlock.dbNewer'
+      : error instanceof WalletDataError
+        ? meta?.kind === 'view'
+          ? 'unlock.dbUnreadableView'
+          : 'unlock.dbUnreadable'
+        : null;
 
   return (
     <section className="screen welcome">
@@ -56,6 +67,11 @@ export function Unlock() {
       {autoLocked !== null && (
         <Notice tone="info">
           {autoLocked.kind === 'hidden' ? t('unlock.autoLockedHidden') : t('unlock.autoLocked', { n: autoLocked.minutes })}
+        </Notice>
+      )}
+      {upgradeRescan && (
+        <Notice tone="info">
+          <p data-testid="upgrade-rescan-locked">{t('unlock.upgradeRescan')}</p>
         </Notice>
       )}
       {softLocked && <p className="muted small">{t('unlock.softLocked')}</p>}
@@ -77,7 +93,7 @@ export function Unlock() {
         )}
         {error != null && !wrongPassword && (
           <Notice tone="error">
-            {t('common.genericError')}
+            {openFailure ? <p>{t(openFailure)}</p> : t('common.genericError')}
             <ErrorDetails error={error} />
           </Notice>
         )}
