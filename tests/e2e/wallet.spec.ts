@@ -161,8 +161,9 @@ test('restore view-only wallet from a viewing key', async ({ page }) => {
 
   await expect(page.getByText('View only', { exact: true })).toBeVisible();
   await expect(page.getByText('You have a transparent balance')).toBeHidden();
-  // No recovery phrase to restore elsewhere: the Orchard notice says who can move the funds.
-  await expect(page.getByText('This wallet watches a balance in the Orchard pool')).toBeVisible();
+  // Born before NU6.3, the wallet holds Orchard funds. The notice written for the engine that
+  // stopped at NU6.1 (move them with another wallet) is gone with the ported engine.
+  await expect(page.getByText('This wallet watches a balance in the Orchard pool')).toHaveCount(0);
   await expect(page.getByText('restore your recovery phrase')).toHaveCount(0);
   await page.getByRole('button', { name: 'Send', exact: true }).click();
   await expect(page.getByText('You are in view-only mode')).toBeVisible();

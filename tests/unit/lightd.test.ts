@@ -10,7 +10,7 @@ import {
   networkStatusFor,
   type LightdInfo,
 } from '../../src/engine/lightd';
-import { WEBZJS_RULES, WEBZJS_UPGRADES } from '../../src/engine/webzjs-upgrades';
+import { WEBZJS_RULES } from '../../src/engine/webzjs-upgrades';
 
 // GetLightdInfo as zcash-mainnet.chainsafe.dev answered it over gRPC-web on
 // 2026-10-28, after NU6.3 (Ironwood) and before NU7: the whole HTTP body, one
@@ -180,26 +180,52 @@ describe('fetchLightdInfo', () => {
 });
 
 describe('network support rule', () => {
+  // The upgrades an engine that stops at NU6.1 knows (the WebZjs Celari shipped
+  // before the Ironwood port), and the three it lacks. Fixed here, so the rule is
+  // tested the same way whatever vendor/ holds.
+  const NU61_UPGRADES = [
+    { name: 'Overwinter', branchId: '5ba81b19', activation: 347_500 },
+    { name: 'Sapling', branchId: '76b809bb', activation: 419_200 },
+    { name: 'Blossom', branchId: '2bb40e60', activation: 653_600 },
+    { name: 'Heartwood', branchId: 'f5b9230b', activation: 903_000 },
+    { name: 'Canopy', branchId: 'e9ff75a6', activation: 1_046_400 },
+    { name: 'NU5', branchId: 'c2d6d0b4', activation: 1_687_104 },
+    { name: 'NU6', branchId: 'c8e71055', activation: 2_726_400 },
+    { name: 'NU6.1', branchId: '4dec4df0', activation: 3_146_400 },
+  ];
+  const AFTER_NU61 = [
+    { name: 'NU6.2', branchId: '5437f330', activation: 3_364_600 },
+    { name: 'NU6.3', branchId: '37a5165b', activation: 3_428_143 },
+    { name: 'NU7', branchId: '77190ad9', activation: 3_543_405 },
+  ];
   // Rules as WebZjs knew them before NU6.2 was scheduled: what the branch rule alone decides.
-  const OLD_RULES = { known: WEBZJS_UPGRADES, missing: [] };
+  const OLD_RULES = { known: NU61_UPGRADES, missing: [] };
   const status = (patch: Partial<LightdInfo>, floor = 0) => networkStatusFor(info(patch), OLD_RULES, 'main', floor);
-  const today = (patch: Partial<LightdInfo>, floor = 0) => networkStatusFor(info(patch), WEBZJS_RULES, 'main', floor);
-  // A future engine that implements NU6.2, NU6.3 and NU7.
-  const PORTED = {
-    known: [
-      ...WEBZJS_UPGRADES,
-      { name: 'NU6.2', branchId: '5437f330', activation: 3_364_600 },
-      { name: 'NU6.3', branchId: '37a5165b', activation: 3_428_143 },
-      { name: 'NU7', branchId: '77190ad9', activation: 3_543_405 },
-    ],
-    missing: [],
-  };
+  // An engine that stops at NU6.1 once NU6.2, NU6.3 and NU7 were scheduled.
+  const NU61_RULES = { known: NU61_UPGRADES, missing: AFTER_NU61 };
+  const today = (patch: Partial<LightdInfo>, floor = 0) => networkStatusFor(info(patch), NU61_RULES, 'main', floor);
+  // An engine that implements NU6.2, NU6.3 and NU7: the one vendor/ now holds.
+  const PORTED = { known: [...NU61_UPGRADES, ...AFTER_NU61], missing: [] };
+
+  it('ships the ported engine: it knows NU6.2, NU6.3 and NU7 and lacks nothing', () => {
+    expect(WEBZJS_RULES).toEqual(PORTED);
+  });
+
+  it('supports the network the captured answer describes (NU6.3), and the NU7 it announces', () => {
+    const live = decodeLightdInfo(grpcWebUnary(CAPTURED));
+    expect(networkStatusFor(live, WEBZJS_RULES, 'main')).toEqual({
+      branchId: '37a5165b',
+      height: 3_533_505,
+      supported: true,
+      upcoming: { name: 'NU7', height: 3_543_405, supported: true },
+    });
+  });
   const ported = (patch: Partial<LightdInfo>, floor = 0) =>
     networkStatusFor(info({ consensusBranchId: '37a5165b', blockHeight: 3_533_575, ...patch }), PORTED, 'main', floor);
 
-  it('does not support the network the captured answer describes (NU6.3), nor the NU7 it announces', () => {
+  it('an engine that stops at NU6.1 does not support the captured network, nor the NU7 it announces', () => {
     const live = decodeLightdInfo(grpcWebUnary(CAPTURED));
-    expect(networkStatusFor(live, WEBZJS_RULES, 'main')).toEqual({
+    expect(networkStatusFor(live, NU61_RULES, 'main')).toEqual({
       branchId: '37a5165b',
       height: 3_533_505,
       supported: false,
@@ -226,16 +252,17 @@ describe('network support rule', () => {
   });
 
   it('says what it knows without a server', () => {
-    expect(localStatus(WEBZJS_RULES, 3_533_575)).toEqual({
+    expect(localStatus(NU61_RULES, 3_533_575)).toEqual({
       branchId: '37a5165b',
       height: 3_533_575,
       supported: false,
       behind: 'engine',
       lacks: ['NU6.2', 'NU6.3'],
     });
-    expect(localStatus(WEBZJS_RULES, 3_364_594)?.lacks).toEqual(['NU6.2']);
-    expect(localStatus(WEBZJS_RULES, 3_364_593)).toBeNull();
+    expect(localStatus(NU61_RULES, 3_364_594)?.lacks).toEqual(['NU6.2']);
+    expect(localStatus(NU61_RULES, 3_364_593)).toBeNull();
     expect(localStatus(PORTED, 3_600_000)).toBeNull();
+    expect(localStatus(WEBZJS_RULES, 3_600_000)).toBeNull();
   });
 
   it('supports the rules it expects at the tip, and only those', () => {
@@ -292,6 +319,29 @@ describe('network support rule', () => {
     expect(ported({ ...nu7, upgradeName: '', upgradeHeight: 0 })).toMatchObject({ supported: false, behind: 'server' });
     // Far from the switch, no announcement is needed.
     expect(ported({ upgradeName: '', upgradeHeight: 0 }).supported).toBe(true);
+  });
+
+  // Verifier finding NU7-3: the label, not the outcome (spending is off either way).
+  it('blames the engine when the network moved an upgrade the engine expects, also past its activation', () => {
+    // NU7 moved earlier, to 3,543,400: the server is on NU7's branch before 3,543,405.
+    for (let h = 3_543_400; h <= 3_543_404; h++) {
+      expect.soft(ported({ consensusBranchId: '77190ad9', blockHeight: h }), `${h}`).toMatchObject({
+        supported: false,
+        behind: 'engine',
+      });
+    }
+    // NU7 postponed to 3,543,500, first seen after 3,543,405: still NU6.3, announcing NU7 at a height
+    // the engine does not know.
+    for (const h of [3_543_405, 3_543_410, 3_543_490]) {
+      expect.soft(
+        ported({ consensusBranchId: '37a5165b', blockHeight: h, upgradeName: 'NU7', upgradeHeight: 3_543_500 }),
+        `${h}`,
+      ).toMatchObject({ supported: false, behind: 'engine', upcoming: { name: 'NU7', height: 3_543_500, supported: false } });
+    }
+    // Unchanged: a node that missed NU7 and announces nothing is a server behind; so is one on an
+    // older branch that announces an upgrade the engine knows at that height.
+    expect(ported({ consensusBranchId: '37a5165b', blockHeight: 3_543_410 })).toMatchObject({ supported: false, behind: 'server' });
+    expect(status({ consensusBranchId: 'c8e71055', upgradeName: 'NU6.1', upgradeHeight: 3_146_400, blockHeight: 3_146_399 }).supported).toBe(true);
   });
 
   it('does not take a server under the floor for current', () => {

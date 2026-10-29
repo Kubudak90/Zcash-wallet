@@ -31,10 +31,10 @@ import type {
   SpendAuthority,
   Summary,
   SyncProgress,
-  TxStatus,
-  TxType,
   ZcashEngine,
 } from './types';
+import { balancesFrom, type RawBalance } from './webzjs-balances';
+import { historyFrom, type RawHistoryEntry } from './webzjs-history';
 import { webzjsLocalStatus, webzjsNetworkStatus } from './webzjs-upgrades';
 
 const NETWORK = 'main';
@@ -42,39 +42,6 @@ const ACCOUNT_HD_INDEX = 0;
 // Notes are spendable after one confirmation, as in upstream's web wallet.
 const MIN_CONFIRMATIONS_TRUSTED = 1;
 const MIN_CONFIRMATIONS_UNTRUSTED = 1;
-
-interface RawBalance {
-  sapling_balance: number;
-  orchard_balance: number;
-  unshielded_balance: number;
-  pending_change: number;
-  pending_spendable: number;
-}
-
-interface RawHistoryEntry {
-  txid: string;
-  tx_type: 'Received' | 'Sent' | 'Shielded';
-  value: number;
-  fee: number | null;
-  block_height: number | null;
-  confirmations: number;
-  status: 'Confirmed' | 'Pending' | 'Expired';
-  memo: string | null;
-  timestamp: number | null;
-  pool: string;
-}
-
-const TX_TYPES: Record<RawHistoryEntry['tx_type'], TxType> = {
-  Received: 'received',
-  Sent: 'sent',
-  Shielded: 'shielded',
-};
-
-const TX_STATUSES: Record<RawHistoryEntry['status'], TxStatus> = {
-  Confirmed: 'confirmed',
-  Pending: 'pending',
-  Expired: 'expired',
-};
 
 /**
  * Builds the spending key and seed fingerprint for one signing operation.
@@ -120,8 +87,10 @@ function saplingProofKey(phrase: string): ProofGenerationKey | undefined {
 }
 
 export class WebzjsEngine implements ZcashEngine {
-  // The vendored WebZjs stops at NU6.1 (see ./webzjs-upgrades.ts).
-  readonly ironwood = false;
+  // The vendored WebZjs (zcash_client_backend 0.25, patches/webzjs/0003-0004) scans,
+  // reports and spends the NU6.3 Ironwood pool; summary() refuses a build that does
+  // not report it (see ./webzjs-upgrades.ts for the network upgrades it knows).
+  readonly ironwood = true;
   private serverUrl = '';
   private wallet: WebWallet | null = null;
   // A throwaway wallet for chain queries before the real one is unlocked.
@@ -253,16 +222,7 @@ export class WebzjsEngine implements ZcashEngine {
     const b = entry?.[1];
     const { chain_tip_height: tipHeight, fully_scanned_height: scannedHeight } = summary;
     summary.free();
-    return {
-      tipHeight,
-      scannedHeight,
-      balances: {
-        orchard: BigInt(b?.orchard_balance ?? 0),
-        sapling: BigInt(b?.sapling_balance ?? 0),
-        transparent: BigInt(b?.unshielded_balance ?? 0),
-        pending: BigInt((b?.pending_change ?? 0) + (b?.pending_spendable ?? 0)),
-      },
-    };
+    return { tipHeight, scannedHeight, balances: balancesFrom(b) };
   }
 
   async addresses(account: number): Promise<Addresses> {
@@ -280,18 +240,7 @@ export class WebzjsEngine implements ZcashEngine {
     const response = await this.open_.get_transaction_history(account, limit, 0);
     const entries = (response.transactions ?? []) as RawHistoryEntry[];
     response.free();
-    return entries.map((e) => ({
-      txid: e.txid,
-      type: TX_TYPES[e.tx_type],
-      valueZats: BigInt(e.value),
-      feeZats: e.fee == null ? null : BigInt(e.fee),
-      height: e.block_height,
-      confirmations: e.confirmations,
-      status: TX_STATUSES[e.status],
-      memo: e.memo,
-      timestamp: e.timestamp,
-      pool: e.pool,
-    }));
+    return historyFrom(entries);
   }
 
   async send(account: number, to: string, zats: bigint, auth: SpendAuthority, memo?: string): Promise<void> {

@@ -111,7 +111,7 @@ export const en: Record<MessageKey, string> = {
   'home.total': 'Total balance',
   'home.hideBalances': 'Hide balances',
   'home.shielded': 'Shielded',
-  'home.shieldedHelp': 'Orchard + Sapling. Amounts and parties are hidden on chain.',
+  'home.shieldedHelp': 'Ironwood + Orchard + Sapling. Amounts and parties are hidden on chain.',
   'home.transparent': 'Transparent',
   'home.transparentHelp': 'Public on chain. Shielding it is recommended.',
   'home.pending': 'Awaiting confirmation',

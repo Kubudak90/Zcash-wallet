@@ -20,6 +20,18 @@ test('a restore shows how many blocks are left, then up to date', async ({ page 
   await expect(page.getByText('Sync in progress.')).toHaveCount(0);
 });
 
+test('a restore shows how many blocks are left with an engine that has a summary before its first pass', async ({ page }) => {
+  // The fake, like the ported WebZjs (zcash_client_sqlite rules), answers no summary until a
+  // pass has set the chain tip (the test above); the engine that stopped at NU6.1 answered one
+  // at birthday - 1 from the start. Both give the same gap.
+  await fakeEngine(page, { summaryBeforePass: true });
+  const birthday = await restoreFromThisMonth(page);
+  const status = page.getByTestId('sync-status');
+  await expect(status).toHaveText(`Syncing · ${en(TIP - (birthday - 1))} blocks left`);
+  await expect(status).toHaveAttribute('data-sync', 'syncing');
+  await expect(status).toHaveText(`Up to date · block ${en(TIP)}`, { timeout: 20_000 });
+});
+
 test('an up-to-date wallet does not flicker during the 30 s re-sync', async ({ page }) => {
   test.slow();
   await restoreFromThisMonth(page);
@@ -184,7 +196,7 @@ test('Turkish labels group digits the Turkish way', async ({ page }) => {
   const birthday = await restoreFromThisMonth(page, 'tr');
   const status = page.getByTestId('sync-status');
   await expect(status).toHaveText(`Eşitleniyor · ${(TIP - (birthday - 1)).toLocaleString('tr-TR')} blok kaldı`);
-  await expect(status).toHaveText('Güncel · blok 3.100.000', { timeout: 20_000 });
+  await expect(status).toHaveText(`Güncel · blok ${TIP.toLocaleString('tr-TR')}`, { timeout: 20_000 });
 });
 
 test('with reduced motion the indeterminate bar does not slide', async ({ page }) => {

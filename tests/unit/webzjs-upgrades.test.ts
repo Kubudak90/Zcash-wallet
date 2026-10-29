@@ -40,20 +40,30 @@ describe('WebZjs and the network it runs on', () => {
     }
   });
 
-  it('is behind the network now, whatever a server or the clock says', () => {
+  it('supports the network now and through NU7, whatever the clock says', () => {
     const live = decodeLightdInfo(grpcWebUnary(CAPTURED));
+    // The captured answer (NU6.3, NU7 announced at 3,543,405) from a server at the anchor height.
+    expect(webzjsNetworkStatus({ ...live, blockHeight: 3_533_575 }, new Date(ANCHOR))).toMatchObject({
+      supported: true,
+      upcoming: { name: 'NU7', height: 3_543_405, supported: true },
+    });
     for (const now of [new Date(ANCHOR), new Date(Date.UTC(2020, 0, 1)), new Date(ANCHOR + 365 * DAY)]) {
-      expect(webzjsNetworkStatus(live, now)).toMatchObject({ supported: false, behind: 'engine' });
-      // A server stuck on NU6.1 at a height from before NU6.2 is not believed.
-      const lacks = expect.arrayContaining(['NU6.2', 'NU6.3']);
-      expect(webzjsNetworkStatus(stuck, now)).toMatchObject({ supported: false, behind: 'engine', lacks });
-      expect(webzjsLocalStatus(now)).toMatchObject({ supported: false, behind: 'engine', lacks });
+      // Nothing it lacks, so the engine itself never reports itself outdated.
+      expect(webzjsLocalStatus(now)).toBeNull();
+      // A server stuck on NU6.1 at a height from before NU6.2 is behind, not the engine.
+      expect(webzjsNetworkStatus(stuck, now)).toMatchObject({ supported: false, behind: 'server' });
     }
+    // A year on, the captured answer is from a server far under the floor: that server is behind.
+    expect(webzjsNetworkStatus(live, new Date(ANCHOR + 365 * DAY))).toMatchObject({ supported: false, behind: 'server' });
   });
 
-  it('counts NU7 among what it lacks once the floor passes it', () => {
-    expect(webzjsLocalStatus(new Date(ANCHOR))?.lacks).toEqual(['NU6.2', 'NU6.3']);
-    expect(webzjsLocalStatus(new Date(ANCHOR + 365 * DAY))?.lacks).toEqual(['NU6.2', 'NU6.3', 'NU7']);
+  it('knows NU6.2, NU6.3 and NU7, and lacks nothing', () => {
+    expect(WEBZJS_MISSING_UPGRADES).toEqual([]);
+    expect(WEBZJS_UPGRADES.slice(-3)).toEqual([
+      { name: 'NU6.2', branchId: '5437f330', activation: 3_364_600 },
+      { name: 'NU6.3', branchId: '37a5165b', activation: 3_428_143 },
+      { name: 'NU7', branchId: '77190ad9', activation: 3_543_405 },
+    ]);
   });
 
   it('agrees with the birthday estimate on when NU7 activates', () => {

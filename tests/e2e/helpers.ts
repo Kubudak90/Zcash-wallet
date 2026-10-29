@@ -6,8 +6,8 @@ import type { FakeKnobs } from '../../src/engine/fake';
 import { currentMonth } from '../../src/lib/birthday';
 
 export const PASSWORD = 'Gizli-Parola-2026';
-// The fake engine's chain tip (src/engine/fake.ts).
-export const TIP = 3_100_000;
+// The fake engine's chain tip (src/engine/fake.ts), under NU6.3 (Ironwood) rules.
+export const TIP = 3_533_800;
 export const en = (n: number) => n.toLocaleString('en-US');
 // A valid-checksum unified address (example from the WebZjs docs).
 export const UA =
@@ -68,7 +68,13 @@ export async function restoreFromThisMonth(page: Page, lang: 'en' | 'tr' = 'en')
   return Number(start!.replace(/\D/g, ''));
 }
 
-/** Switches on behaviour of the fake engine that WebZjs does not show today; applies again after every reload. */
+/**
+ * The engine Celari shipped before the port, which stopped at NU6.1: it cannot see Ironwood and
+ * answers a summary before its first pass. Combine with networkOutdated / localOutdated.
+ */
+export const OLD_ENGINE: FakeKnobs = { ironwood: false, summaryBeforePass: true };
+
+/** Switches on behaviour of the fake engine that its defaults (the ported WebZjs) do not show; applies again after every reload. */
 export async function fakeEngine(page: Page, knobs: FakeKnobs): Promise<void> {
   await page.addInitScript((k) => {
     (window as unknown as { __fakeEngine: typeof k }).__fakeEngine = k;
