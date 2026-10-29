@@ -173,10 +173,14 @@ test('a restore over several budgeted passes counts down without jumping back, a
   const seen = await page.evaluate(() => (window as unknown as { seen: string[] }).seen);
   const syncing = seen.filter((s) => !s.includes('|Up to date'));
   const counts = syncing.map((s) => {
-    const m = /^syncing\|Syncing · ([\d,]+) blocks left$/.exec(s);
+    const m = /^syncing\|Syncing · ([\d,]+) blocks? left$/.exec(s);
     expect(m, `a syncing label while the restore runs: ${s}`).not.toBeNull();
-    return Number(m![1]!.replace(/,/g, ''));
+    const count = Number(m![1]!.replace(/,/g, ''));
+    // One block, not "1 blocks" (final review V2-3): the last pass shows it until it is saved.
+    expect(s, 'the label for one block').toBe(count === 1 ? 'syncing|Syncing · 1 block left' : `syncing|Syncing · ${m![1]} blocks left`);
+    return count;
   });
+  expect(counts, 'the last pass counts down to one block').toContain(1);
   expect(counts[0]).toBe(gap);
   let rises = 0;
   for (let i = 1; i < counts.length; i++) {
@@ -190,6 +194,69 @@ test('a restore over several budgeted passes counts down without jumping back, a
   // And the count did move down in steps across the passes.
   expect(new Set(counts).size).toBeGreaterThanOrEqual(6);
 });
+
+for (const how of ['reload', 'soft lock'] as const) {
+  test(`after a ${how} in the middle of a budgeted restore, the count goes on from the scan queue`, async ({ page }) => {
+    test.slow();
+    // Final review V2-1: on unlock the summary's fully scanned height is still the birthday - 1
+    // (top-down passes), so a count from it is the whole range again. The engine's scan queue is
+    // there as soon as the wallet opens: the first count after unlocking must come from it.
+    const batch = 1_250;
+    await fakeEngine(page, { budgetedPasses: { passBlocks: 4 * batch, batchBlocks: batch } });
+    // Every state the pill takes from the first paint of every load, however briefly.
+    await page.addInitScript(() => {
+      const w = window as unknown as { seen: string[] };
+      w.seen = [];
+      const record = () => {
+        const el = document.querySelector('[data-testid="sync-status"]');
+        if (!el) return;
+        const entry = `${el.getAttribute('data-sync')}|${el.textContent}`;
+        if (w.seen.at(-1) !== entry) w.seen.push(entry);
+      };
+      new MutationObserver(record).observe(document, { subtree: true, childList: true, characterData: true, attributes: true });
+    });
+    const counts = async () =>
+      (await page.evaluate(() => (window as unknown as { seen: string[] }).seen)).flatMap((s) => {
+        const m = /\|Syncing · ([\d,]+) blocks? left$/.exec(s);
+        return m ? [Number(m[1]!.replace(/,/g, ''))] : [];
+      });
+    const passesRun = () =>
+      page.evaluate(() => (window as unknown as { __fakeEngine: FakeKnobs }).__fakeEngine.budgetedPasses?.passesRun ?? 0);
+    await restoreFromThisMonth(page);
+    await expect.poll(passesRun, { timeout: 60_000 }).toBeGreaterThanOrEqual(1);
+    if (how === 'reload') {
+      // The next pass after the second waits at its start, so the reload loses no scanned batch:
+      // the saved wallet holds exactly what the last label counted.
+      await setKnobs(page, { holdPass: true });
+      await expect.poll(passesRun, { timeout: 60_000 }).toBeGreaterThanOrEqual(2);
+      await page.waitForTimeout(1_000);
+    } else {
+      await expect.poll(passesRun, { timeout: 60_000 }).toBeGreaterThanOrEqual(2);
+    }
+    const before = await counts();
+    const lastBefore = before.at(-1)!;
+    expect(lastBefore).toBeLessThan(before[0]! - 2 * 4 * batch + 1);
+    if (how === 'reload') {
+      await page.reload();
+    } else {
+      // A soft lock waits for the running pass, saves it and reloads.
+      await page.getByRole('button', { name: 'Lock' }).click();
+      await page.waitForEvent('load', { timeout: 60_000 });
+    }
+    await page.getByLabel('Password').fill(PASSWORD, { timeout: 30_000 });
+    await page.getByRole('button', { name: 'Unlock' }).click();
+    const status = page.getByTestId('sync-status');
+    await expect(status).toHaveText(/Syncing · [\d,]+ blocks? left/);
+    // Through the start of the next pass and its first batches.
+    await expect.poll(passesRun, { timeout: 60_000 }).toBeGreaterThanOrEqual(1);
+    const after = await counts();
+    expect(after.length, 'a count after the unlock').toBeGreaterThan(0);
+    // No block was mined, so no count after the unlock is above the last one before it.
+    expect(Math.max(...after), `counts after the ${how}: ${after.join(', ')} (last before: ${lastBefore})`).toBeLessThanOrEqual(
+      lastBefore,
+    );
+  });
+}
 
 test('"Up to date" shows the network tip, not the scanned height', async ({ page }) => {
   // The server answering the tip read is three blocks ahead of where the sync stops.

@@ -251,7 +251,10 @@ the chain tip) after every write; `sync_progress()` gives `unscanned_blocks`,
 counts `max(0, unscanned_blocks - max(0, visited - unscanned_visited)) +
 max(0, network tip - wallet_tip)`, which only rises with the tip
 (`src/lib/syncView.ts`), and starts the next pass at once when
-`ended_early` is set.
+`ended_early` is set. On every unlock it reads the queue before the summary
+shows (`enterReady`): after a reload in the middle of a restore the summary alone
+would count the whole range again for up to 1.5 s (a reviewer's mainnet run:
+39,175 -> 49,174 -> 29,179).
 
 ### 22. History enhancement can be turned off; status checks are spaced out
 

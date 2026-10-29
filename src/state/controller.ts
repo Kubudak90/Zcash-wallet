@@ -336,9 +336,15 @@ export class WalletController {
   }
 
   private async enterReady() {
+    // What is left by the engine's scan queue, read before the summary shows (final review
+    // V2-1): the engine scans the newest blocks first, so after a reload in the middle of a
+    // restore the fully scanned height is still the birthday - 1, and a count from it would be
+    // the whole range again until the first pass reads the queue, a network round trip later.
+    // The queue is lock-free and valid as soon as the wallet is open.
+    const queue = queueOf(await this.readProgress());
     this.set({
       phase: 'ready',
-      sync: { ...this.state.sync, status: 'starting', error: null, catchUp: null, progress: null, queue: null },
+      sync: { ...this.state.sync, status: 'starting', error: null, catchUp: null, progress: null, queue },
     });
     await this.refresh();
     // Asked for before the first pass takes the database, so Receive has one at once.

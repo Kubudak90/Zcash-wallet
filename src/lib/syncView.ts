@@ -3,6 +3,7 @@
 // can be unit-tested.
 
 import type { ScanQueue } from '../engine/types';
+import type { Lang, Translate } from '../i18n';
 import { syncProgress } from './birthday';
 
 /**
@@ -166,4 +167,22 @@ export function syncView(
     return { kind: 'upToDate', height: tip };
   }
   return { kind: 'connecting' };
+}
+
+/** The indicator's text, shared by the top-bar pill and the Home progress bar. */
+export function syncLabel(view: SyncView, t: Translate, lang: Lang): string {
+  const n = (x: number) => x.toLocaleString(lang === 'tr' ? 'tr-TR' : 'en-US');
+  switch (view.kind) {
+    case 'error':
+      return t('sync.error');
+    case 'stopped':
+      return t('sync.stopped');
+    case 'syncing':
+      // The last pass counts down to one block, which it shows until it is saved (V2-3).
+      return view.blocksLeft === 1 ? t('sync.syncingOne') : t('sync.syncing', { blocks: n(view.blocksLeft) });
+    case 'upToDate':
+      return t('sync.upToDate', { height: n(view.height) });
+    case 'connecting':
+      return t('sync.starting');
+  }
 }

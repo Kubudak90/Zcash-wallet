@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 
 import { Notice } from '../components/ui';
-import { useI18n, type Lang, type MessageKey, type Translate } from '../i18n';
-import { syncView, type SyncView } from '../lib/syncView';
+import { useI18n, type MessageKey } from '../i18n';
+import { syncLabel, syncView, type SyncView } from '../lib/syncView';
 import { useController, useWallet } from '../state/wallet';
 import { History } from './History';
 import { Home } from './Home';
@@ -25,23 +25,6 @@ const NAV: { tab: Exclude<Tab, 'shield'>; label: MessageKey; icon: string }[] = 
 export function useSyncView(): SyncView {
   const { sync, summary, meta } = useWallet();
   return syncView(sync, summary, meta?.birthday ?? null);
-}
-
-/** The indicator's text, shared by the top-bar pill and the Home progress bar. */
-export function syncLabel(view: SyncView, t: Translate, lang: Lang): string {
-  const n = (x: number) => x.toLocaleString(lang === 'tr' ? 'tr-TR' : 'en-US');
-  switch (view.kind) {
-    case 'error':
-      return t('sync.error');
-    case 'stopped':
-      return t('sync.stopped');
-    case 'syncing':
-      return t('sync.syncing', { blocks: n(view.blocksLeft) });
-    case 'upToDate':
-      return t('sync.upToDate', { height: n(view.height) });
-    case 'connecting':
-      return t('sync.starting');
-  }
 }
 
 const SYNC_TONE: Record<SyncView['kind'], string> = {

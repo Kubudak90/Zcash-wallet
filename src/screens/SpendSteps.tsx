@@ -5,7 +5,7 @@ import { SpendRefusedError, type SendStage } from '../engine';
 import { useI18n } from '../i18n';
 import { spendingDisabled } from '../lib/network';
 import { refusalText } from '../lib/spendRefusal';
-import { spendWait } from '../lib/spendWait';
+import { spendWait, spendWaitText } from '../lib/spendWait';
 import { WrongPasswordError } from '../lib/vault';
 import { useWallet } from '../state/wallet';
 import { useSyncView } from './Main';
@@ -44,13 +44,9 @@ export function SpendConfirm({
   // A spend started during a pass, or far behind the tip, would sit on
   // "building" for that long (see spendWait).
   const wait = spendWait(view, sync, summary);
-  const blocks = (n: number) => n.toLocaleString(lang === 'tr' ? 'tr-TR' : 'en-US');
-  let waitFor: string | null = null;
-  if (wait?.kind === 'syncing') waitFor = t('send.waitForSync', { blocks: blocks(wait.blocksLeft) });
-  else if (wait?.kind === 'behind') waitFor = t('send.waitForRetry', { blocks: blocks(wait.blocksLeft) });
-  else if (wait?.kind === 'connecting') waitFor = t('send.waitForConnect');
+  let waitFor = spendWaitText(wait, t, lang);
   // The first network check has not answered yet; the controller would wait for it too.
-  else if (network.kind === 'checking') waitFor = t('send.waitForConnect');
+  if (waitFor === null && network.kind === 'checking') waitFor = t('send.waitForConnect');
 
   async function submit(e: FormEvent) {
     e.preventDefault();

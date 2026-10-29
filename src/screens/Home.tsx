@@ -2,10 +2,11 @@ import { Amount, Notice, useHideBalances } from '../components/ui';
 import { SHIELDING_THRESHOLD_ZATS, TYPICAL_FEE_ZATS, grandTotal, shieldedTotal } from '../engine';
 import { useI18n } from '../i18n';
 import { spendingDisabled } from '../lib/network';
+import { syncLabel } from '../lib/syncView';
 import { formatZec } from '../lib/zec';
 import { useWallet } from '../state/wallet';
 import type { Tab } from './Main';
-import { syncLabel, useSyncView } from './Main';
+import { useSyncView } from './Main';
 import { disabledMessage, useNetworkView } from './NetworkBanner';
 
 /** An eye, struck through while balances are hidden. */
