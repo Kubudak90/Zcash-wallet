@@ -1,12 +1,12 @@
 import { createContext, useCallback, useContext, type ReactNode } from 'react';
 
-import { en } from './en';
-import { tr, type MessageKey } from './tr';
+import { en, type MessageKey } from './en';
+import { tr } from './tr';
 
-export type Lang = 'tr' | 'en';
+export type Lang = 'en' | 'tr';
 export type { MessageKey };
 
-const dictionaries: Record<Lang, Record<MessageKey, string>> = { tr, en };
+const dictionaries: Record<Lang, Record<MessageKey, string>> = { en, tr };
 
 export type Translate = (key: MessageKey, vars?: Record<string, string | number>) => string;
 
@@ -18,7 +18,7 @@ export function translate(lang: Lang, key: MessageKey, vars?: Record<string, str
   );
 }
 
-const LangContext = createContext<Lang>('tr');
+const LangContext = createContext<Lang>('en');
 
 export function LangProvider({ lang, children }: { lang: Lang; children: ReactNode }) {
   return <LangContext.Provider value={lang}>{children}</LangContext.Provider>;

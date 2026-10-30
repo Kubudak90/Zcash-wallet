@@ -1,9 +1,10 @@
 import { useI18n, type Lang } from '../i18n';
 import { useController, useWallet } from '../state/wallet';
 
+// English first: it is the primary language.
 const LANGS: { code: Lang; label: string }[] = [
-  { code: 'tr', label: 'Türkçe' },
   { code: 'en', label: 'English' },
+  { code: 'tr', label: 'Türkçe' },
 ];
 
 export function LanguageSwitch() {

@@ -2,7 +2,7 @@
   "name": "celari-wallet",
   "private": true,
   "version": "0.1.0",
-  "description": "Celari: açık kaynak, tarayıcıda çalışan, gizlilik öncelikli Zcash cüzdanı",
+  "description": "Celari: an open-source, privacy-first Zcash wallet that runs in the browser",
   "license": "MIT OR Apache-2.0",
   "type": "module",
   "scripts": {

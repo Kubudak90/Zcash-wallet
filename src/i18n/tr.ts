@@ -1,6 +1,8 @@
-// Türkçe kaynak metinler. en.ts aynı anahtarları içermek zorundadır (tip denetimi).
+// Türkçe metinler. Anahtarların kaynağı en.ts; bu dosya hepsini içermek zorundadır (tip denetimi).
 
-export const tr = {
+import type { MessageKey } from './en';
+
+export const tr: Record<MessageKey, string> = {
   'common.continue': 'Devam',
   'common.back': 'Geri',
   'common.cancel': 'Vazgeç',
@@ -316,6 +318,4 @@ export const tr = {
   'settings.source': 'Kaynak kod',
   'settings.licenses': 'Üçüncü taraf lisansları (cüzdan motoru)',
   'settings.version': 'Sürüm {v}',
-} as const;
-
-export type MessageKey = keyof typeof tr;
+};
