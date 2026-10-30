@@ -9,7 +9,8 @@
  * One drawing per size range, each in a 64 x 64 box: the full mark from 48 px;
  * the same mark with every fold and the gold crescent, drawn larger in its box
  * and with wider fold gaps so they stay gaps (not grey hairlines), from 21 to
- * 47 px; and the bare silhouette at 16 to 20 px.
+ * 47 px; and the bare silhouette at 16 to 20 px. The sizes are device pixels:
+ * on a 2x screen a lockup shows the full mark (BrandLockup).
  */
 export type MarkMaster = 'full' | 'ui' | '16';
 
@@ -18,6 +19,8 @@ interface MasterPaths {
   facet: string;
   /** The drawing's own bounds in the 64 box: what a lockup lines up with the name. */
   crop: string;
+  /** How wide its fold gaps are, in the 64 box (0: no folds). tests/unit/brand.test.ts reads it. */
+  gap: number;
 }
 
 export const MASTERS: Record<MarkMaster, MasterPaths> = {
@@ -25,19 +28,23 @@ export const MASTERS: Record<MarkMaster, MasterPaths> = {
     body: 'M43.471 27.99L31.09 20.253A18.129 18.129 0 0 0 25.23 17.89A81.33 81.33 0 0 0 15.508 16.443L27.354 9.041C32.507 5.821 35.083 5.821 40.236 9.041L52.965 16.995A2.205 2.205 0 0 1 53.243 20.529L44.779 27.887A1.103 1.103 0 0 1 43.471 27.99ZM11 39.995L11 22.137A4.41 4.41 0 0 1 15.818 17.746A80.06 80.06 0 0 1 24.968 19.133A16.859 16.859 0 0 1 30.417 21.33L30.659 21.481L30.236 21.778A91.651 91.651 0 0 0 12.28 38.32A26.205 26.205 0 0 0 11 39.995ZM11 42.295L11.533 41.475A24.935 24.935 0 0 1 13.258 39.131A90.381 90.381 0 0 1 18.259 33.588A35.295 35.295 0 0 0 32.397 48.918A90.817 90.817 0 0 0 42.096 53.797L40.236 54.959C35.083 58.179 32.507 58.179 27.354 54.959L13.073 46.035A4.41 4.41 0 0 1 11 42.295ZM31.424 43.538L43.471 36.01A1.103 1.103 0 0 1 44.779 36.113L53.243 43.471A2.205 2.205 0 0 1 52.965 47.005L43.409 52.976L43 52.802A89.547 89.547 0 0 1 33.75 48.23A31.362 31.362 0 0 1 31.424 43.538Z',
     facet: 'M28.868 24.331A32.632 32.632 0 0 0 31.561 46.913A34.025 34.025 0 0 1 19.213 32.629A90.381 90.381 0 0 1 28.868 24.331Z',
     crop: '11 6.626 42.242 50.747',
+    gap: 1.27,
   },
   ui: {
     // The full mark's construction redrawn to fill 56 of the 64 box, its fold
-    // gaps 2.0 wide (1.27 in 'full'): at least one pixel from a 28 px lockup up.
+    // gaps 2.0 wide (1.27 in 'full'): at least one pixel from a 28 px lockup up
+    // on a 1x screen.
     body: 'M43.832 27.575L30.169 19.037A20.005 20.005 0 0 0 23.703 16.43A89.747 89.747 0 0 0 12.975 14.833L26.047 6.665C31.733 3.112 34.576 3.112 40.262 6.665L54.308 15.442A2.433 2.433 0 0 1 54.615 19.342L45.275 27.461A1.217 1.217 0 0 1 43.832 27.575ZM8 39.773L8 21.718A4.866 4.866 0 0 1 13.319 16.872A87.747 87.747 0 0 1 23.29 18.386A18.005 18.005 0 0 1 28.884 20.595A111.067 111.067 0 0 0 9.182 38.308A23.451 23.451 0 0 0 8 39.773ZM8 43.361L8.839 42.07A21.451 21.451 0 0 1 10.687 39.625A109.067 109.067 0 0 1 15.726 34.246A38.983 38.983 0 0 0 31.381 50.933A106.641 106.641 0 0 0 42.005 56.246L40.262 57.335C34.576 60.888 31.733 60.888 26.047 57.335L10.288 47.488A4.866 4.866 0 0 1 8 43.361ZM31.054 44.41L43.832 36.425A1.217 1.217 0 0 1 45.275 36.539L54.615 44.658A2.433 2.433 0 0 1 54.308 48.558L44.073 54.953L43.429 54.68A104.641 104.641 0 0 1 33.893 50.049A34.009 34.009 0 0 1 31.054 44.41Z',
     facet: 'M27.612 23.984A36.009 36.009 0 0 0 30.475 48.034A36.983 36.983 0 0 1 17.236 32.769A109.067 109.067 0 0 1 27.612 23.984Z',
     crop: '8 4 46.615 56',
+    gap: 2.0,
   },
   '16': {
     body: 'M8 43.361L8 20.639A4.866 4.866 0 0 1 10.288 16.512L26.047 6.665C31.733 3.112 34.576 3.112 40.262 6.665L54.308 15.442A2.433 2.433 0 0 1 54.615 19.342L44.225 28.373A1.217 1.217 0 0 1 42.782 28.487L28.846 19.779A36.009 36.009 0 0 0 28.846 44.221L42.782 35.513A1.217 1.217 0 0 1 44.225 35.627L54.615 44.658A2.433 2.433 0 0 1 54.308 48.558L40.262 57.335C34.576 60.888 31.733 60.888 26.047 57.335L10.288 47.488A4.866 4.866 0 0 1 8 43.361Z',
     // The favicon's facet (public/favicon.svg) in this box: colour only, it lies on the body.
     facet: 'M27.994 22.463A36.009 36.009 0 0 0 31.352 49.687A38.304 38.304 0 0 1 16.264 32.541A98.604 98.604 0 0 1 27.994 22.463Z',
     crop: '8 4 46.615 56',
+    gap: 0,
   },
 };
 
@@ -131,21 +138,36 @@ const LOCKUP_FALLBACK_H = 30;
  * --brand-h per placement (styles.css, .brand-lockup). The drawing is chosen
  * here, not from that size: the 'ui' mark, for UI sizes (masterFor's 'ui'
  * range, lockups up to 41 px tall), unless a placement passes `master`
- * ('full' is the large lockup's). tests/unit/brand.test.ts keeps every
- * --brand-h in the default drawing's range. The name is drawn, so its text is
- * there for screen readers (and for anything that reads the brand's text) in a
- * hidden span.
+ * ('full' is the large lockup's). The 'ui' mark's wider fold gaps are for the
+ * 1x pixel grid, so it comes with the full mark itself for 2x screens and up,
+ * where that one's finer folds are still more than a device pixel wide; the
+ * stylesheet shows one of the two (.brand-lockup-mark-1x, -2x). Both are
+ * cropped to boxes of the same shape, so the name sits the same next to
+ * either. tests/unit/brand.test.ts keeps every --brand-h in the range of both
+ * drawings. The name is drawn, so its text is there for screen readers (and
+ * for anything that reads the brand's text) in a hidden span.
  */
 export function BrandLockup({ master = 'ui', className }: { master?: MarkMaster; className?: string }) {
+  const width = +(LOCKUP_FALLBACK_H * 0.8324).toFixed(2);
+  const hidpi = master === 'ui';
   return (
     <span className={className ? `brand-lockup ${className}` : 'brand-lockup'}>
       <MarkSvg
         master={master}
         cropped
-        width={+(LOCKUP_FALLBACK_H * 0.8324).toFixed(2)}
+        width={width}
         height={LOCKUP_FALLBACK_H}
-        className="brand-lockup-mark"
+        className={hidpi ? 'brand-lockup-mark brand-lockup-mark-1x' : 'brand-lockup-mark'}
       />
+      {hidpi && (
+        <MarkSvg
+          master="full"
+          cropped
+          width={width}
+          height={LOCKUP_FALLBACK_H}
+          className="brand-lockup-mark brand-lockup-mark-2x"
+        />
+      )}
       <Wordmark height={+(LOCKUP_FALLBACK_H * 0.5423).toFixed(2)} className="brand-lockup-name" />
       <span className="visually-hidden">Celari</span>
     </span>
