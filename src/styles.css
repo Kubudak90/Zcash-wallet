@@ -267,6 +267,12 @@ svg {
   max-width: 62ch;
 }
 
+/* A shell notice above a screen's heading (network, stopped engine, rescan): the
+   heading keeps the room it has at the top of the page instead of sitting on the notice. */
+.content > :is(.network-live:not(:empty), .notice) ~ .screen > .screen-head {
+  margin-top: 16px;
+}
+
 .stack {
   display: flex;
   flex-direction: column;
@@ -787,6 +793,9 @@ ul.plain li + li {
 }
 
 .card-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   padding: 20px 24px 24px;
 }
 

@@ -29,7 +29,8 @@ export function Shield({ onNavigate, onClose }: { onNavigate: (tab: Tab) => void
   const fmt = (z: bigint) => formatZec(z, { locale: lang });
 
   return (
-    <Screen title={t('shield.title')} onBack={spending ? undefined : onClose}>
+    // No Back once it is done, as on Send's result: Close there goes to the same place.
+    <Screen title={t('shield.title')} onBack={spending || shielded !== null ? undefined : onClose}>
       {shielded !== null ? (
         <div className="card spend-done">
           <div className="result">

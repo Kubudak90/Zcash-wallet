@@ -275,7 +275,11 @@ export function Home({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
             )}
           </div>
           {history.length === 0 ? (
-            <p className="card-empty muted">{t('history.empty')}</p>
+            // The same words as History's empty state, so an empty wallet reads alike on both screens.
+            <div className="card-empty">
+              <p>{t('history.empty')}</p>
+              <p className="muted small">{t('history.emptyHelp')}</p>
+            </div>
           ) : (
             <ul className="tx-list" data-testid="recent-activity" style={fraction}>
               {recent.map((tx) => (
