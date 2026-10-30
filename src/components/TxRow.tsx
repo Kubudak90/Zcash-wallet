@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 
 import type { HistoryItem, TxType } from '../engine';
 import { useI18n } from '../i18n';
@@ -43,9 +43,10 @@ export function useFractionWidth(txs: HistoryItem[]): CSSProperties {
 /**
  * One transaction in a list: what it was, when, how private, and its signed
  * amount, decimal points lined up down the list. Shared by History and the
- * Recent activity on Balance; only History offers the transaction ID.
+ * Recent activity on Balance; only History offers the transaction ID, either
+ * as `copyId` or in its own `children`, which close the row.
  */
-export function TxRow({ tx, copyId = false }: { tx: HistoryItem; copyId?: boolean }) {
+export function TxRow({ tx, copyId = false, children }: { tx: HistoryItem; copyId?: boolean; children?: ReactNode }) {
   const { t } = useI18n();
   const balances = useHideBalances();
   const date = useTxDate()(tx);
@@ -87,6 +88,7 @@ export function TxRow({ tx, copyId = false }: { tx: HistoryItem; copyId?: boolea
           <CopyButton value={tx.txid} label={t('history.copyTxid')} />
         </div>
       )}
+      {children}
     </li>
   );
 }

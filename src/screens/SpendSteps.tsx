@@ -1,5 +1,6 @@
-import { useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 
+import { Icon, type IconName } from '../components/icons';
 import { ErrorDetails, Notice, PasswordField, Spinner } from '../components/ui';
 import { SpendRefusedError, type SendStage } from '../engine';
 import { useI18n } from '../i18n';
@@ -13,20 +14,29 @@ import { disabledMessage, useNetworkView } from './NetworkBanner';
 
 const STAGES: SendStage[] = ['building', 'signing', 'proving', 'broadcasting'];
 
-/** Password confirmation plus live progress for a spend (send or shield). */
+/**
+ * Password confirmation plus live progress for a spend (send or shield). The
+ * screen puts it in its confirm panel: the form, then the stages in its place.
+ */
 export function SpendConfirm({
   submitLabel,
+  submitIcon,
   run,
   disabledText,
   failureHint,
+  note,
   onViewHistory,
 }: {
   submitLabel: string;
+  /** Drawn before the label; an SVG adds no text, so the button's text stays the label. */
+  submitIcon?: IconName;
   run: (password: string, onStage: (s: SendStage) => void) => Promise<void>;
   /** Shown in place of the form while the network runs rules this version does not support. */
   disabledText: string;
   /** Shown when building the transaction failed, before anything was signed. */
   failureHint?: string;
+  /** A line above the password field: what the password does. */
+  note?: ReactNode;
   onViewHistory: () => void;
 }) {
   const { t, lang } = useI18n();
@@ -40,6 +50,14 @@ export function SpendConfirm({
   // Refs, not state: a second click in the same tick must already see them.
   const running = useRef(false);
   const lastStage = useRef<SendStage | null>(null);
+  const progress = useRef<HTMLDivElement>(null);
+  const sending = stage !== null;
+
+  // The stages replace the form where the user pressed the button, which on a
+  // phone can be well down the page: bring them into view as the spend starts.
+  useEffect(() => {
+    if (sending) progress.current?.scrollIntoView({ block: 'nearest' });
+  }, [sending]);
 
   // A spend started during a pass, or far behind the tip, would sit on
   // "building" for that long (see spendWait).
@@ -82,7 +100,8 @@ export function SpendConfirm({
   if (stage) {
     const current = STAGES.indexOf(stage);
     body = (
-      <div className="stack">
+      <div className="spend-progress" ref={progress}>
+        {/* The marks sit in a fixed column, so every label starts at the same x. */}
         <ol className="stages">
           {STAGES.map((s, i) => (
             <li
@@ -91,7 +110,7 @@ export function SpendConfirm({
               aria-current={i === current ? 'step' : undefined}
             >
               <span className="stage-icon" aria-hidden="true">
-                {i < current ? '✓' : i === current ? <Spinner /> : null}
+                {i < current ? <Icon name="check" /> : i === current ? <Spinner /> : null}
               </span>
               <span>
                 {t(`send.stage.${s}`)}
@@ -100,7 +119,10 @@ export function SpendConfirm({
             </li>
           ))}
         </ol>
-        <p className="muted small">{t('send.doNotClose')}</p>
+        {/* Not a live region: the stage status above is the one that speaks. */}
+        <Notice tone="warn" live={false}>
+          <strong>{t('send.doNotClose')}</strong>
+        </Notice>
       </div>
     );
   } else if (error && maybeSent) {
@@ -127,7 +149,8 @@ export function SpendConfirm({
     );
   } else {
     body = (
-      <form className="stack" onSubmit={submit}>
+      <form className="stack spend-form" onSubmit={submit}>
+        {note && <p className="spend-note">{note}</p>}
         {waitFor && (
           <Notice tone="info">
             <span data-testid="spend-wait">{waitFor}</span>
@@ -143,13 +166,16 @@ export function SpendConfirm({
             {!refusal && <ErrorDetails error={error.cause} />}
           </Notice>
         )}
-        <button type="submit" className="primary" disabled={password === '' || waitFor !== null}>
+        <button type="submit" className="primary spend-submit" disabled={password === '' || waitFor !== null}>
           {busy ? (
             <>
               <Spinner /> {submitLabel}
             </>
           ) : (
-            submitLabel
+            <>
+              {submitIcon && <Icon name={submitIcon} />}
+              {submitLabel}
+            </>
           )}
         </button>
       </form>
