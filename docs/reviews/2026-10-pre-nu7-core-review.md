@@ -2,7 +2,7 @@
 
 Interim record of the review started on 2026-10-30 (branch `claude/core-engine-review`), saved so that no progress is lost if the session stops. Findings are as reported by each lens reviewer; "Verified" is the independent refuting verifier's verdict where it has finished. Polish items are not verified. Nothing here is fixed yet; fixes and the final decisions go to docs/engine-port.md (review round 7).
 
-Progress: 6/6 lens reviews; 31 findings (0 critical, 8 major, 19 minor, 4 polish); 21/27 non-polish findings verified, 21 confirmed real, 0 refuted.
+Progress: 6/6 lens reviews; 31 findings (0 critical, 8 major, 19 minor, 4 polish); 27/27 non-polish findings verified, 27 confirmed real, 0 refuted.
 
 ## State and how to continue (if this session stops)
 
@@ -1001,7 +1001,64 @@ What I could not check or did not run:
 - Scenario: 1) One GetLatestBlock answer from a malicious or buggy server says 499,000,000. upstream sync::run calls update_chain_tip(499,000,000). 2) Later an honest server answers 3,536,010. I reproduced this with a native probe against the real backend: chain_height stays 499,000,000 and the queue keeps Historic(3530000..499000001) after the honest update and after encode/decode_new. 3) The default server answers any GetBlockRange above its tip with grpc-status 11 'GetBlock: block N is newer than the latest block' (checked live on zcash-mainnet.chainsafe.dev). So every later pass fails at the first batch that reaches past the real tip, and blocks near the tip are never scanned again. 4) The inflated queue is saved even though failed passes are not: prepareAddress() persists on every Receive opening (controller.ts:365), and so does afterSpend. 5) Building uses target = chain_height()+1. Before NU7, branch(499M+1)=NU7 differs from branch(real+1), so the send forces sync_to_tip, which fails, and every send is refused. While the lying server is still in use, it reports the same tip and claims NU7's branch in GetLightdInfo, so networkStatusFor says 'supported'. A NU7 v6 transaction is then built with expiry about 499,000,040. check_minable passes (branch matches, expiry > tip+3), the transaction is stored and its notes are marked spent. If the server drops it, or the real network rejects it (NU7 not active), GetStatus only sets confirmed_unmined_at to the inflated tip, which stays below the expiry. 6) A new wallet created while the inflated tip is served gets birthday = inflated tip - 10, above the real chain, so later payments to it are never scanned (and see SYNC-2).
 - Impact: Funds are stuck, not stolen. The spent notes stay locked until the user wipes the wallet and restores from the seed. After switching to an honest server the wallet still cannot sync: new incoming payments stay hidden, the balance freezes, nothing new is saved, sends fail before NU7, and confirmations show nonsense. The app gives no hint that a wipe and restore is the only fix. The only trigger needed is one lie from the configured server (the default is a third-party pool), and the damage outlives that server.
 - Proposed fix: (a) Backend, the minimal fix that makes it heal itself: in update_chain_tip_internal, right after the `new_tip < max_scanned` early return (wallet_write.rs:357-361), when `self.chain_tip_height() > Some(new_tip)`, cut every scan-queue entry to end at or below `new_tip + 1` (delete entries that start above it). Every range above new_tip is unscanned there, because max_scanned <= new_tip. The next honest GetLatestBlock then repairs the queue. (b) Clock ceiling: add `chainCeiling(now) = CHAIN_ANCHOR.height + ceil((now + CLOCK_SLACK_MS - CHAIN_ANCHOR.time)/1000/10)` (10 s per block, below NU7's 25 s) to src/engine/webzjs-upgrades.ts. Make networkStatusFor throw when info.blockHeight > ceiling. Ignore higher values in readTip and in the Create/Restore latestHeight() calls. Pass the ceiling to the engine through a setter and refuse a GetLatestBlock height above it in Wallet::network_tip() and before update_chain_tip in sync_pass (for example, check the GetLatestBlock answer in BudgetedTransport).
-- Verified: (pending)
+- Verified: **real, major**; fix before NU7: yes
+- Verifier's evidence: I tried to refute this and could not. I reproduced it end to end with the real patched WebZjs glue and the real memory backend. Some parts of the scenario need correcting, listed below. No tracked file was changed (git status is clean). The scratch work is in /tmp/claude-0/-home-user-Zcash-wallet/5e91fe3a-29e4-5243-bea0-135f18bac5ff/scratchpad/core-review/verify-SYNC-1/.
+
+Code path
+- engine/zcash_client_memory/src/wallet_write.rs:348-411 returns early only when new_tip < max_scanned. Otherwise it calls replace_queue_entries(.., new_tip+1, false), which never removes queue entries above new_tip.
+- chain_tip_height() is the highest queue end minus 1 (types/memory_wallet/mod.rs:254-256).
+- This copies zcash_client_sqlite 0.23 exactly (wallet/scanning.rs:614-646, wallet.rs:3464). So it is upstream behaviour, not a porting bug, and no doc records it as a deliberate decision. README.md:128 lists "faulty or malicious lightwalletd answers" as still to review.
+- Upstream sync::run passes the raw GetLatestBlock height to update_chain_tip (zcash_client_backend 0.25 sync.rs:302-327).
+- In the glue (wallet.rs:296-307), network_tip accepts any u32. must_sync_before_building (boundary.rs) only handles a wallet that is behind. In pczt_send, blocks_behind saturates at 0 when the wallet is ahead.
+
+Reproduction
+Tests s1_inflated_tip_before_nu7 and s1_inflated_tip_after_nu7, appended to the scratch copy's tests/nu7_pipeline.rs. Setup: a wallet holding a 2,000,000 zat Ironwood note, MockLwd, a save and decode_new in between as the app's persists do. Log: run.log.
+- Before NU7: the wallet is synced to 3,543,350. One pass gets GetLatestBlock = 499,000,000 and fails at GetBlockRange.
+  - chain_height becomes 499,000,000 and the queue holds Historic(3,543,351..499,000,001).
+  - Ironwood spendable drops from 2,000,000 to 0 while the total stays 2,000,000. unscanned_blocks is 495,456,650.
+  - All of this survives the save and reload.
+- Then three passes against an honest server (real tips 3,543,360, 365 and 380) all fail. Each one asks for GetBlockRange 3,543,351..=3,553,350, a full BATCH_SIZE batch of 10,000 blocks, so nothing new is scanned and spendable stays 0.
+- pczt_create before NU7 fails: the branch of 499M+1 (NU7) differs from that of the real tip + 1 (NU6.3), which forces sync_to_tip, and that fails.
+- After NU7, with the honest server at 3,543,445, pczt_create fails with InsufficientFunds { available: 0 }.
+
+Corrections to the scenario
+1. "Blocks near the tip are never scanned again" is too strong. A batch goes through once the real chain passes its end, so the wallet lags in 10,000-block steps (about 8.7 days at 75 s per block), and every pass in between fails. Balance and incoming payments are frozen for days at a time, with no end.
+2. Notes in the last, incomplete shard of their pool become unspendable, because shard_max_priority is above Scanned (input_source.rs:177-180, 236-241). That is stuck funds shown as 0 spendable, which is stronger than the scenario says.
+3. The v6 transaction with an expiry around 499,000,040 is only possible from notes in completed shards. The anchor is the highest checkpoint and the unscanned range starts above it (queries.rs:209-262). I confirmed this by reading the code; I did not reproduce it.
+4. Saving is real. prepareAddress persists at every unlock and every Receive opening (controller.ts:351, :358-366), afterSpend persists (:839-842), and a pass that ends on its time budget counts as a success and persists too.
+5. I tried a non-malicious trigger: a user entering the operator's testnet proxy, zcash-testnet.chainsafe.dev. Live, its GetLatestBlock answers 4,559,201, about 1.02M blocks above mainnet (3,536,061). With captured testnet answers, though, the pass fails at GetSubtreeRoots ("Inserted root conflicts", Sapling shard 0) before update_chain_tip runs, so this does not trigger it. The trigger is a mainnet server whose GetLatestBlock alone is inflated, whether buggy or malicious.
+
+Fix checked
+With fix (a) below in the scratch engine copy (log: run-fix.log):
+- The first honest pass succeeds. It asks only for GetBlockRange 3,543,351..=3,543,360, chain_height becomes 3,543,360 and spendable is back to 2,000,000, even on the wallet reopened from the bad save.
+- Before NU7, pczt_create builds an NU6.3 transaction (0x37a5165b) with expiry 3,543,421. After NU7 it builds an NU7 v6 transaction with expiry 3,543,566, which is sent.
+- Full glue suite: 70/70 pass (glue-fix.log). Backend suite: 198 passed, 6 ignored, 0 failed (backend-fix.log).
+
+Impact
+Funds are stuck and the wrong balance shows, but nothing is stolen. A wipe and restore from the seed recovers everything. One bad answer from the configured server is enough, and the damage stays after switching servers.
+- Verifier's fix: Required now: fix (a), in engine/zcash_client_memory/src/wallet_write.rs, update_chain_tip_internal. Right after the `if new_tip < h { return Ok(()); }` block (about :357-361):
+
+```rust
+// The tip went down, but not below any scanned block (max_scanned <= new_tip), so nothing above new_tip is scanned.
+// Drop the queue above it; otherwise one inflated GetLatestBlock stays the wallet's chain tip for good.
+if self.chain_tip_height().is_some_and(|t| t > new_tip) {
+    self.scan_queue.trim_to(new_tip);
+}
+```
+
+- trim_to already exists (types/scanning.rs:220) and is what truncate_to_height uses.
+- With it, an already-damaged saved wallet heals on its first honest pass.
+- Add the two s1_* glue tests as regression tests.
+- Record the change as a deviation from sqlite in UPSTREAM.md and docs/engine-port.md, and report it upstream: zcash_client_sqlite has the same behaviour.
+- Then: rebuild vendor/, update scripts/webzjs-vendor.sha256, and run CI with full_rebuild.
+
+Cheap companion (recommended), in the glue:
+- In boundary::must_sync_before_building, also return true when wallet_tip > network_tip + MAX_BLOCKS_BEHIND_TO_BUILD. A send then re-syncs, which heals the tip through (a), instead of building on an inflated target if a pass failed before update_chain_tip.
+- In pczt_send, refuse when wallet_tip > network_tip + 100, matching the existing check for a wallet that is behind.
+
+Defer: the clock ceiling (b). Only it helps against a server that keeps lying, but if the device clock is behind, it would refuse honest tips. NU7 also changes the block time (per the repo's own comment), so this is not the week to calibrate it.
+
+SYNC-2 (a tip below the birthday panics) is separate. Its clamp/early return should land together with (a).
 
 ### SYNC-3 · major · ts — 'I don't know' birthday detection starts the scan at the first transparent transaction, so earlier shielded funds are silently never found
 - Where: src/screens/RestoreWallet.tsx:104-108 (height = detected ?? SAPLING_ACTIVATION_HEIGHT); src/engine/webzjs.ts:179-193; crates/webzjs-wallet/src/bindgen/wallet.rs:746-783 (upstream detect_birthday_from_transparent_address: min height of GetTaddressTxids answers - 100); webzjs-keys/src/keys.rs:183-191 (probes only the default UA's transparent receiver); src/i18n/en.ts:83-84
@@ -1096,14 +1153,99 @@ Then rebuild vendor/ with scripts/build-webzjs.sh, update scripts/webzjs-vendor.
 - Scenario: (a) The server sends large blocks, the batch size shrinks to 20, and the server then answers one 20-block GetBlockRange with millions of small CompactBlock messages. Nothing abandons the download, try_collect grows past the wasm memory limit, and the engine traps. (b) The server sends one CompactBlock with height 2^32: MemBlockCache::insert calls height().unwrap(), which panics and traps. (c) A spend search answered by an endless GetTaddressTxids stream does the same. Each time CrashWatch reports EngineStoppedError, the user reloads, and the next pass crashes again.
 - Impact: The tab can be crashed and kept unusable while that server is configured (DoS). No state is lost, because nothing is saved after a trap.
 - Proposed fix: In CountedBody/batch_growing, end the download with an error (not a resize) when `counter.messages > batch_blocks`, or when bytes exceed max even at min_blocks (hard cap min_blocks x 4 MiB). In ProgressCache::insert, check each block before passing it on: height <= u32::MAX and inside the requested range, and hash/prev_hash 32 bytes when there is no header. Return a cache error instead of panicking, which needs an error type in place of Infallible. Cap GetTaddressTxids at about 1,000 transactions and return BadData beyond that.
-- Verified: (pending)
+- Verified: **real, minor**; fix before NU7: no
+- Verifier's evidence: I reproduced all three parts natively. I applied the current patches/webzjs/0001-0004 to a fresh WebZjs a50df94, used engine/webzjs.Cargo.lock and nightly-2026-10-28, and ran mock-lightwalletd tests through Wallet::sync. Scratch test: /tmp/claude-0/-home-user-Zcash-wallet/5e91fe3a-29e4-5243-bea0-135f18bac5ff/scratchpad/core-review/verify-SYNC-4/webzjs/crates/webzjs-wallet/src/tests/verify_sync4.rs. Logs: .../verify-SYNC-4/run.log and run3.log.
+
+(b) Bad height. I set one captured mainnet block's height to 2^32. Wallet::sync panics at zcash_client_backend-0.25.0/src/proto.rs:107 (CompactBlock::height() unwrap, TryFromIntError(PosOverflow)). It is reached through ProgressCache::insert -> SyncCounters::on_insert (progress.rs:218) before MemBlockCache::insert (block_source.rs:101). A block with no header and a 31-byte hash panics at zcash_primitives-0.31.0/src/block.rs:62 (BlockHash::from_slice), called from scanning/compact.rs:178 via ProgressCache::with_blocks. The wasm has no catch_unwind and panics abort, so either case is a trap and CrashWatch reports EngineStoppedError (Decision 16).
+
+(a) Flood. With the default sizes (batch_size 10000, max 64 MiB, min_blocks 20), the server's first answer was 23 messages of 3 MiB. It was abandoned, and the next batch is 20 blocks. That 20-block answer then carried 277,891 extra messages (300 MiB). It was not abandoned and was collected in full: batches_abandoned=1, largest_batch_bytes=314,588,004, process peak RSS rose from 26 to 855 MiB. A pure-logic check agrees: batch_growing(100 GiB, 10M messages) returns None when the batch is 20 blocks. The cause is pass_budget.rs:228: it gives up whenever current <= min_blocks, and the message count is never compared with the blocks requested. Since wasm memory is capped at 1 GiB, a slightly larger flood traps.
+
+(c) GetTaddressTxids. data_requests.rs:172-178 collected 200,000 RawTransactions (190 MiB) from one answer. These requests are served inside sync_pass, before the app saves, so a trap there also throws away the pass's scanned blocks.
+
+The upstream sync::run streams (GetSubtreeRoots, GetAddressUtxos, try_collect) are uncounted too, and upstream has the same height()/hash() unwraps, so this comes from upstream and Celari's glue does not guard it.
+
+Why it is only minor. Only a malicious or broken server can do this. No honest lightwalletd sends a height over u32, a hash that is not 32 bytes, or more messages than blocks requested. An honest GetTaddressTxids answer is bounded by its range (at most about 40 blocks, the expiry delta). A malicious server can already stop the wallet from syncing by stalling, erroring or withholding blocks. No funds, keys or privacy are at stake. Nothing is saved after a trap, so stored state stays as the last save. The user can still recover: Settings stays reachable after the engine stops, and changing the server reloads with the new one. What the finding adds is a crash/reload loop with a misleading message (en.ts 'engine.stopped' blames memory or an internal error, not the server).
+- Verifier's fix: These are small changes to the glue and backend, best done after NU7.
+
+1. pass_budget.rs, batch_growing (line 225). Before the early return, end the download with a plain error, not a resize, when either holds:
+   - `blocks > current`: a GetBlockRange never legitimately answers more messages than the batch it asked for. Verify ranges are at most 10 blocks and other ranges are split by batch_size.
+   - `bytes > hard_max`, with hard_max = min_blocks x 4 MiB (tonic's per-message limit). Twenty honest blocks are at most about 40 MB.
+
+   Use Status::new(Code::DataLoss, "celari: oversized block range answer") and set `abandoned` so is_resize stays false. The pass then fails as a server error and is retried; it does not trap.
+
+2. progress.rs, ProgressCache::insert. Before on_insert and inner.insert, reject the batch if any block has height > u32::MAX, a height outside the requested range, or (when header is empty) a hash or prev_hash that is not 32 bytes. Return a cache error. This needs MemBlockCache's BlockSource/BlockCache Error to become a real error type in place of Infallible (sync::run only requires std::error::Error + Send + Sync). Do not silently drop such blocks: the gap reads as a continuity error and becomes an endless rewind loop.
+
+3. data_requests.rs:176. Cap the collected answer by bytes in proportion to the range, for example (end - start + 1) x 2 MB, and return BadData beyond it. Or decrypt each transaction as it arrives instead of collecting them all. The suggested cap of about 1,000 transactions could wrongly fail spend searches for a busy honest address, leaving a spent UTXO counted as unspent.
+
+4. A cheap copy change, optional: have the 'engine.stopped' message suggest trying another server in Settings if the problem repeats.
+
+Add mock-lwd tests for all three, as in the scratch file.
 
 ### SYNC-5 · minor · engine — No timeout on any engine gRPC call: a stalled request freezes the pass, blocks sends at 'building' and holds off auto-lock indefinitely
 - Where: crates/webzjs-wallet/src/bindgen/wallet.rs:144 (Client::new with no FetchOptions timeout); crates/webzjs-wallet/src/wallet.rs:440 (the pass takes the db write lock for its whole length) and :551 (catch_up_before_building waits for db.read()); src/state/controller.ts:527 (only catch-up passes are watched for a stall); src/state/controller.ts:440-443 (lock(), including auto-lock from App.tsx:43, is deferred while spending)
 - Scenario: While the wallet is up to date, a GetBlockRange, GetTreeState or GetLatestBlock stream stalls: a hostile or broken server, or a dead HTTP/2 connection after a network change. eng.sync() never settles, no stall warning appears because catchUp is null, the balance freezes and passes stop. The user then sends: pczt_create reaches catch_up_before_building and waits forever on db.read(), so the UI sits at 'building' with spending = true. Every auto-lock calls lock(), which only sets lockAfterSpend. The wallet stays unlocked on screen with the AES key, and the seed phrase decrypted for the send, in memory. If the stalled request later fails or finishes, the send continues to sign and broadcast long after the user gave up on it.
 - Impact: Defence-in-depth and robustness: auto-lock can be bypassed for as long as a request hangs, the user sees no error, and a delayed payment can still go out.
 - Proposed fix: Create the client with `tonic_web_wasm_client::Client::new_with_options(url, FetchOptions::new().timeout(Duration::from_secs(180)))`. The AbortGuard covers the whole response, so 180 s still fits one 32-64 MiB batch. In the app, watch every pass for STALL_MS, not just catch-up passes. In lock(), defer only once the spend has reached 'signing'. During 'building' nothing is signed or stored yet, so reloadLocked() is safe.
-- Verified: (pending)
+- Verified: **real, minor**; fix before NU7: no
+- Verifier's evidence: I reproduced the finding natively and confirmed every code reference in the patched tree (WebZjs a50df94 with patches/webzjs/0001-0004 applied fresh, engine/ next to it).
+
+1. The engine has no timeout anywhere.
+   - bindgen/wallet.rs:144 creates the transport with `Client::new(url)`. In tonic-web-wasm-client 0.9.2, `Client::new` sets `options: None`, and `FetchOptions::default().timeout` is `None`, so the `AbortGuard` never gets a timer.
+   - pass_budget.rs `BudgetedTransport`, `CountedFuture` and `CountedBody` only count bytes and refuse at batch boundaries. A request that is Pending stays Pending.
+   - wallet.rs:440 holds `db.write()` for the whole pass, including `serve_transaction_data_requests`.
+   - wallet.rs:549 calls `network_tip()` and then waits on `db.read()` at :551.
+   - Both `pczt_create` (:867) and `pczt_shield` (:748) go through this path.
+
+2. Native reproduction. Files:
+   - /tmp/claude-0/-home-user-Zcash-wallet/5e91fe3a-29e4-5243-bea0-135f18bac5ff/scratchpad/core-review/verify-SYNC-5/webzjs/crates/webzjs-wallet/src/tests/verify_sync5.rs
+   - a `stall` knob added to the scratch copy of mock_lwd.rs
+   - log: /tmp/claude-0/-home-user-Zcash-wallet/5e91fe3a-29e4-5243-bea0-135f18bac5ff/scratchpad/core-review/verify-SYNC-5/run.log
+
+   Steps: sync the wallet to the tip, then stall GetSubtreeRoots (the first request of a steady-state pass). Result:
+   - After 3 s, `sync()` was still pending, with running=true and visited=0 / scanned=0.
+   - `pczt_shield` started meanwhile was still unsettled 3 s later, stuck where the UI shows 'building'.
+   - When the stall was cleared, the pass returned Ok and the build went straight on: it reached propose and returned InsufficientFunds.
+   - So a payment that looked dead resumes as soon as the request ends. Test result: 1 passed.
+
+3. App side, confirmed:
+   - controller.ts:527 watches only catch-up passes.
+   - syncView.ts:166 maps status 'syncing' with a known network tip to 'upToDate'. During a stalled steady-state pass the UI therefore says "Up to date · block N" while the balance is frozen, and no stall warning appears.
+   - If GetLatestBlock stalls in `readTip` (controller.ts:516), `syncing` stays true and `kickSync` is a no-op, so no more passes run.
+   - A send still starts. `requireSupportedNetwork` uses the app's own fetch with its 10 s timeout (lightd.ts:164). `spendingPhrase` then decrypts the seed, and `eng.send` sets 'building'. The send then hangs in pczt_create.
+   - controller.ts:440-443: `lock()` only sets `lockAfterSpend`. App.tsx:43 sets `locked=true` after its one call, so it never retries.
+   - The wallet therefore stays unlocked on screen, with the AES key and the seed string in memory, for as long as the request hangs.
+   - Not documented. Decision 16 covers only traps and catch-up stalls. The lock.spec test 'a running send finishes before the lock' assumes a spend that ends.
+
+4. Limits on the impact:
+   - Nothing can be signed or revealed without the password. A bystander sees only what is already on screen.
+   - Funds are never at risk, and the delayed payment is the one the user confirmed. beforeBroadcast and the NU7 checks still run.
+   - Chrome fails in-flight requests on a network change (ERR_NETWORK_CHANGED). A silently dead connection ends after TCP keepalive, a few minutes. So the "dead HTTP/2 after network change" trigger is bounded in practice.
+   - The unbounded case is a server or proxy that keeps the connection open but does not answer (hostile, or a stuck backend).
+   - Minor is the right severity.
+
+5. The proposed engine fix is unsafe as written. The tonic-web-wasm-client timeout is total, not idle: the AbortGuard timer starts at request_init and lives in the response body. A 180 s limit aborts any GetBlockRange batch that downloads slower than size/180 s:
+   - 32 MiB needs about 1.5 Mbit/s and 64 MiB about 3 Mbit/s;
+   - a 10,000-block batch at today's size (about 15 MB) needs about 0.7 Mbit/s.
+   A timed-out batch is discarded, not committed. It is not classified as a resize or a budget refusal, and the next pass starts with the same batch size. On a slow or Tor link the sync would retry forever and never progress, which is a new major stuck-sync bug.
+- Verifier's fix: Make the fix in three parts, smallest and safest first.
+
+(1) App only, controller.ts. Watch every pass, not just catch-up passes, so that a stalled steady-state pass shows the existing stall warning and restart button.
+- Line 527: `const pass = this.eng.syncProgress ? this.watchPass() : null;`
+- Keep the progress bar for catch-up only: in `watchPass`, set `progress` only when `this.state.sync.catchUp` is set, and always set `stalled`.
+
+(2) App only. Stop deferring the lock while nothing has been signed or stored.
+- Record the stage in `spend()`: `this.spendStage = s` inside the `onStage` wrapper. Set it to `null` before `run()` and in `finally`.
+- In `lock()`: `if (this.state.spending && this.spendStage !== null && this.spendStage !== 'building') { this.lockAfterSpend = true; return; }`. Otherwise fall through to the existing soft-lock / `reloadLocked()` path.
+- This is safe because before 'signing', pczt_create has stored nothing that is persisted and nothing has been broadcast. Signing, proving and broadcasting keep today's deferral.
+- Add an e2e case: hold the spend at 'building', auto-lock, and expect a reload to the lock screen.
+
+(3) Engine. Use an idle timeout per request, not a total one.
+- In pass_budget.rs, wrap `CountedFuture` and `CountedBody` with a `tokio_with_wasm::time::Sleep`, already a dependency with the `time` feature. Re-arm it on every received frame, for example 120 s without any byte. On expiry return `Status::unavailable("celari: no answer from the server")`.
+- Use the same wrapper for `Wallet.client`, so that network_tip, data requests and SendTransaction are covered too.
+- Do NOT use `FetchOptions::timeout(180 s)`. Its timer covers the whole response and would make large batches fail forever on slow links.
+- If a total timeout is wanted, apply it only to unary calls: GetLatestBlock, GetTreeState, GetTransaction, SendTransaction, GetLightdInfo.
+
+Parts (1) and (2) are low-risk TS changes. Part (3) needs a wasm rebuild, a new scripts/webzjs-vendor.sha256 and a native test, for example the verify_sync5 stall test asserting an error instead of a hang.
 
 ## Lens: drift
 
@@ -1145,21 +1287,125 @@ About "14.16 olmadı mı?": the only "14.16" in the repo is Node `>=14.16` in .w
 - Scenario: An x86_64 Linux build where any input differs from the pinned set: a different clang build, a stray untracked engine file (see DRIFT-2), a poisoned .webzjs/target or cached wasm-bindgen (see DRIFT-4). build-webzjs.sh prints the diff and exits 1 but leaves the unpinned vendor/. The README recipe runs `npm run build:webzjs` and then `npm run build` as separate lines (README.md:88-90). The second command bundles that vendor/ without any signal: the dist wasm is a byte copy of vendor/ (checked here: dist/assets/webzjs_wallet_bg-*.wasm has sha256 c8fa1653..., the same as vendor/). On any non-x86_64 host the mismatch is only a warning, so this happens every time.
 - Impact: A locally built deployment (the owner deploys a dist/ by hand: vendor/ is git-ignored and README.md:113-122 describes Netlify/Cloudflare uploads) can ship a key-handling wasm that is not the reviewed, pinned one. The hash list exists to stop exactly that, but it is only enforced in CI.
 - Proposed fix: (1) In build-webzjs.sh, when the list differs and WEBZJS_LIST_MISMATCH is not `warn`, move the result aside (`mv "$OUT" "$OUT.unpinned"`) before `exit 1`. (2) Add a `prebuild` npm script, or a `buildStart` hook in vite.config.ts. It recomputes `(cd vendor && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum)` and fails `npm run build` unless the result equals scripts/webzjs-vendor.sha256. Allow an explicit opt-out (e.g. CELARI_UNPINNED_ENGINE=1) for engine development only.
-- Verified: (pending)
+- Verified: **real, minor**; fix before NU7: yes
+- Verifier's evidence: I reproduced this in a scratch clone at /tmp/claude-0/-home-user-Zcash-wallet/5e91fe3a-29e4-5243-bea0-135f18bac5ff/scratchpad/core-review/verify-DRIFT-1/repo (HEAD 65871bc). I made no edits to tracked files in /home/user/Zcash-wallet, and its git status is clean.
+
+1. **Build script leaves an unpinned vendor/ in place.** I copied the real vendor/ (it matches all 16 entries of scripts/webzjs-vendor.sha256) and appended a 38-byte custom section to vendor/webzjs-wallet/webzjs_wallet_bg.wasm. Its sha256 changed from c8fa1653... to fcf65015.... I then ran the script's own final check block (scripts/build-webzjs.sh:362-381, extracted unchanged into harness/tail.sh) on Linux x86_64 with WEBZJS_LIST_MISMATCH unset. It printed the diff and the "this vendor/ is not the pinned one" error and exited 1. The altered vendor/ was still there, untouched.
+
+2. **`npm run build` then ships it with no signal.** `npm run build` (package.json:11, `tsc --noEmit && vite build`) exited 0, with no warning in the log (build.log). dist/assets/webzjs_wallet_bg-B65Rr5TN.wasm has sha256 fcf65015..., byte for byte the altered file. vite.config.ts:43-58 only aliases vendor/. vite.webzjs.ts checks nothing. Outside build-webzjs.sh and ci.yml, nothing in the repo reads scripts/webzjs-vendor.sha256.
+
+3. **Where the claim is weaker than stated.**
+   - On x86_64 the script does print a clear error, so an operator who reads it is warned.
+   - Off x86_64 the warning-only behaviour is a documented, deliberate decision (build-webzjs.sh:64-66, ci.yml:97-101, Decision 19). That is not new evidence.
+   - CI's `celari-dist` artifact (ci.yml:329-333) is built only after the hash check, so a deploy of that artifact is safe.
+   - A compromised build machine is out of scope: it could edit dist/ directly.
+
+4. **New evidence, a more likely trigger with no message at all.** A stale vendor/ after a `git pull` that changes patches/webzjs, engine/ or the list. build-webzjs.sh is never run, so nothing is printed, and `npm run build` bundles the old engine. Engine fixes are landing in this pre-NU7 round (the review doc says "rebuild vendor/, regenerate scripts/webzjs-vendor.sha256"). A hand-built redeploy could therefore ship an engine without them. How the owner deploys is not documented anywhere: README.md:113-122 only names Netlify/Cloudflare `_headers`.
+
+5. **The fix works.** I prototyped it in the clone (diff at /tmp/claude-0/-home-user-Zcash-wallet/5e91fe3a-29e4-5243-bea0-135f18bac5ff/scratchpad/core-review/verify-DRIFT-1/vite-pinned-engine.diff). Results:
+   - the altered wasm fails the build, exit 1, with "vendor/ does not match scripts/webzjs-vendor.sha256";
+   - an extra file in vendor/ also fails it;
+   - the pinned vendor/ builds, exit 0, and tsc passes;
+   - `CELARI_UNPINNED_ENGINE=1` builds with a warning.
+   
+   The fake-engine e2e (vite dev), `test:e2e:real` (vite preview of an existing dist) and CI's app job (no build) are unaffected.
+- Verifier's fix: Minimal fix: a build-only Vite plugin in vite.config.ts, placed first in `plugins`. Prefer it over an npm `prebuild` script, which npm skips under ignore-scripts=true and which `npx vite build` does not run.
+
+`{ name: 'celari-pinned-engine', apply: 'build', buildStart() { ... } }`. The hook:
+- lists every file under vendor/ recursively (readdirSync with `{ recursive: true, withFileTypes: true }`, keeping files only);
+- names each one `./<posix relative path>` and sorts them by bytes, which is the same order as LC_ALL=C sort;
+- builds the text `${sha256hex}  ${path}\n` for each file in that order;
+- calls `this.error('vendor/ does not match scripts/webzjs-vendor.sha256: rebuild it with npm run build:webzjs')` unless that text equals the content of scripts/webzjs-vendor.sha256 exactly.
+
+It skips the check, with `this.warn`, only when CELARI_UNPINNED_ENGINE=1. That opt-out is for engine development and for non-x86_64 hosts, which by design never reproduce the list. The tested version is in the scratch diff above, about 30 lines.
+
+The reviewer's part (1), moving vendor/ aside in build-webzjs.sh on a mismatch, is optional once this plugin exists. It would also change the script's documented "left in place" behaviour.
+
+Until the fix lands, deploy only CI's `celari-dist` artifact from a main from-source run. For a local build, run `(cd vendor && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum) | cmp - scripts/webzjs-vendor.sha256` before uploading dist/.
 
 ### DRIFT-2 · minor · ci — The clean-tree guard depends on the user's git config, and engine/ reaches cargo through a symlink to the working tree
 - Where: scripts/build-webzjs.sh:112 (`git -C "$ROOT" status --porcelain -- patches/webzjs engine`); patches/webzjs/0003 adds `celari-engine -> ../engine`; engine/zcash_client_memory/Cargo.toml [package] has no `build = false`
 - Scenario: With `status.showUntrackedFiles=no` in ~/.gitconfig (a common large-repo setting), `git status --porcelain` lists no untracked files. Reproduced in a scratch clone: an untracked engine/zcash_client_memory/build.rs is listed by default but produces empty output under `-c status.showUntrackedFiles=no`. Files ignored through .git/info/exclude or core.excludesFile are never listed either. Because cargo compiles engine/ through the symlink, such a file reaches the build: cargo runs any engine/zcash_client_memory/build.rs automatically. That build script can set cfgs or env, or emit link args, for a crate that holds the wallet's notes and keys.
 - Impact: Uncommitted, unreviewed code can reach the engine build. On x86_64 Linux the final hash comparison still catches it (and then DRIFT-1 applies). Off x86_64 it is only a warning. CI is unaffected, because its checkout is clean.
 - Proposed fix: Use `git -C "$ROOT" status --porcelain --untracked-files=all --ignored=matching -- patches/webzjs engine` (filtering out engine/**/target if wanted). Better: after the patches are applied, replace the `celari-engine` symlink with a directory extracted from `git -C "$ROOT" archive HEAD engine`, at the same relative path so the panic paths and the output stay identical. Then only committed content can reach cargo. Also add `build = false` to the [package] section of engine/zcash_client_memory/Cargo.toml.
-- Verified: (pending)
+- Verified: **real, minor**; fix before NU7: no
+- Verifier's evidence: I reproduced this in a scratch clone of HEAD 65871bc, at /tmp/claude-0/-home-user-Zcash-wallet/5e91fe3a-29e4-5243-bea0-135f18bac5ff/scratchpad/core-review/verify-DRIFT-2/clone. No tracked file in the real repo was changed.
+
+1. The guard at scripts/build-webzjs.sh:112 is `git status --porcelain -- patches/webzjs engine`, and it depends on the user's git config. I added an untracked engine/zcash_client_memory/build.rs:
+   - With default config the guard prints `?? engine/zcash_client_memory/build.rs`, and `WEBZJS_PREPARE_ONLY=1 bash scripts/build-webzjs.sh` stops with "uncommitted changes".
+   - With `status.showUntrackedFiles=no` (passed as GIT_CONFIG_COUNT/KEY/VALUE env, which the script does not refuse) the same run applies 0001-0004 and prints "Prepared ...". The file is then visible as .webzjs/celari-engine/zcash_client_memory/build.rs, through the symlink `celari-engine -> ../engine`.
+   - Listing the file in .git/info/exclude also gives empty output, even with `--untracked-files=all`.
+   - I found two more bypasses that work even with default config. An untracked engine/zcash_client_memory/.gitignore containing `build.rs` and `.gitignore` hides both files. A tracked engine file marked `git update-index --skip-worktree` can be edited without status showing it.
+
+2. Cargo would build the file. In the prepared .webzjs/crates/webzjs-wallet, `cargo +nightly-2026-10-28 metadata --locked --offline` lists zcash_client_memory with a `custom-build` target at celari-engine/zcash_client_memory/build.rs. engine/zcash_client_memory/Cargo.toml has no `build` key, so cargo picks the file up automatically.
+   - A toy workspace with the same layout (path dependency through a symlink to ../engine, excluded from members) ran an untracked build.rs, which set `cargo:rustc-cfg=injected`, and the library's output changed to "INJECTED".
+   - With `build = false` in the toy [package], the build.rs was ignored and the output was "clean".
+
+3. The impact is limited:
+   - Only build.rs is picked up automatically for a library dependency. Other untracked .rs files are inert unless a tracked file declares them, which CI would catch. Untracked patches are never applied, because the script uses `git ls-files` for them.
+   - On x86_64 Linux the final hash comparison fails the build whenever the stray file changes the output. Off x86_64 it is a warning, as the docs already say for those hosts.
+   - CI builds from a clean checkout and ships vendor/ only when it matches scripts/webzjs-vendor.sha256. Users' wasm therefore cannot carry such a file unless someone deploys a vendor/ built locally and ignores the warning or error (see DRIFT-1).
+   - Anyone who can plant files in the developer's working tree can already change cargo, rustup or the shell profile. So this is not a security boundary. It is a gap in the documented guarantee ("uncommitted changes stop the build", patches/webzjs/README.md:6, docs/engine-port.md:388) for accidental leftovers.
+   - No prior decision in docs/engine-port.md or patches/webzjs/README.md covers this. scripts/test-build-webzjs-guards.sh does not test the clean-tree guard.
+- Verifier's fix: Minimal fix, which does not change the wasm:
+
+(a) In scripts/build-webzjs.sh:112-115, check three things instead of plain `git status`, so that git config, ignore files and index flags cannot hide anything:
+```
+dirty="$(git -C "$ROOT" status --porcelain --untracked-files=all -- patches/webzjs engine
+  git -C "$ROOT" ls-files --others --directory -- patches/webzjs engine | grep -v -E '^engine/(.+/)?target/$' || true
+  git -C "$ROOT" ls-files -v -- patches/webzjs engine | grep -v '^H ' || true)"
+if [ -n "$dirty" ]; then echo "error: patches/webzjs or engine has uncommitted, untracked or index-hidden files:" >&2; echo "$dirty" >&2; exit 1; fi
+```
+- `--untracked-files=all` overrides status.showUntrackedFiles.
+- `ls-files --others` with no exclude options also lists files hidden by info/exclude, core.excludesFile or an untracked .gitignore. Only the committed `engine/**/target/` is filtered out.
+- `ls-files -v` catches skip-worktree (S) and assume-unchanged (lowercase) entries.
+
+Do not use the `--ignored=matching` variant the finding proposes as is: it reports engine/zcash_client_memory/target/ after a manual `cargo test` there and fails spuriously.
+
+(b) Add `build = false` to the [package] section of engine/zcash_client_memory/Cargo.toml. This closes the only channel cargo discovers automatically. Changing engine/ invalidates the CI cache key, so confirm the rebuilt vendor/ still matches scripts/webzjs-vendor.sha256.
+
+(c) Optionally add a case for an untracked engine/zcash_client_memory/build.rs under status.showUntrackedFiles=no to scripts/test-build-webzjs-guards.sh.
+
+Not needed now: replacing the symlink with a `git archive HEAD engine` copy. It is the strongest option, but it changes the build pipeline and what the native glue tests see, and it would need the hash list re-verified.
 
 ### DRIFT-3 · minor · engine — The native test script tests whatever is in .webzjs/ and engine/, not the committed patches and sources
 - Where: scripts/test-engine-native.sh:75-86 (glue mode only compares .webzjs/Cargo.lock with engine/webzjs.Cargo.lock); :89-120 (backend mode compiles the engine/ working tree with no uncommitted-change check); patches/webzjs/README.md tells developers to edit files inside .webzjs/
 - Scenario: A developer follows the README workflow and edits, for example, UPGRADE_SEND_PAUSE in .webzjs/crates/webzjs-wallet/src/boundary.rs. They then run `scripts/test-engine-native.sh glue`, which passes on the edited code, but leave a hunk out of the regenerated 0004 patch. The build resets .webzjs/ and applies the committed 0004, so the shipped wasm differs from what was tested. The same applies to uncommitted engine/ edits in backend mode: build-webzjs.sh refuses them, test-engine-native.sh does not. For this review I ran both suites on a fresh checkout of HEAD: backend 198 passed, 0 failed, 6 ignored; glue 68 passed, 0 failed. So the current documented results do hold.
 - Impact: The test evidence recorded in docs/engine-port.md (the Tests table) is the main evidence for the NU7 boundary and spend logic. It can silently describe code that is not what ships.
 - Proposed fix: In glue mode, first run `WEBZJS_PREPARE_ONLY=1 bash "$ROOT/scripts/build-webzjs.sh"`. It resets .webzjs/ to the pinned commit plus the committed patches and keeps target/. In backend mode, refuse when `git status --porcelain --untracked-files=all -- engine` is non-empty. In both modes, offer an explicit `--dirty` flag for work in progress, and print it on the result line.
-- Verified: (pending)
+- Verified: **real, minor**; fix before NU7: no
+- Verifier's evidence: The mechanism is real and I reproduced it. It affects developer tooling only: nothing changes in what ships and no user funds are at risk. All test runs were in a scratch clone of HEAD 65871bc at /tmp/claude-0/-home-user-Zcash-wallet/5e91fe3a-29e4-5243-bea0-135f18bac5ff/scratchpad/core-review/verify-DRIFT-3/repo, with logging stubs for cargo, rustup and rustc on PATH. I made no edits to tracked files and did not touch the shared .webzjs/.
+
+1. Backend mode (scripts/test-engine-native.sh:89-120). I appended a line to engine/zcash_client_memory/src/lib.rs, so `git status` shows ` M engine/...`. The script printed its usual result line and ran `cargo test --locked --lib ...` in engine/zcash_client_memory, exit 0. With the same tree, scripts/build-webzjs.sh:112-116 stops with "error: patches/webzjs or engine has uncommitted changes". So the test script accepts a tree that the build refuses.
+
+2. Glue mode (scripts/test-engine-native.sh:75-86). I prepared .webzjs/ from the committed patches with WEBZJS_PREPARE_ONLY=1. I then changed `pub const UPGRADE_SEND_PAUSE: u32 = 10;` to `0` in .webzjs/crates/webzjs-wallet/src/boundary.rs:36 and made engine/ dirty. The script ran `cargo test --locked -p webzjs-wallet ...`, exit 0. Its only checks are that Cargo.toml exists and that the Cargo.lock files compare equal (`cmp`). Glue mode also compiles the engine/ working tree, through the symlink .webzjs/celari-engine -> ../engine that 0003 adds, so a dirty engine/ gets into the glue suite as well. The finding only mentions this for backend mode.
+
+3. The developer workflow in patches/webzjs/README.md:67-77 has the developer edit inside .webzjs/. Nothing ties the glue tests to the committed 0004: build-webzjs.sh:123-141 resets the tree and re-applies the committed patches only when it runs.
+
+Limits of the finding:
+- The documented glue command, `bash scripts/build-webzjs.sh && scripts/test-engine-native.sh glue` (docs/engine-port.md:441, README.md:42), already tests committed code: the build refuses a dirty tree and resets .webzjs/ first.
+- What ships always comes from committed sources (CI, the pinned sha256 list).
+- The reviewer re-ran both suites on a clean HEAD and got the same numbers as the docs: 198/0/6 and 68/0. No recorded evidence is wrong today.
+- The only weak wording is the backend row at docs/engine-port.md:440: "with the same sources and lockfile from the engine's working tree".
+
+The proposed fix is not safe as written. It would run `WEBZJS_PREPARE_ONLY=1 build-webzjs.sh` by default in glue mode, and that discards a developer's work in .webzjs/ without warning. I reproduced this: I committed a "base" inside .webzjs, as the README says, then added a WIP line to boundary.rs. A PREPARE_ONLY run exited 0 and removed the WIP line (count 0). The reason is `git checkout --force` plus `git clean` at build-webzjs.sh:124-127. A test command that resets by default would destroy the edit-then-test loop the README describes.
+- Verifier's fix: This touches only scripts/test-engine-native.sh and scripts/build-webzjs.sh, and does not change what goes into the wasm. It refuses instead of resetting.
+
+(a) In both modes, before running cargo, apply the build's own check, because glue compiles ../engine too:
+`dirty="$(git -C "$ROOT" status --porcelain -- patches/webzjs engine)"; if [ -n "$dirty" ] && [ "$allow_dirty" != 1 ]; then echo "error: uncommitted changes in patches/webzjs or engine (the build would refuse them); commit them or pass --dirty" >&2; git -C "$ROOT" status --short -- patches/webzjs engine >&2; exit 1; fi`
+
+(b) Glue mode. In build-webzjs.sh, right after `cp "$LOCKFILE" "$SRC/Cargo.lock"` and before the PREPARE_ONLY exit, record a stamp of the prepared tree:
+`idx="$(mktemp)"; GIT_INDEX_FILE="$idx" git -C "$SRC" add -A; echo "$(GIT_INDEX_FILE="$idx" git -C "$SRC" write-tree) $(git -C "$ROOT" rev-parse HEAD:patches/webzjs)" > "$SRC/target/celari-prepared"; rm -f "$idx"`
+target/ is ignored, so `git clean` keeps the stamp and `add -A` leaves it out. In glue mode, the test script recomputes the same two values with a temporary index. If they differ from the stamp, it refuses with "error: .webzjs/ is not the committed patches (edited after scripts/build-webzjs.sh, or patches changed since); run scripts/build-webzjs.sh again or pass --dirty".
+
+(c) Parse a leading `--dirty` flag that skips (a) and (b). When it is used, print "(DIRTY: uncommitted working tree, not what ships)" on the "glue tests:" and "backend tests:" lines.
+
+Do not make glue mode run PREPARE_ONLY by default.
+
+Until this lands:
+- Run the glue suite only through the documented `bash scripts/build-webzjs.sh && scripts/test-engine-native.sh glue`.
+- Run the backend suite only on a clean `git status -- engine patches/webzjs`.
+- Reword docs/engine-port.md:440 to state that the second run was on committed sources, which the reviewer's clean-HEAD run confirms.
 
 ### DRIFT-4 · polish · ci — Cached tool binaries are trusted by their --version string; only wasm-opt is re-hashed
 - Where: scripts/build-webzjs.sh:241-245 (wasm-bindgen-cli); scripts/audit-engine.sh:76-82 (cargo-deny); scripts/gen-licenses.sh:121-128 (cargo-about); compare scripts/build-webzjs.sh:254 (wasm-opt is checksum-checked on every run)
