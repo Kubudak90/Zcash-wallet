@@ -3,11 +3,16 @@
 //
 // Secrets policy: the seed phrase is only decrypted for the moment it is
 // needed (adding the account, signing, revealing it) and is never kept in
-// state. While unlocked, only the derived AES key stays in memory so the
-// wallet database can be re-encrypted after each sync. Locking reloads the
-// page, which drops the key and the wasm memory together; during a catch-up
-// pass the lock screen shows first and the reload waits until the pass is
-// saved (see lock()).
+// state. While unlocked, only the database key stays in memory so the
+// wallet database can be re-encrypted after each sync. A vault of version 2
+// seals the secret under a different key, so that one cannot open it; a
+// version 1 vault, which this release still writes, can (lib/vault.ts, review
+// round 7, VAULT-1). Locking reloads the page, which drops the key and the wasm
+// memory together; during a catch-up pass the lock screen shows first and the
+// reload waits until the pass is saved (see lock()).
+//
+// One page at a time opens the wallet (lib/tabLock.ts): every page saves its own
+// copy of the database over the stored one.
 
 import {
   EngineStoppedError,
@@ -24,6 +29,7 @@ import {
 import { isShieldedOnlyUnified } from '../lib/address';
 import { canSpend, nextCheck, type NetworkCheck } from '../lib/network';
 import { storage, type Settings, type WalletMeta } from '../lib/storage';
+import { holdTabLock, type ReleaseTabLock } from '../lib/tabLock';
 import { CATCH_UP_BLOCKS, STALL_MS, catchUpFor, type QueueReading, type SyncInfo } from '../lib/syncView';
 import { createVault, decryptDb, encryptDb, unlockVault, type Secret, type VaultRecord } from '../lib/vault';
 
@@ -97,6 +103,17 @@ export class WalletDataError extends Error {
   }
 }
 
+/**
+ * Another Celari page (tab or window) has a wallet open, so this one does not open or write
+ * anything (lib/tabLock.ts). Nothing was changed.
+ */
+export class OtherTabError extends Error {
+  constructor() {
+    super('Celari has the wallet open in another tab or window');
+    this.name = 'OtherTabError';
+  }
+}
+
 /** A spend refused before anything left the wallet: the network check did not say yes (see canSpend). */
 export class NetworkNotSupportedError extends Error {
   constructor() {
@@ -115,6 +132,13 @@ function confirmLeave(e: BeforeUnloadEvent) {
 export class WalletController {
   private engine: ZcashEngine | null = null;
   private key: CryptoKey | null = null;
+  /**
+   * The salt of the vault `key` belongs to. A save is written only while the stored vault
+   * still has it: another page may have removed the wallet, or replaced it (storage.setDb).
+   */
+  private vaultSalt: string | null = null;
+  /** Held from opening a wallet until the page unloads (lib/tabLock.ts). */
+  private tabLock: ReleaseTabLock | null = null;
   private listeners = new Set<() => void>();
   private syncTimer: ReturnType<typeof setTimeout> | null = null;
   private lockAfterSpend = false;
@@ -216,22 +240,37 @@ export class WalletController {
 
   // --- create / restore / unlock ---------------------------------------------
 
+  /**
+   * Creates (or restores) a wallet and stores it. Throws OtherTabError while another page
+   * has a wallet open, and storage's WalletExistsError when another page stored one since
+   * this page showed onboarding; neither writes anything.
+   */
   async createWallet(secret: Secret, birthday: number, password: string): Promise<void> {
-    const { record, key } = await createVault(password, secret);
+    await this.takeTabLock();
+    let record: VaultRecord;
+    let key: CryptoKey;
+    let meta: WalletMeta;
+    try {
+      ({ record, key } = await createVault(password, secret));
 
-    await this.eng.open(null);
-    const accountId = await this.addAccount(secret, birthday);
-    const meta: WalletMeta = {
-      kind: secret.kind === 'seed' ? 'seed' : 'view',
-      birthday,
-      createdAt: Date.now(),
-      accountId,
-    };
-    const db = await encryptDb(key, await this.eng.exportDb());
-    await storage.saveWallet(record, meta, db);
+      await this.eng.open(null);
+      const accountId = await this.addAccount(secret, birthday);
+      meta = {
+        kind: secret.kind === 'seed' ? 'seed' : 'view',
+        birthday,
+        createdAt: Date.now(),
+        accountId,
+      };
+      const db = await encryptDb(key, await this.eng.exportDb());
+      await storage.saveWallet(record, meta, db);
+    } catch (e) {
+      this.releaseTabLock();
+      throw e;
+    }
 
     this.key = key;
-    this.set({ meta, accountId, upgradeRescan: false });
+    this.vaultSalt = record.kdf.salt;
+    this.set({ meta, accountId: meta.accountId ?? null, upgradeRescan: false });
     await this.enterReady();
   }
 
@@ -250,8 +289,23 @@ export class WalletController {
     if (this.lockAfterPass) return this.unlockSoft(record, password);
 
     // Throws WrongPasswordError before anything else happens.
-    const { secret, key } = await unlockVault(record, password);
+    const { secret, key } = await this.openVault(record, password);
+    // Before anything is opened or written: another page with the wallet open would save over it.
+    await this.takeTabLock();
+    try {
+      await this.openDatabase(record, meta, secret, key);
+    } catch (e) {
+      this.releaseTabLock();
+      throw e;
+    }
 
+    this.key = key;
+    this.vaultSalt = record.kdf.salt;
+    await this.enterReady();
+  }
+
+  /** unlock()'s part after the password: opens the stored database, or rebuilds it (see unlock()). */
+  private async openDatabase(record: VaultRecord, meta: WalletMeta, secret: Secret, key: CryptoKey): Promise<void> {
     const blob = await storage.getDb();
     let accountId: number | null = null;
     let oldFormat = false;
@@ -299,23 +353,25 @@ export class WalletController {
       const ours = existing ? await decryptDb(key, existing).then(() => true, () => false) : false;
       const legacy = oldFormat && !ours ? blob! : null;
       const next: WalletMeta = { ...meta, accountId };
-      await storage.replaceDb(db, next, legacy);
+      await storage.replaceDb(db, next, legacy, record.kdf.salt);
       upgradeRescan ||= oldFormat;
       this.set({ meta: next, accountId, upgradeRescan });
     } else {
       this.set({ meta, accountId, upgradeRescan });
     }
-
-    this.key = key;
-    await this.enterReady();
   }
 
   /** Ends a soft lock (see lock()): checks the password and returns to the pass that kept running. */
   private async unlockSoft(record: VaultRecord, password: string): Promise<void> {
+    // Removed or replaced in another page meanwhile: the pass here belongs to a wallet that is gone.
+    if (record.kdf.salt !== this.vaultSalt) {
+      this.walletGone();
+      throw new Error('the wallet was removed or replaced in another tab');
+    }
     this.unlocking = true;
     try {
       // Throws WrongPasswordError; the decrypted secret is dropped at once.
-      await unlockVault(record, password);
+      await this.openVault(record, password);
     } catch (e) {
       // The pass ended during the attempt, and its reload waited for it.
       if (!this.syncing) this.reloadLocked();
@@ -327,6 +383,54 @@ export class WalletController {
     this.set({ phase: 'ready', softLocked: false });
     // A pass that ended during the attempt did not schedule the next one.
     if (!this.syncing) this.kickSync();
+  }
+
+  /**
+   * unlockVault, and the vault stored again when it comes back upgraded to the version this
+   * Celari writes (lib/vault.ts, VAULT_WRITE_VERSION). Only the vault is written, only while
+   * the stored one has the same salt; a failed write leaves the old one, which still opens.
+   */
+  private async openVault(record: VaultRecord, password: string): Promise<{ secret: Secret; key: CryptoKey }> {
+    const { secret, key, upgraded } = await unlockVault(record, password);
+    if (upgraded) {
+      await storage.upgradeVault(upgraded).catch((e) => console.warn('could not store the upgraded vault', e));
+    }
+    return { secret, key };
+  }
+
+  /**
+   * Takes the single-page lock (lib/tabLock.ts) before this page opens a wallet; throws
+   * OtherTabError while another page holds it. Without Web Locks (Safari before 15.4) it
+   * goes on: the stored-vault checks of setDb, replaceDb and saveWallet still keep a stale
+   * page from writing over another wallet.
+   */
+  private async takeTabLock(): Promise<void> {
+    if (this.tabLock) return;
+    const locks = (navigator as Partial<Navigator>).locks;
+    if (!locks) {
+      console.warn('no Web Locks: another tab is not kept from opening this wallet');
+      return;
+    }
+    const release = await holdTabLock(locks);
+    if (!release) throw new OtherTabError();
+    this.tabLock = release;
+  }
+
+  /** Gives the single-page lock back: an attempt to open a wallet failed after taking it. */
+  private releaseTabLock(): void {
+    this.tabLock?.();
+    this.tabLock = null;
+  }
+
+  /**
+   * The stored wallet is not the one this page has open any more: another page removed it,
+   * or removed it and stored another. Nothing more is saved from here; the page reloads, to
+   * the lock screen of what is stored now, or to Welcome.
+   */
+  private walletGone(): void {
+    console.warn('the wallet was removed or replaced in another tab');
+    window.removeEventListener('beforeunload', confirmLeave);
+    this.reloadLocked();
   }
 
   private addAccount(secret: Secret, birthday: number): Promise<number> {
@@ -427,8 +531,12 @@ export class WalletController {
     // Nothing secret comes out of a locked wallet, soft-locked included, so no spend can start either.
     if (this.state.phase !== 'ready') throw new Error('the wallet is locked');
     const record = await storage.getVault();
-    if (!record) throw new Error('no wallet');
-    return (await unlockVault(record, password)).secret;
+    // Never another wallet's secret: one stored by another page since this one opened its own.
+    if (record?.kdf.salt !== this.vaultSalt) {
+      this.walletGone();
+      throw new Error('the wallet was removed or replaced in another tab');
+    }
+    return (await this.openVault(record!, password)).secret;
   }
 
   async viewingKeyFor(secret: Secret): Promise<string> {
@@ -459,6 +567,7 @@ export class WalletController {
   /** Drops the key and, with the page, the wasm memory. */
   private reloadLocked(): void {
     this.key = null;
+    this.vaultSalt = null;
     window.location.reload();
   }
 
@@ -709,11 +818,16 @@ export class WalletController {
     const run = this.persisting.then(async () => {
       const key = this.key;
       if (!key) return false;
+      const salt = this.vaultSalt!;
       const blob = await encryptDb(key, await this.eng.exportDb());
       // Wiped meanwhile (a soft lock leaves the wipe button on screen while a
       // pass runs): writing now would bring the removed database back.
       if (this.key !== key) return false;
-      await storage.setDb(blob);
+      // The same, from another page: written only while the stored vault is still this one.
+      if (!(await storage.setDb(blob, salt))) {
+        this.walletGone();
+        return false;
+      }
       return true;
     });
     this.persisting = run.catch(() => undefined);
