@@ -4,7 +4,9 @@ import { Notice, Screen } from '../components/ui';
 import { useI18n } from '../i18n';
 import { newWalletBirthday } from '../lib/birthday';
 import { newSeedPhrase, pickVerificationPositions } from '../lib/seed';
+import { Icon } from '../components/icons';
 import { useController } from '../state/wallet';
+import { Flow } from './AccountLayout';
 import { PasswordSetup } from './PasswordSetup';
 
 type Step = 'seed' | 'verify' | 'password';
@@ -52,31 +54,44 @@ export function CreateWallet({ onCancel }: { onCancel: () => void }) {
 
   if (step === 'seed') {
     return (
-      <Screen title={t('create.seedTitle')} onBack={onCancel}>
-        <p className="muted">{t('create.seedIntro')}</p>
-        <Notice tone="warn">
-          <ul className="plain">
-            <li>{t('create.seedWarn1')}</li>
-            <li>{t('create.seedWarn2')}</li>
-            <li>{t('create.seedWarn3')}</li>
-          </ul>
-        </Notice>
-        <div className="seed-wrap">
-          <SeedGrid ref={grid} phrase={phrase} hidden={!revealed} />
-          {!revealed && (
-            <button type="button" className="secondary reveal" onClick={() => setRevealed(true)}>
-              {t('create.reveal')}
-            </button>
-          )}
-        </div>
-        <label className="check">
-          <input type="checkbox" checked={wroteDown} disabled={!revealed} onChange={(e) => setWroteDown(e.target.checked)} />
-          {t('create.wroteDown')}
-        </label>
-        <button type="button" className="primary" disabled={!revealed || !wroteDown} onClick={() => setStep('verify')}>
-          {t('common.continue')}
-        </button>
-      </Screen>
+      <Flow step={1}>
+        <Screen title={t('create.seedTitle')} onBack={onCancel}>
+          <p className="muted">{t('create.seedIntro')}</p>
+          <Notice tone="warn">
+            <ul className="plain">
+              <li>{t('create.seedWarn1')}</li>
+              <li>{t('create.seedWarn2')}</li>
+              <li>{t('create.seedWarn3')}</li>
+            </ul>
+          </Notice>
+          <div className={revealed ? 'seed-wrap' : 'seed-wrap covered'}>
+            <SeedGrid ref={grid} phrase={phrase} hidden={!revealed} />
+            {!revealed && (
+              <button type="button" className="secondary reveal" onClick={() => setRevealed(true)}>
+                <Icon name="eye" />
+                {t('create.reveal')}
+              </button>
+            )}
+          </div>
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={wroteDown}
+              disabled={!revealed}
+              onChange={(e) => setWroteDown(e.target.checked)}
+            />
+            {t('create.wroteDown')}
+          </label>
+          <button
+            type="button"
+            className="primary"
+            disabled={!revealed || !wroteDown}
+            onClick={() => setStep('verify')}
+          >
+            {t('common.continue')}
+          </button>
+        </Screen>
+      </Flow>
     );
   }
 
@@ -89,29 +104,34 @@ export function CreateWallet({ onCancel }: { onCancel: () => void }) {
       if (ok) setStep('password');
     };
     return (
-      <Screen title={t('create.verifyTitle')} onBack={() => setStep('seed')}>
-        <p className="muted">{t('create.verifyIntro')}</p>
-        <form className="stack" onSubmit={submit}>
-          {positions.map((p, i) => (
-            <label key={p} className="field">
-              <span>{t('create.wordN', { n: p + 1 })}</span>
-              <input
-                name={`word-${p + 1}`}
-                autoComplete="off"
-                autoCapitalize="none"
-                spellCheck={false}
-                autoFocus={i === 0}
-                value={answers[i]}
-                onChange={(e) => setAnswers((a) => a.map((v, j) => (j === i ? e.target.value : v)))}
-              />
-            </label>
-          ))}
-          {verifyFailed && <Notice tone="error">{t('create.verifyError')}</Notice>}
-          <button type="submit" className="primary" disabled={answers.some((a) => a.trim() === '')}>
-            {t('common.continue')}
-          </button>
-        </form>
-      </Screen>
+      <Flow step={2}>
+        <Screen title={t('create.verifyTitle')} onBack={() => setStep('seed')}>
+          <p className="muted">{t('create.verifyIntro')}</p>
+          <form className="stack" onSubmit={submit}>
+            <div className="verify-words">
+              {positions.map((p, i) => (
+                <label key={p} className="field">
+                  <span>{t('create.wordN', { n: p + 1 })}</span>
+                  <input
+                    name={`word-${p + 1}`}
+                    className="mono"
+                    autoComplete="off"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    autoFocus={i === 0}
+                    value={answers[i]}
+                    onChange={(e) => setAnswers((a) => a.map((v, j) => (j === i ? e.target.value : v)))}
+                  />
+                </label>
+              ))}
+            </div>
+            {verifyFailed && <Notice tone="error">{t('create.verifyError')}</Notice>}
+            <button type="submit" className="primary" disabled={answers.some((a) => a.trim() === '')}>
+              {t('common.continue')}
+            </button>
+          </form>
+        </Screen>
+      </Flow>
     );
   }
 
