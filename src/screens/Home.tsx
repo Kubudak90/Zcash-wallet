@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import { useEffect, useId, useRef, type CSSProperties } from 'react';
 
 import { Icon } from '../components/icons';
 import { TxRow, useFractionWidth } from '../components/TxRow';
@@ -94,10 +94,21 @@ export function Home({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
   const split = !!b && (balances.hidden || shieldedTotal(b) + b.transparent > 0n);
   // "49,799 blocks left": the part of the sync label after its first " · ".
   const blocksLeft = sync.kind === 'syncing' ? syncLabel(sync, t, lang).split(' · ').slice(1).join(' · ') : '';
+  const total = b ? grandTotal(b) : 0n;
+
+  // Not wrapped in <Screen>, so it applies Screen's first-mount rule itself: coming back from
+  // Shield (Back or Close) unmounts the button that had focus, and the heading takes it.
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    const active = document.activeElement;
+    if (!active || active === document.body) heading.current?.focus();
+  }, []);
 
   return (
     <section className="screen home">
-      <h1 className="visually-hidden">{t('nav.home')}</h1>
+      <h1 className="visually-hidden" tabIndex={-1} ref={heading}>
+        {t('nav.home')}
+      </h1>
       <div className="dashboard">
         <section className="card hero" aria-labelledby={totalId}>
           <div className="hero-top">
@@ -120,14 +131,20 @@ export function Home({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
           <div className={b ? 'balance-total' : 'balance-total balance-waiting'} data-testid="balance-total">
             {b ? (
               <>
-                <span className="amt">
-                  <AmountParts zats={grandTotal(b)} />
+                {/* --chars sizes the figure to one line (styles.css). Never while hidden: the
+                    mask's size would tell how large the balance is. */}
+                <span
+                  className="amt"
+                  style={balances.hidden ? undefined : ({ '--chars': fmt(total).length } as CSSProperties)}
+                >
+                  <AmountParts zats={total} />
                 </span>{' '}
                 <span className="unit">ZEC</span>
               </>
             ) : (
               // No figure yet: a calm sentence, not a dash at display size.
-              <span className="balance-wait">{t('home.balanceWaiting')}</span>
+              // Stopped, no sync runs until a reload: say that rather than "as the sync goes on".
+              <span className="balance-wait">{t(sync.kind === 'stopped' ? 'home.balanceStopped' : 'home.balanceWaiting')}</span>
             )}
           </div>
           {/* Shielded payments since NU6.3 land in Ironwood, which an engine without it does not see. */}
@@ -277,6 +294,9 @@ export function Home({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
           {history.length === 0 ? (
             // The same words as History's empty state, so an empty wallet reads alike on both screens.
             <div className="card-empty">
+              <span className="history-empty-icon" aria-hidden="true">
+                <Icon name="history" />
+              </span>
               <p>{t('history.empty')}</p>
               <p className="muted small">{t('history.emptyHelp')}</p>
             </div>

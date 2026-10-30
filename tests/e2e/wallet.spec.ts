@@ -42,7 +42,7 @@ test('create, receive, send, shield, lock and unlock', async ({ page }) => {
   await nav(page, 'History');
   const history = page.getByTestId('history');
   await expect(history.locator('.tx').first()).toContainText('Sent');
-  await expect(history.locator('.tx').first()).toContainText('-0.5001');
+  await expect(history.locator('.tx').first()).toContainText(/[-\u2212]0\.5001/);
   await expect(history).toContainText('Received');
 
   // Shield the transparent balance.

@@ -9,6 +9,7 @@
 
 /* These screens lay out their own columns: wider than the shared reading measure. */
 .content > .screen:not(.home) > .spend-layout,
+.content > .screen:not(.home) > .send-blocked,
 .content > .screen:not(.home) > .receive-layout,
 .content > .screen:not(.home) > .history-card,
 .content > .screen:not(.home) > .history-empty {
@@ -79,10 +80,10 @@
   margin: 0;
 }
 
-/* The recipient, in the monospace face, as tall as the address it holds. */
+/* The recipient, in the monospace face, as tall as the address it holds; 16px
+   on phones (iOS zooms into a smaller focused field), 14px from 1024px. */
 textarea.address-input {
   min-height: 0;
-  font-size: 0.875rem;
   line-height: 1.65;
   letter-spacing: 0.01em;
 }
@@ -99,7 +100,6 @@ textarea.address-input {
 textarea.memo {
   min-height: 96px;
   font-family: inherit;
-  font-size: 0.9375rem;
   word-break: normal;
   overflow-wrap: anywhere;
 }
@@ -208,6 +208,11 @@ textarea.memo {
   --tone: var(--muted);
 }
 
+/* Partly shielded: History's half mark. */
+.kind-partial {
+  --tone: var(--warn);
+}
+
 .kind-mark {
   flex: none;
   width: 8px;
@@ -218,6 +223,10 @@ textarea.memo {
 
 .kind-shielded .kind-mark {
   background: var(--tone);
+}
+
+.kind-partial .kind-mark {
+  background: linear-gradient(90deg, var(--tone) 50%, transparent 50%);
 }
 
 .kind-unknown .kind-mark {
@@ -258,11 +267,15 @@ textarea.memo {
   padding: 22px 20px 20px;
 }
 
+/* The figure sizes itself to the line (--chars is its length, Send.tsx): it
+   never breaks inside the number or runs out of the card; the unit may wrap. */
 .preview-figure {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: 10px;
+  gap: 4px 10px;
   margin-top: 14px;
+  container-type: inline-size;
 }
 
 .figure {
@@ -276,7 +289,9 @@ textarea.memo {
 }
 
 .preview-figure .figure {
-  font-size: 2.75rem;
+  white-space: nowrap;
+  font-size: 2.75rem; /* where container units are not supported */
+  font-size: min(2.75rem, calc(96cqi / (var(--chars, 4) * 0.55)));
 }
 
 .preview-figure.empty .figure {
@@ -416,6 +431,7 @@ textarea.memo {
   grid-row: 1;
   padding: 0 0 16px;
   border-bottom: 0;
+  container-type: inline-size;
 }
 
 /* From and To on Shield: a mark and words, no outline (a list of two, not tags). */
@@ -444,21 +460,28 @@ textarea.memo {
 
 .summary-hero > div.summary-amount dd {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: 10px;
+  gap: 4px 10px;
   text-align: left;
+  word-break: normal;
+  overflow-wrap: normal;
+}
+
+/* The last amount check before signing: never broken inside the number or
+   the unit; the figure shrinks to its column (--chars, Send.tsx / Shield.tsx).
+   0.55em is the widest tabular digit, "0", with its tracking. */
+.summary-hero .summary-amount .figure,
+.summary-hero .summary-amount .unit {
+  white-space: nowrap;
 }
 
 .summary-hero .summary-amount .figure {
-  font-size: 2.5rem;
+  font-size: 2.5rem; /* where container units are not supported */
+  font-size: min(var(--figure-max, 2.5rem), calc(96cqi / (var(--chars, 12) * 0.55)));
 }
 
-.summary-hero > div.summary-to,
-.summary-hero > div.summary-move:first-child {
-  border-top: 1px solid var(--border);
-}
-
-.spend-summary .summary + .summary {
+.summary-hero > div.summary-to {
   border-top: 1px solid var(--border);
 }
 
@@ -605,13 +628,20 @@ textarea.memo {
   gap: 22px;
 }
 
+/* A spend's stages. */
 .stages {
-  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
 }
 
 /* A fixed mark column (spend.spec checks every label starts at the same x). */
 .stages li {
   position: relative;
+  display: grid;
+  align-items: start;
   grid-template-columns: 28px minmax(0, 1fr);
   gap: 14px;
   padding-bottom: 18px;
@@ -646,15 +676,13 @@ textarea.memo {
 .stages .stage-icon {
   position: relative;
   z-index: 1;
+  display: grid;
+  place-items: center;
   width: 28px;
   height: 28px;
   border: 1px solid var(--input-border);
   border-radius: 50%;
   background: var(--surface);
-}
-
-.stages .stage-icon:empty::before {
-  content: none;
 }
 
 .stages li.done .stage-icon {
@@ -670,6 +698,7 @@ textarea.memo {
 
 .stages li.current {
   color: var(--text);
+  font-weight: 560;
 }
 
 .stages li.current .stage-icon {
@@ -761,13 +790,6 @@ textarea.memo {
   }
 }
 
-/* Phones and tablets, while the spend runs: the stages come first, right under the title. */
-@media (max-width: 1023px) {
-  .confirm-layout:has(.stages) > .confirm-panel {
-    order: -1;
-  }
-}
-
 @media (min-width: 1024px) {
   .spend-layout {
     display: grid;
@@ -781,10 +803,16 @@ textarea.memo {
     padding: 32px;
   }
 
-  .send-preview,
-  .confirm-panel {
+  /* The preview only: its height is bounded (the memo row is one line). The
+     confirm panel grows with errors, their details and the stages, and sticky
+     it could hold the focused Send button below the fold. */
+  .send-preview {
     position: sticky;
     top: 44px;
+  }
+
+  textarea.address-input {
+    font-size: 0.875rem;
   }
 
   .send-preview,
@@ -793,9 +821,13 @@ textarea.memo {
     padding: 28px;
   }
 
-  .preview-figure .figure,
-  .summary-hero .summary-amount .figure {
+  .preview-figure .figure {
     font-size: 3.25rem;
+    font-size: min(3.25rem, calc(96cqi / (var(--chars, 4) * 0.55)));
+  }
+
+  .summary-hero .summary-amount .figure {
+    --figure-max: 3.25rem;
   }
 
   .spend-summary .summary > div,
@@ -818,6 +850,19 @@ textarea.memo {
   .spend-summary,
   .confirm-panel {
     padding: 24px;
+  }
+}
+
+/* Below 1180px the form needs the whole column: the preview goes under it, as
+   on a tablet. Confirm and Shield keep their two columns. */
+@media (min-width: 1024px) and (max-width: 1179px) {
+  .send-layout {
+    display: flex; /* base .spend-layout: flex-direction: column */
+    align-items: stretch;
+  }
+
+  .send-preview {
+    position: static;
   }
 }
 
@@ -1111,8 +1156,13 @@ button.receive-toggle .icon {
 
 /* --- History ---------------------------------------------------------------- */
 
+/* The amount column grows with the list's widest amount (--tx-int, --tx-frac:
+   useFractionWidth, set on this card), taking room from the privacy column,
+   which wraps, never from the transaction column. Hidden balances set neither,
+   and the columns are the fixed ones. */
 .history-card {
-  --hist-cols: 36px minmax(0, 1fr) 150px 200px 140px 36px;
+  --tx-amt: max(140px, calc(var(--tx-int, 0ch) + var(--tx-frac, 0ch) + 2.4em));
+  --hist-cols: 36px minmax(0, 1fr) 150px max(64px, calc(340px - var(--tx-amt))) var(--tx-amt) 36px;
   padding: 0;
 }
 
@@ -1297,7 +1347,9 @@ button.tx-more[aria-expanded='true'] .icon {
 }
 
 @media (max-width: 379px) {
+  /* As every list's rows there (styles.css): the amount under the type. */
   .history .tx {
+    grid-template-areas: 'icon main' 'icon value' 'icon date' 'icon privacy' 'icon detail';
     column-gap: 12px;
     padding-inline: 12px;
   }
@@ -1321,10 +1373,15 @@ button.tx-more[aria-expanded='true'] .icon {
     padding: 14px 24px 12px;
     border-bottom: 1px solid var(--border);
     color: var(--subtle);
+    text-transform: uppercase;
+  }
+
+  /* The labels' size on the labels: ch and em in the shared columns resolve
+     against the head's own font, which is the rows' font. */
+  .tx-head > span {
     font-size: 0.75rem;
     font-weight: 560;
     letter-spacing: 0.085em;
-    text-transform: uppercase;
   }
 
   .tx-head-amount {
@@ -1377,7 +1434,8 @@ button.tx-more[aria-expanded='true'] .icon {
 
 @media (min-width: 1024px) and (max-width: 1279px) {
   .history-card {
-    --hist-cols: 36px minmax(0, 1fr) 128px 176px 116px 36px;
+    --tx-amt: max(116px, calc(var(--tx-int, 0ch) + var(--tx-frac, 0ch) + 2.4em));
+    --hist-cols: 36px minmax(0, 1fr) 128px max(64px, calc(292px - var(--tx-amt))) var(--tx-amt) 36px;
   }
 
   .tx-head,

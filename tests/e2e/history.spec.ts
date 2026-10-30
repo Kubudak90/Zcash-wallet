@@ -1,14 +1,16 @@
 import { sha256 } from '@noble/hashes/sha256';
-import { base58check } from '@scure/base';
+import { base58check, bech32 } from '@scure/base';
 import { expect, test, type Page } from '@playwright/test';
 
-import { PASSWORD, UA, createWallet, nav } from './helpers';
+import { PASSWORD, UA, createWallet, nav, setKnobs } from './helpers';
 
 // History rows carry a privacy label from the pool WebZjs reports. The fake
 // engine reports pools the way WebZjs does: the recipient's pool plus Orchard
 // change, 'mixed' when they differ; a shield is all Orchard.
 
 const T1 = base58check(sha256).encode(new Uint8Array([0x1c, 0xb8, ...new Uint8Array(20).fill(7)]));
+// A valid Sapling address (bech32 over 43 bytes).
+const ZS = bech32.encode('zs', bech32.toWords(new Uint8Array(43).fill(7)), 90);
 
 async function send(page: Page, to: string, amount: string | 'max') {
   await nav(page, 'Send');
@@ -79,13 +81,15 @@ test.describe('the transaction ID', () => {
     await createWallet(page);
     await send(page, UA, '0.1');
     await nav(page, 'History');
-    // Rows are grouped: one not yet in a block, then the month of the first payment.
-    await expect(page.getByTestId('history').locator('.month-head')).toHaveText(['Not in a block yet', /^\w+ \d{4}$/]);
+    // Rows are grouped: one not in a block, then the month of the first payment.
+    await expect(page.getByTestId('history').locator('.month-head')).toHaveText(['Not in a block', /^\w+ \d{4}$/]);
 
     const row = page.getByTestId('history').locator('.tx').first();
     const toggle = row.getByRole('button', { name: 'Transaction ID', exact: true });
     const copy = row.getByRole('button', { name: 'Copy transaction ID' });
     await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    // Every row's toggle has this name; its description says which payment it opens.
+    await expect(toggle).toHaveAccessibleDescription('Sent, Pending, -0.1001 ZEC');
     await expect(copy).toBeHidden();
     await toggle.click();
     await expect(toggle).toHaveAttribute('aria-expanded', 'true');
@@ -94,4 +98,49 @@ test.describe('the transaction ID', () => {
     await copy.click();
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(txid);
   });
+});
+
+test('an open transaction ID stays open, and keeps focus, when a new payment shifts the groups', async ({ page }) => {
+  test.slow();
+  await createWallet(page);
+  await nav(page, 'Receive');
+  const own = (await page.getByTestId('receive-address').textContent())!;
+  await send(page, UA, '0.1');
+  await nav(page, 'History');
+  const history = page.getByTestId('history');
+  await expect(history.locator('.month-head')).toHaveText(['Not in a block', /^\w+ \d{4}$/]);
+  const received = history.locator('.tx-received');
+  const toggle = received.getByRole('button', { name: 'Transaction ID', exact: true });
+  await toggle.click();
+  const copy = received.getByRole('button', { name: 'Copy transaction ID' });
+  await copy.focus();
+
+  // The next pass brings a payment in at the top, in a group of its own: the groups below
+  // move down one place, and must not be rebuilt (closing the row and dropping focus).
+  await setKnobs(page, { incoming: [own] });
+  await expect(history.locator('.tx')).toHaveCount(3, { timeout: 45_000 });
+  await expect(history.locator('.month-head')).toHaveText([/^\w+ \d{4}$/, 'Not in a block', /^\w+ \d{4}$/]);
+  const first = history.locator('.tx-received').last();
+  await expect(first.getByRole('button', { name: 'Transaction ID', exact: true })).toHaveAttribute('aria-expanded', 'true');
+  await expect(first.getByRole('button', { name: 'Copy transaction ID' })).toBeFocused();
+});
+
+test('a payment to a Sapling address is called partly shielded, as History calls it', async ({ page }) => {
+  await createWallet(page);
+  await nav(page, 'Send');
+  await page.getByLabel('Recipient address').fill(ZS);
+  await page.getByLabel('Amount (ZEC)').fill('0.1');
+  await expect(page.getByLabel('Recipient address')).toHaveAccessibleDescription(/Sapling · partly shielded/);
+  await expect(page.locator('.send-preview')).toContainText('Partly shielded payment');
+  await page.getByRole('button', { name: 'Review' }).click();
+  // The amount entering Sapling shows on chain: never "Shielded" beside it.
+  const tag = page.locator('.summary-privacy dd');
+  await expect(tag).toHaveText('Partly shielded');
+  await expect(tag.locator('.kind-tag')).toHaveClass(/kind-partial/);
+  await page.getByLabel('Enter your password to confirm').fill(PASSWORD);
+  await page.locator('form').getByRole('button', { name: 'Send', exact: true }).click();
+  await expect(page.getByRole('heading', { name: '0.10 ZEC sent' })).toBeVisible({ timeout: 10_000 });
+  await expect(tag).toHaveText('Partly shielded');
+  await nav(page, 'History');
+  await expect(page.getByTestId('history').locator('.tx-sent .privacy')).toHaveClass(/privacy-partial/);
 });
