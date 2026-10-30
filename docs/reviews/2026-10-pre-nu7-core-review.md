@@ -1,6 +1,8 @@
 # Pre-NU7 core and engine review — interim findings
 
-Interim record of the review started on 2026-10-30 (branch `claude/core-engine-review`), saved so that no progress is lost if the session stops. Findings are as reported by each lens reviewer; the "Verified" column is the independent refuting verifier's verdict where it has finished (blank = not verified yet). Nothing here is fixed yet; fixes and the final decisions go to docs/engine-port.md (review round 7).
+Interim record of the review started on 2026-10-30 (branch `claude/core-engine-review`), saved so that no progress is lost if the session stops. Findings are as reported by each lens reviewer; "Verified" is the independent refuting verifier's verdict where it has finished. Polish items are not verified. Nothing here is fixed yet; fixes and the final decisions go to docs/engine-port.md (review round 7).
+
+Progress: 6/6 lens reviews; 31 findings (0 critical, 8 major, 19 minor, 4 polish); 13/27 non-polish findings verified, 13 confirmed real, 0 refuted.
 
 ## State and how to continue (if this session stops)
 
@@ -17,7 +19,6 @@ Interim record of the review started on 2026-10-30 (branch `claude/core-engine-r
   6. Push the branch, then run `ci.yml` with workflow_dispatch: CI does not run on branch pushes. Use `full_rebuild=true` if `vendor/` changed.
 - Do not touch Vercel, the `vercel-preview` branch or the `celari-preview` project: the owner still has funds in that deployment.
 
-
 ## Lens: vault
 
 Coverage: Read in full: src/lib/vault.ts, seed.ts, bytes.ts, storage.ts, birthday.ts, autoLock.ts, clipboard.ts; src/state/controller.ts, autoLockNotice.ts, wallet.tsx; src/App.tsx, src/main.tsx; the secret-handling parts of src/engine/webzjs.ts, webzjs-errors.ts, fake.ts; src/screens/Settings.tsx (PasswordGate, ViewingKey, WipeWallet), Unlock.tsx, CreateWallet.tsx, RestoreWallet.tsx, PasswordSetup.tsx, SpendSteps.tsx, the confirm step of Send.tsx; src/components/ui.tsx (CopyButton, PasswordField, ErrorDetails). Also docs/engine-port.md (all decisions and deferred items), the relevant parts of README.md, git history of the clipboard and lock commits, and in .webzjs the create_account and usk_from_seed_str paths (they do not store or echo the seed). None of the six findings is among the documented decisions or deferred items; Decision 18 covers only the rescan pausing at locks.
@@ -33,7 +34,22 @@ Not checked: real devices (iOS Safari and Firefox clipboard activation, VAULT-5,
 - Scenario: Wallet unlocked, or soft-locked during a catch-up pass with the 'Your wallet is locked' screen showing. Someone at the machine opens DevTools on the Celari tab and runs queryObjects(CryptoKey), reads the 'vault' record from IndexedDB 'celari'/'kv', then calls crypto.subtle.decrypt({name:'AES-GCM', iv: vault.secret.iv, additionalData: 'celari/secret/v1'}, key, vault.secret.ct). The result is {kind:'seed', phrase:'...'} and no password was typed. Reproduced twice. (1) Unit PoC: scratchpad/core-review/vault/poc.test.ts decrypts record.secret with the key unlockVault returns, which is the key encryptDb uses. (2) Playwright with CDP Runtime.queryObjects on the real controller and vault (fake engine): scratchpad/core-review/vault/keyinmem.spec.ts gets the full 24 words from an unlocked tab, and also from a soft-locked tab.
 - Impact: Seed exposure, and with it theft of all funds, to anyone with a short time at an unlocked or soft-locked tab and console access (an XSS would get the same). This works without the password the app asks for on every spend and every reveal. The README promises 'the seed is decrypted only to sign and the password is asked on every spend', and the controller says only the derived AES key stays in memory. In fact that key and the seed are equivalent, so the password asked per spend is a UI gate only, not a cryptographic one.
 - Proposed fix: Separate the keys. In vault.ts, call PBKDF2 deriveBits(256), import the result as an HKDF key and derive two non-extractable AES-GCM keys with info 'celari/secret/v2' and 'celari/db/v2'. Zero the bits after the import. unlockVault/createVault return only dbKey to the controller (secretKey is used inside and dropped). Write vault v:2. Migration on unlock of a v:1 record: decrypt the secret, 'db' and 'db-legacy' with the v1 key; re-seal the secret with secretKey and the blobs with dbKey; write vault, db and db-legacy in one writeAll transaction; then drop the v1 key. Alternative with the same effect: keep v1 secret sealing, add a random DB key wrapped under the password key (AAD 'celari/dbkey/v1') in the vault record, and unwrap it as non-extractable on unlock. Either way, controller.key must not be able to open record.secret.
-- Verified: **real, major**, fix before NU7: no
+- Verified: **real, major**; fix before NU7: no
+- Verifier's evidence: I tried to refute this and could not. I read the code end to end and reproduced it twice.
+
+Code path. src/lib/vault.ts:40-51 derives one non-extractable AES-GCM key. createVault (:72-89) seals the secret with that key, and the only thing separating the slots is the AAD 'celari/secret/v1'. That AAD is a constant in the bundle, so it is not a secret. unlockVault (:92-104) returns the same key, and encryptDb/decryptDb (:106-112) use it for the 'db' blob. The controller keeps it for the whole session: controller.ts:233 sets this.key = key after createWallet and :309 after unlock. Soft lock (lock(), :452-456) sets phase 'locked' and softLocked but never clears this.key. Only reloadLocked (:460) and wipe (:489) drop it. The per-spend and reveal gates (revealSecret :426-431, spendingPhrase :768-771) re-derive from the typed password, but anyone holding this.key can skip that step. This breaks the policy the code itself states at controller.ts:4-7 and in README.md:37/:155 ("the seed is decrypted only to sign and the password is asked on every spend"). It is not one of the documented deliberate decisions. docs/engine-port.md decision 18 avoided keeping the database key in memory while the wallet shows as locked, and the README roadmap (:127) lists the vault audit as not done.
+
+Reproduction 1 (unit, the real vault.ts): /tmp/claude-0/-home-user-Zcash-wallet/5e91fe3a-29e4-5243-bea0-135f18bac5ff/scratchpad/core-review/verify-VAULT-1/vault-key.test.ts, 4/4 pass. The key from createVault and the key from unlockVault, which is the key encryptDb uses (extractable=false), both decrypt record.secret to {kind:'seed', phrase} without the password.
+
+Reproduction 2 (Chromium, real controller, fake engine): /tmp/claude-0/-home-user-Zcash-wallet/5e91fe3a-29e4-5243-bea0-135f18bac5ff/scratchpad/core-review/verify-VAULT-1/key.spec.ts. Steps: create a wallet, reload, unlock with the password, then use CDP to do what queryObjects(CryptoKey) does in the DevTools console. Exactly one CryptoKey is live, and it decrypts the IndexedDB 'vault' record to the full 24 words.
+
+The same test checks whether the fix would be pointless because the seed lingers in the JS heap anyway. It does not: a heap snapshot after a forced GC holds no run of the seed words after a plain unlock. With the real engine, a plain unlock never passes the phrase to wasm either, because addAccount runs only on a rebuild. So in this state the key is the only way to the seed, and separating the keys does turn the password check into a real cryptographic gate.
+
+Impact and limits. Anyone with a short time at an unlocked tab, or at a soft-locked tab that shows 'Your wallet is locked', and DevTools gets the seed and can take all funds without the password. An XSS gets the same, but CSP makes XSS unlikely, and an XSS could phish the password anyway. After a spend in the same session, wasm memory may still hold traces of the seed or spending key. That is a separate, narrower issue the fix does not cover.
+
+Not reproduced: the soft-lock case in a browser. I relied on the code path above (lock() at controller.ts:452-456 never clears this.key).
+
+Severity: major ("a check that can be bypassed", seed exposure that needs local access to the tab), not critical. It has nothing to do with NU7.
 - Verifier's fix: Minimal fix, which leaves the 'db' and 'db-legacy' blobs as they are (checked in the scratch test 'fix model').
 
 1. In src/lib/vault.ts, replace deriveKey with deriveKeys(password, salt, iterations):
@@ -61,7 +77,34 @@ Alternative with the same effect, but it re-encrypts both db blobs: a random DB 
 - Scenario: Reproduced with Playwright, two pages in one context, fake engine, real controller and storage (scratchpad/core-review/vault/multitab.spec.ts). (a) Tab A creates a wallet, then tab B unlocks it. Receive in A shows [x, y]; Receive in B shows [y, z]. Address y was shown in both tabs as fresh ('For your privacy, Celari shows a new address each time…'). (b) Tab B: Settings > Remove wallet. IndexedDB keys become []. Tab A is still unlocked and persists on its next address or pass, so the keys become ['db']. Tab B creates a new wallet; tab A persists again, writing its old-key blob over the new 'db'. After a lock and unlock, tab B shows 'Celari could not read this wallet's saved data'. Also with two tabs: a send in tab A is lost from storage when tab B's next pass (within 30 s) overwrites 'db'. History then misses the send and its inputs read as unspent until it is mined. The controller's comment at :824-827 says the saved wallet must keep the transaction.
 - Impact: Privacy leak beyond what the app tells users: one address goes to two payers as 'never shown before', so their payments can be linked. 'Remove wallet from this browser' does not remove the database while another tab is unlocked. A wallet re-created afterwards (also the only way to change the password, wipe and restore) becomes unreadable: stuck until another wipe and a full rescan. Balance and History are wrong after a send made in the other tab.
 - Proposed fix: Take a Web Lock for the page's lifetime at the start of boot(). Call navigator.locks.request('celari-wallet', {ifAvailable: true}, lock => lock ? new Promise(() => {}) : undefined) and resolve whether it was granted. If it was not, go to bootError with an 'already open in another tab' message and never unlock. The lock is released on reload or close, so the lock-reload gets it back. A page holding a Web Lock is also kept out of Chrome's bfcache. If keeping several tabs is wanted instead: a BroadcastChannel 'wipe'/'locked' message that makes other tabs call reloadLocked(), plus a check in persist() that the stored vault salt still matches this.key's vault before setDb.
-- Verified: **real, minor**, fix before NU7: no
+- Verified: **real, minor**; fix before NU7: no
+- Verifier's evidence: The mechanism is real and reproduces. Nothing in src/ coordinates between tabs: there is no navigator.locks, no BroadcastChannel and no storage event. The docs do not list multi-tab use as a decision or a known gap.
+
+- Boot takes no lock: src/state/controller.ts:180-203.
+- Each tab works on its own in-memory copy of the engine database. Address handout runs prepareAddress (:358-375), which calls nextShieldedAddress, which calls WebZjs get_next_shielded_address. That reads get_next_available_address on the tab's own in-memory db (patches/webzjs/0004-ironwood-nu7.patch around :6282-6288). Two copies opened from the same 'db' therefore hand out the same next diversified address.
+- persist() (:708-721) overwrites 'db' with this tab's export, through storage.setDb (src/lib/storage.ts:70), a plain idb set where the last writer wins. Its only guard is `this.key !== key`, so it never notices that another tab wiped or replaced the vault.
+- wipe() (:487-492) clears only this tab's key.
+
+I re-ran the reviewer's spec (copy in scratchpad/core-review/verify-VAULT-2/multitab.spec.ts; fake engine, real controller and storage). Both tests pass:
+- The same u1 address was shown as "new address" in tab A (2nd opening) and tab B (1st opening).
+- After the wipe in B, the IDB keys were []. Tab A's next persist brought them back to ['db']. After B created a new wallet and A persisted again, B's lock and unlock showed "could not read this wallet's saved data".
+
+The finding leaves out one important limit. I measured it in verify-VAULT-2/bounds.spec.ts:
+- useAutoLock (src/App.tsx:28-82, HIDDEN_LOCK_MS = 60_000 in src/lib/autoLock.ts:5) locks and reloads a tab that has been hidden for 60 s. Simulating a background tab, A locked after 60 s.
+- Headless Playwright pages are all "visible", so the reviewer's repro never hits this. With two tabs in one window, both are unlocked for at most ~60 s after switching.
+- That window grows only in two cases. One is a soft lock during a catch-up pass: the key is kept until the pass is saved, about 5 min. The other is two windows visible side by side: up to the idle lock, 15 min by default.
+
+So the case of overwriting the next wallet's db needs the old tab to stay unlocked through the whole create or restore flow in the other tab. It also needs the old tab to be the last writer. If the new wallet's tab persists once more after the old tab locks, it heals: it persists after every pass, every 30 s.
+
+The lost-send variant is also transient. The other tab's write is undone by the sending tab's next persist (afterSpend calls kickSync, and passes run every 30 s). Even when that write does land last, scanning the block where the transaction is mined brings it back: the spent nullifiers, plus the change and outgoing outputs read through the OVK. A respend from the same notes in the meantime would be refused by the mempool.
+
+Impact:
+- No loss of funds and no key exposure.
+- The address reuse is an off-chain link only: two payers who compare notes see the same address. Shielded outputs stay unlinkable on-chain.
+- The orphan 'db' left after a wipe cannot be decrypted, because the PBKDF2 salt was deleted with the vault. The next saveWallet replaces it.
+- An overwritten db is recovered by wiping and restoring from the seed, with a rescan.
+
+All of this needs the user to unlock the same wallet in two tabs at once, so the rating is minor rather than major. It has nothing to do with NU7.
 - Verifier's fix: Allow only one Celari page at a time to hold a wallet key, using a Web Lock that is held until the page unloads.
 
 In src/state/controller.ts:
@@ -92,7 +135,39 @@ Add an e2e test: two pages in one context. The second shows the other-tab messag
 - Scenario: Restore runs (catch-up pass). The user locks, or auto-lock fires, and the soft lock starts. The pass's download stalls: a half-open connection or a proxy that holds the stream. eng.sync() never settles, so syncLoop's tail at :582 never runs. Only a pass ending, an engine trap or a wrong password reload the page, and SyncInfo.stalled is shown only in Main, which is unmounted. Reproduced with the fake engine (holdPass) and a fake clock: 33 minutes after Lock the page had not reloaded, still showed 'Your wallet is locked', and the seed came out of the heap (scratchpad/core-review/vault/keyinmem.spec.ts, second test).
 - Impact: The wallet tells the user it is locked, but the database key (with VAULT-1, the seed) and the decrypted wallet in wasm stay in memory with no time limit. Defence in depth: auto-lock gives no guarantee during a restore.
 - Proposed fix: In watchPass read(), after computing stalled: if (stalled && this.lockAfterPass && !this.unlocking) this.reloadLocked(). Also, in lock() when soft-locking, start a cap timer, e.g. this.softLockTimer = setTimeout(() => { if (this.lockAfterPass && !this.unlocking) this.reloadLocked(); }, 15 * 60_000), and clear it in unlockSoft. The cap covers a syncProgress that also stops answering. At most the unsaved part of one pass is lost, and the lock screen already says progress is saved when the pass ends.
-- Verified: **real, minor**, fix before NU7: no
+- Verified: **real, minor**; fix before NU7: no
+- Verifier's evidence: I could not refute it. I reproduced it with both the fake engine and the real engine, and the existing code has no timeout at any of these points.
+
+Code path (src/state/controller.ts):
+- lock() at :451-455 sets lockAfterPass and the 'locked' phase, and starts no timer.
+- The only reloads during a soft lock are three. The syncLoop tail at :582-585 runs only after `await this.eng.sync()` (:531) and the post-pass awaits (readTip, refresh, persist) settle. engineStopped (:484) needs a wasm trap. unlockSoft's catch (:321) reloads only `if (!this.syncing)`, so during a hung pass even a wrong password does not reload. The finding's wording is slightly off on that last point.
+- watchPass (:657) computes `stalled` but only passes it to setSync. The stall banner lives in Main (src/screens/Main.tsx:179), which is unmounted while the phase is 'locked'.
+- useAutoLock (src/App.tsx:126) is active only when the phase is 'ready'.
+
+Engine side:
+- The 0004 PassBudget checks the budget only in `admits()`, before a GetBlockRange goes out, and only after at least one batch (pass_budget.rs ~L2227).
+- BudgetedTransport has no timeout. WebZjs builds its tonic-web-wasm-client 0.8 `Client::new(url)` with no `Options.timeout`, so fetch has no deadline.
+
+Reproductions (scratch: /tmp/claude-0/-home-user-Zcash-wallet/5e91fe3a-29e4-5243-bea0-135f18bac5ff/scratchpad/core-review/verify-VAULT-3):
+1. stall.spec.ts (fake engine, holdPass, fake clock):
+   - (A) 60 fake minutes after Lock there was still no reload, the lock screen still showed, and 1 CryptoKey was still in the heap.
+   - (B) A wrong password during the hung pass did not reload.
+   - (C) Control: when the pass ends, the page reloads.
+2. real/realstall.spec.ts (production build in verify-VAULT-3/dist, real WebZjs, mainnet zcash-mainnet.chainsafe.dev). context.route held the pass's first GetBlockRange unanswered, and every other RPC went through. Restoring from 2026-10 showed "Syncing · 50,285 blocks left". I pressed Lock and waited 420 s in real time, past the 300 s budget. There was no reload, the lock screen showed "Your wallet is locked", and the CryptoKey count was 1 before and 1 after. So the budget does not bound a stalled download, and nothing else does.
+
+It contradicts a documented intent. docs/engine-port.md Decision 18 records the owner's decision not to keep scanning under the lock screen because that "would keep the database key in memory while the wallet shows as locked". The soft lock is meant to be the bounded exception, at most one pass of about 300 s. The lock-screen text (en.ts 'unlock.softLocked') does not tell users the wait can be unbounded.
+
+Real-world triggers: lightwalletd or a proxy/CDN in front of it holding the stream open without sending data, or a malicious or broken server. A truly dead TCP peer may eventually be dropped by Chrome's TCP keepalive, which ends the pass and reloads the page, so the unbounded case needs a peer that is alive but silent.
+
+Impact: defence in depth only. To exploit it, someone needs access to the running browser tab (DevTools queryObjects(CryptoKey)) while a hung pass keeps the database key, and with VAULT-1 the seed, in memory after auto-lock or Lock. No funds move and nothing reaches the network.
+
+Fix verified in a scratch copy (fixcopy/ + fixtests/fix.spec.ts), 5/5 passing:
+- F1: the cap reloads between 14 and 15 minutes.
+- F2: with pass counters standing still, the stall check reloads at fake minute 11.
+- F3: unlocking clears the cap.
+- F4: a wrong password during a hang is still capped.
+- F5: a pass that ends still reloads as before.
+The existing lock.spec, sync-status.spec (including the soft-lock budgeted-restore test), engine-stop.spec and upgrade.spec all pass on the fixed copy: 25/25. tsc is clean and no tracked files changed.
 - Verifier's fix: This is an app-only change in src/state/controller.ts. No engine or vendor rebuild is needed.
 
 (1) The minimal fix is a hard cap on the soft lock. It covers every place a hang can happen: the scan, the data-request serving, and readTip/refresh/persist after the pass, where watchPass only sees running:false and never flags a stall.
@@ -132,7 +207,31 @@ The cost is at most the unsaved part of one pass, which resumes from the last sa
 - Scenario: Settings > Show recovery phrase (or Create, after Reveal). The grid is selectable (user-select is none only while blurred), so the user selects the words and presses Ctrl+C. copiedInPage(false) then cancels any pending clear. The 24 words stay in the clipboard, and in OS clipboard history or sync, indefinitely. A viewing key copied the same way is cleared after 60 s.
 - Impact: The most sensitive secret gets less protection than the viewing key, through a mechanism that is already built. Any app or clipboard-sync service that reads the clipboard later can take the phrase.
 - Proposed fix: Add data-clipboard-clear="" to the SeedGrid <ol> in CreateWallet.tsx. watchClipboard's closest() then schedules the 60 s clear for a hand copy of the phrase, both in Create and in Settings. Optionally show the same note as under the viewing key.
-- Verified: **real, minor**, fix before NU7: no
+- Verified: **real, minor**; fix before NU7: no
+- Verifier's evidence: I reproduced this in Chromium with Playwright, using the fake-engine dev server. Scratch files: /tmp/claude-0/-home-user-Zcash-wallet/5e91fe3a-29e4-5243-bea0-135f18bac5ff/scratchpad/core-review/verify-VAULT-4/vault4.spec.ts and /tmp/claude-0/-home-user-Zcash-wallet/5e91fe3a-29e4-5243-bea0-135f18bac5ff/scratchpad/core-review/verify-VAULT-4/pw.config.ts. No tracked files were changed and the repo is clean.
+
+Code path:
+- watchClipboard() is installed in every phase (src/App.tsx:128), so it also runs during onboarding.
+- onCopy (src/lib/clipboard.ts:143-148) takes the selection's commonAncestorContainer, calls closest('[data-clipboard-clear]') on it, then calls copiedInPage(). With no match, copiedInPage (57-60) calls cancel().
+- Only the viewing key's <code> carries that attribute (src/screens/Settings.tsx:150).
+- The SeedGrid <ol> (src/screens/CreateWallet.tsx:19-26) does not. Settings reuses it at Settings.tsx:384.
+- The words can only be selected while revealed: the .seed-grid.blurred rule (styles.css:1041-1044) sets user-select: none only while blurred. After Reveal, computed user-select is 'auto'.
+
+Results:
+1. Create > Reveal words, select the grid, Ctrl+C. The clipboard holds all 24 words, interleaved with their numbers. sessionStorage 'celari.clipboardClear' stays null. After 3 minutes plus a click or focus, the clipboard still holds the phrase.
+2. Settings: copy the viewing key with the button, which puts a clear in pending. Then Show recovery phrase, select the grid, Ctrl+C. The pending clear is cancelled (storage key goes to null), and after 3 minutes the phrase is still in the clipboard.
+3. Proposed fix, simulated by setting data-clipboard-clear on the <ol> in-page. The same hand copy schedules a clear, and the clipboard reads '' after 61 s. Selecting a single .seed-word inside an <li> also matches.
+
+No prior decision covers this:
+- Commit c486460 scoped the clear "yalnızca görüntüleme anahtarı için" (only for the viewing key) and gives no reason for leaving a hand copy of the phrase uncleared.
+- README.md:127 still lists the clipboard as an open audit item.
+- Nothing in docs/engine-port.md addresses it.
+
+Two refinements to the finding:
+- Cancelling the viewing-key clear is not a separate defect. The clipboard now holds the phrase instead of the key, so that follows from the design. The real gap is that the phrase itself is never cleared.
+- The impact needs the user to copy the phrase on purpose, against the on-screen warning (create.seedWarn2). This is defence-in-depth, so minor is the right severity.
+
+Side effect of the fix: with both gates open in Settings, a hand copy of the phrase also shows the viewing key's "Celari tries to clear the clipboard..." note under the key row. ViewingKey reads the global status. I confirmed the note appears (1 note visible). The note is accurate but sits in the wrong row.
 - Verifier's fix: In src/screens/CreateWallet.tsx, add data-clipboard-clear="" to the SeedGrid <ol> (lines 19-26), next to data-testid="seed-grid". Both the Create screen and Settings (Settings.tsx:384) then go through watchClipboard's closest() check, so a hand copy of the phrase schedules the same 60 s best-effort clear.
 
 Follow-ups:
@@ -147,14 +246,75 @@ Do not make the grid unselectable or block copy. That would hurt accessibility a
 - Scenario: iPhone Safari: the user copies the viewing key and keeps using Celari by tapping. Safari allows navigator.clipboard.writeText only with transient user activation. Under the HTML spec, pointerdown gives activation only for pointerType 'mouse'; for touch it comes on pointerup or touchend, after the capture listener at :150 has already run. Every retry from a tap, focus or the timer is refused, so the status stays 'pending' and the clipboard keeps the key. INFERRED from the spec's list of activation-triggering events and Safari's gesture rule; not run on a device here, because Playwright's Chromium grants clipboard-write without activation.
 - Impact: The 'cleared after 60 seconds' protection does not work on iOS, the main phone platform, even with the tab in front. The note there says 'may happen later'.
 - Proposed fix: In watchClipboard, also retry on window 'pointerup' and 'touchend' (capture), or on 'click', and remove them in the cleanup. tryClear already gives way to a copy that happens during the write, because it re-checks deadline.
-- Verified: (pending)
+- Verified: **real, minor**; fix before NU7: no
+- Verifier's evidence: I reproduced this in the real app (dev server with VITE_FAKE_ENGINE=1) under Playwright WebKit with iPhone 13 emulation and Playwright Firefox with hasTouch. No tracked files were changed; `git status` is clean. One part of the finding is overstated: the clear is not refused on every tap. In the newer engines it fails only while taps are more than 5 s apart.
+
+Why it happens:
+- Firefox, dom/events/EventStateManager.cpp: on touch, user activation is set at pointerup, not pointerdown (pointerdown counts only for `mInputSource == MOZ_SOURCE_MOUSE`). nsContentUtils::IsCutCopyAllowed allows a write only while `HasValidTransientUserGestureActivation()` holds, and that lasts `dom.user_activation.transient.timeout` = 5000 ms.
+- WebKit main and safari-7625-branch, Modules/async-clipboard/Clipboard.cpp:87: writes need `window->hasTransientActivation()`, which lasts 5 s (LocalDOMWindow.cpp:202). EventHandler.cpp:268-276 treats only TouchEnd as activation-triggering.
+- safari-7618 to 7624 branches (Safari up to 26.x): writes need `UserGestureIndicator::processingUserGesture()`, so the write must happen inside the gesture's own handler and there is no 5 s carry-over. Whether a touch pointerdown carries that gesture on iOS is decided in closed WebKitAdditions code (EventHandlerIOSTouch.cpp), so I could not check it. If it does not, taps never clear on those versions; only a key press does.
+
+Probe with one listener per page (pw/act2.mjs), same result in WebKit and Firefox:
+- Retry on touch pointerdown: refused when no earlier tap; succeeds 1.5 s after a tap; refused more than 5 s after the last tap. A timer succeeds only within 5 s of a tap.
+- Retry on pointerup, touchend or click: succeeds on every tap.
+
+End-to-end in the app (e2e/touch-clear.spec.ts). Copy the viewing key by tapping, then tap the key text. Every write is logged from inside the page, because Playwright's evaluate can grant activation.
+- As shipped, WebKit iPhone and Firefox gave the same log:
+  - `t=60.0s write('') act=false REJECT NotAllowedError` (the timer)
+  - taps at t=63, 71 and 79 s: each `REJECT NotAllowedError`
+  - only a tap at t=80.5 s, 1.5 s after the previous one, gives `act=true OK` and 'Clipboard cleared.'
+- With a pointerup retry simulated (an init script dispatches 'focus' on pointerup): the first tap after the deadline, at t=63.0 s, gives `act=true OK` and 'Clipboard cleared.' in both browsers.
+
+Not affected:
+- Chromium and Android Chrome: they need focus, not activation.
+- Desktop mouse use: pointerdown with a mouse is activation-triggering.
+- Typing in any field: the keydown retry works everywhere.
+
+Impact: on Safari and Firefox on phones and tablets, the viewing key (UFVK) can stay in the clipboard well past 60 s while the tab is in front. This happens when the user only taps and the taps are more than 5 s apart (tap, read, tap), and on Safari 26 and earlier possibly on every tap. While it stays, Universal Clipboard can sync it to other devices and other apps can paste it. The note (en.ts:377) says the clear depends only on the tab being in front, and that is not true here. This weakens a defence-in-depth feature; it puts no funds at risk and does not expose the spending key, so it is minor.
+
+Repro files:
+- /tmp/claude-0/-home-user-Zcash-wallet/5e91fe3a-29e4-5243-bea0-135f18bac5ff/scratchpad/core-review/verify-VAULT-5/e2e/touch-clear.spec.ts
+- /tmp/claude-0/-home-user-Zcash-wallet/5e91fe3a-29e4-5243-bea0-135f18bac5ff/scratchpad/core-review/verify-VAULT-5/e2e/pw.config.ts
+- /tmp/claude-0/-home-user-Zcash-wallet/5e91fe3a-29e4-5243-bea0-135f18bac5ff/scratchpad/core-review/verify-VAULT-5/pw/act2.mjs
+
+To run Playwright WebKit I installed its system libraries with `npx playwright install-deps webkit` (apt packages only, nothing in the repo).
+- Verifier's fix: In src/lib/clipboard.ts watchClipboard, keep the pointerdown listener (mouse) and add one for pointerup, with its removal in the cleanup:
+  window.addEventListener('pointerup', retry, true);
+  ...
+  window.removeEventListener('pointerup', retry, true);
+A touch pointerup is activation-triggering in both Gecko and WebKit, and activation is set before listeners run. That is enough for Firefox and Safari 27+. For Safari 26 and earlier (activation checked by gesture token), also add window 'click' with capture, and remove it in the cleanup. The synthetic click after a tap on iOS runs as a user gesture.
+
+This brings no new race with a Copy tap. The window capture listener fires, and starts its write(''), before React's onClick write(key). The writes run in order, and tryClear already gives way through its deadline re-check. The existing pointerdown retry already has the same order.
+
+Optionally, add an e2e test like touch-clear.spec.ts (WebKit iPhone or Firefox with hasTouch) and drop 'while this tab is in front' from the note's claim or soften it.
 
 ### VAULT-6 · minor · ts — Vault and database are kept in best-effort storage: navigator.storage.persist() is never requested and users are not warned that the browser can delete them
 - Where: src/lib/storage.ts:8 (createStore('celari','kv'), no persist()); src/state/controller.ts:231 (saveWallet, nothing after it); README.md and the Create/Restore copy (no warning)
 - Scenario: Safari deletes all script-writable storage of a site that has not been used for 7 days of browser use (WebKit's policy; a site added to the Home Screen is exempt). Chromium can evict a non-persisted origin under storage pressure. A user who holds funds and does not open Celari for a few weeks finds the Welcome screen: vault, meta and db are gone. INFERRED from the browsers' published storage policies; grep shows no persist() call and no warning anywhere.
 - Impact: The funds are recoverable only from the recovery phrase, and a full rescan is needed; a user who lost the paper loses access to the funds. The app tells users nothing about this risk.
 - Proposed fix: After storage.saveWallet in createWallet, and on unlock when navigator.storage.persisted() is false, call navigator.storage?.persist?.() and ignore any failure. Add a line to the create/restore flow and the README: the browser can delete this site's data (Safari after 7 days without a visit unless Celari is added to the Home Screen), and the recovery phrase is the only backup.
-- Verified: **real, minor**, fix before NU7: no
+- Verified: **real, minor**; fix before NU7: no
+- Verifier's evidence: The gap in the code is confirmed, but the finding overstates what the app tells users.
+
+Code:
+- src/lib/storage.ts:8 opens createStore('celari','kv'), an ordinary best-effort IndexedDB store.
+- src/state/controller.ts:231 (storage.saveWallet in createWallet) and unlock() (line 246 on) never call navigator.storage.persist() or persisted(). Grepping src/ finds no navigator.storage use at all.
+- I ran the fake-engine dev build in Playwright Chromium (scratch script /tmp/claude-0/-home-user-Zcash-wallet/5e91fe3a-29e4-5243-bea0-135f18bac5ff/scratchpad/core-review/verify-VAULT-6/check.mjs). navigator.storage.persisted() returns false for the app's origin, so its data can be evicted.
+- docs/engine-port.md, README.md and the patch/upstream notes do not document this as a deliberate decision.
+
+Browser policies (checked against primary sources):
+- WebKit blog 10218: Safari deletes "all of a website's script-writable storage", Indexed DB included, "after seven days of Safari use without user interaction on the site". Home Screen web apps "have their own counter of days of use".
+- WebKit blog 14403: Safari grants persist() by heuristics "like whether the website is opened as a Home Screen Web App". A persistent origin is excluded from eviction. The post does not say persistent mode exempts a site from the ITP 7-day removal.
+- Chromium evicts non-persistent origins under storage pressure. The WebKit post also lists storage pressure as a trigger.
+
+Eviction itself cannot be reproduced here: there is no Safari, and filling the disk is not practical. The scenario rests on these published policies.
+
+Corrections to the finding:
+1. "The app tells users nothing" is wrong. The app tells users the phrase is the only backup: en.ts:41 says "These 24 words are the only backup of your wallet", en.ts:44 says "If you lose these words, your funds cannot be recovered", tr.ts:42/45 say the same, and a verification step makes them re-enter words. A user who kept the phrase loses no funds. What is missing is any word that the browser may erase the wallet on its own. Users get a surprise Welcome screen and a full rescan from the birthday, which the README says can take hours for old birthdays. Only a user who ignored the backup warning loses funds; a view-only wallet needs its uview key to be added back.
+2. persist() alone does not fix the Safari case. Safari grants it essentially only to Home Screen web apps, and its effect on the 7-day ITP removal is undocumented. So on Safari, the warning text and the Home Screen advice are the real fix. persist() mainly protects against storage-pressure eviction in Chromium and Firefox.
+3. Firefox shows a permission prompt for persist() (expected UX, not a bug).
+
+Nothing here is tied to NU7.
 - Verifier's fix: 1. Add a best-effort persistence request in src/state/controller.ts. Put `void requestPersistence();` right after `await storage.saveWallet(record, meta, db);` at line 231, and in unlock() after unlockVault succeeds. Add this helper:
 
 ```ts
@@ -182,35 +342,235 @@ Coverage: Read in full: src/state/controller.ts, src/engine/webzjs.ts, webzjs-er
 - Scenario: A user restores a recovery phrase from a wallet that gives out a new t-address for each receive (Zashi/Zodl). Two external t-addresses inside the gap limit, tA and tB, still hold unshielded UTXOs, for example withdrawals from two different exchanges. Celari's gap-limit address generation and refresh_utxos find both, and Home shows one Transparent total with a Shield button. The user presses Shield. pczt_shield calls get_transparent_balances, gets {tA, tB} and passes both to propose_shielding. GreedyInputSelector spends UTXOs from both addresses in one v6 transaction. The Shield screen only said the amount and "your transparent address" (singular) would be visible.
 - Impact: The chain now shows tA and tB as one owner (common-input ownership), and that link is permanent. Two exchange accounts or payers that the earlier wallet kept apart by rotating addresses can now be linked. This leaks more than the app tells the user. The Zcash mobile SDKs refuse this case ("Account has more than one transparent receiver with funds to shield") and shield one receiver at a time. README says shielding has not been tested with real funds yet, so this would show up in the owner's next test with a restored phrase.
 - Proposed fix: Engine: give pczt_shield an optional address, `pczt_shield(account_id, address: Option<String>)`. When it is None and `transparent_balances.len() > 1`, return a coded refusal (e.g. `ShieldSeveralAddresses`, listing address and value) before proposing anything. When it is Some, pass `&[addr]` as from_addrs. Add `transparent_balances(account)` to the bindings. App: when more than one address holds funds, shield one address per transaction. Say on screen that shielding them together would link them publicly. Map the new code in webzjs-errors.ts like the other SpendRefusedError codes.
-- Verified: (pending)
+- Verified: **real, minor**; fix before NU7: no
+- Verifier's evidence: The engine behaviour is real, and I reproduced it end to end. I could not refute it, but two parts of the finding are wrong or overstated, so I am rating it minor rather than major.
+
+Reproduction (native glue test; scratch only, no tracked files changed):
+- The patched WebZjs tree is at /tmp/claude-0/-home-user-Zcash-wallet/5e91fe3a-29e4-5243-bea0-135f18bac5ff/scratchpad/core-review/verify-SPEND-1/wz. The test is `review_spend1` at the end of crates/webzjs-wallet/src/tests/nu7_pipeline.rs. I also extended the scratch MockLwd so `GetAddressUtxosStream` serves UTXOs and records which addresses were asked.
+- The log is /tmp/claude-0/-home-user-Zcash-wallet/5e91fe3a-29e4-5243-bea0-135f18bac5ff/scratchpad/core-review/verify-SPEND-1/test.log.
+- Setup: a freshly created account, with one UTXO the server reports on the default address tA (index 0, 0.006 ZEC) and one on tB (external index 3, inside the gap limit of 10, 0.007 ZEC).
+- `sync_to_tip` sent one GetAddressUtxos request naming 16 addresses, tA and tB among them. The memory backend's get_transparent_receivers returns every External and Internal gap address, exposed or not (engine/zcash_client_memory/src/wallet_read.rs:983-995, transparent_ops.rs:105-165). Account creation generates those gap addresses (wallet_write.rs:322-338, GapLimits::default: external 10, internal 5).
+- get_transparent_balances returned both addresses, and the app's single Transparent total (unshielded_balance) was 1,300,000 zats.
+- `pczt_shield` produced 2 transparent inputs with 2 distinct source scripts (tA and tB). After signing (webzjs-keys), proving and `pczt_send`, one transaction was broadcast spending both prevouts.
+- The code path is patched wallet.rs:771-797: `from_addrs = transparent_balances.into_keys()` goes whole to propose_shielding. GreedyInputSelector::propose_shielding (zcash_client_backend 0.25, input_selection.rs:2223) gathers inputs from every source address into one single-step proposal.
+- The app cannot choose an address. controller.ts:789-795 and the WebWallet.pczt_shield(account_id) binding take no address. The Shield copy says "The amount and your transparent address are visible on chain" (en.ts:311-313, tr.ts:312-313; singular), and nothing anywhere mentions that addresses get linked.
+- Nothing in docs/engine-port.md, the README, patches/webzjs/README.md or UPSTREAM.md records this as a decision. docs/reviews/2026-10-pre-nu7-core-review.md is only this review's interim log.
+
+What weakens the finding:
+1. Its claim that "the Zcash mobile SDKs refuse this case and shield one receiver at a time" is out of date. In the current zcash-android-wallet-sdk backend (backend-lib/src/main/rust/lib.rs, proposeShielding, about lines 2360-2395), a null transparentReceiver shields every non-ephemeral address whose spendable value meets the threshold, all in one transaction; only ephemeral addresses go one at a time. The Kotlin doc still says it throws, but the code does not. Zodl Android (main, 2026-10-29) calls `proposeShielding(..., transparentReceiver = null)` in ProposalDataSource.kt:207-213. So the reference NU6.3 wallet links funded addresses in exactly the same way. Celari is no worse than the ecosystem default; it is only less candid in its copy.
+2. Celari itself never puts funds on a second address. The t1 address it shows is fixed, Receive hands out shielded-only UAs, and ZIP 320 ephemeral outputs are spent by the second transaction of the pair. The multi-address state appears only when restoring, or using alongside Celari, a seed whose other wallet funded several BIP44 addresses or change addresses on account 0. Examples: Trezor or Ledger fresh receive and change addresses, or zcashd UAs at different diversifier indices. I did not confirm the finding's specific example that Zodl rotates t-addresses: Zodl rotates shielded-only UAs, and its t-address comes from getTransparentAddress. The owner's own Celari wallet, with a single t1, is not affected.
+
+Remaining harm: the precondition is narrow, but when it holds, Shield links the addresses on chain permanently, and the screen does not say so. That is a disclosure gap rather than an exploit; the copy and the README privacy section talk about one address.
+
+Pitfalls in the finding's proposed fix:
+- A refusal on `transparent_balances.len() > 1` also counts addresses holding only dust: transparent_balances inserts an entry for any non-zero value, adding it as uneconomic value. That would refuse spuriously.
+- A hard refusal with no per-address path would leave the funds unshieldable in Celari, which is worse than the leak.
+- With per-address shielding, any address below SHIELDING_THRESHOLD (100,000 zats) could never be shielded unless it is combined with another.
+- Verifier's fix: Minimal safe fix (app copy only, no engine change; can land at any time):
+- In en.ts and tr.ts, change shield.intro and shield.introOrchard to say: "The amount and your transparent address(es) are visible on chain. If your transparent funds are on more than one address (for example after restoring a phrase from another wallet), they move in one transaction, which shows publicly that those addresses belong to the same wallet."
+- Add one line to the README privacy paragraph saying the same.
+
+Full fix (engine plus app, after NU7):
+1. Patch 0004 / wallet.rs: `pczt_shield(account_id, address: Option<String>)`.
+   - Decode the address and check it is one of the account's receivers (as the Android SDK does).
+   - With Some(addr), use `from_addrs = [addr]`, only if its spendable value is at least SHIELDING_THRESHOLD.
+   - With None, keep the current behaviour.
+2. Add a `transparent_balances(account)` binding returning (address, spendable value) pairs, counting only spendable value; leave uneconomic dust out.
+3. App: when more than one address is at or above the threshold, offer shielding one address per transaction (each its own sign, prove and send), plus an explicit "shield all together" option that warns the addresses will be linked publicly. Keep the combined option for amounts that only pass the threshold together.
+4. Do not hard-refuse more than one funded address without that per-address path, or the funds become unshieldable in Celari.
+5. Add a native glue test along the lines of the scratch review_spend1 test, and map any new refusal code in webzjs-errors.ts.
 
 ### SPEND-2 · minor · ts — TEX payments can never be built, yet the form accepts them, and the failure tells the user to lower the amount
 - Where: src/lib/address.ts:55 (accepts `tex`); src/screens/Send.tsx:77-79 (feeFloor 20,000 for TEX), 326 (texWarn), 333 (failureHint); src/screens/SpendSteps.tsx:101 (every non-refusal error at 'building' gets failureHint); src/i18n/en.ts:247. Engine side: pczt_create calls create_pczt_from_proposal, which in zcash_client_backend 0.25 src/data_api/wallet.rs:2987-2990 returns ProposalNotSupported for any proposal with more than one step. A TEX payment always gets the two-step ZIP 320 proposal: input_selection.rs:956-1004 and 2153-2172.
 - Scenario: A user pastes an exchange deposit address `tex1…`, enters 0.5 ZEC and has enough Ironwood funds. Review shows "TEX · public" with a fee of about 0.0002, and the user confirms with the password. pczt_create calls propose_transfer, which builds a ZIP 320 pair: step 0 sends shielded value to an ephemeral t-address, step 1 pays the TEX. create_pczt_from_proposal then fails with ProposalNotSupported. The screen says "Sending failed. The balance may not cover the network fee. Lower the amount slightly and try again." Every retry with a smaller amount fails the same way. Nothing is stored, because ephemeral addresses are only reserved later, in build_proposed_transaction (wallet.rs:2555). Earlier tests did not catch this: the 'measured' TEX case in tests/unit/spend-refusal.test.ts used an empty wallet, so it never got past InsufficientFunds. docs/engine-port.md:351 still lists a TEX send as a real-funds test, while the Deferred section says "Celari builds no such pairs".
 - Impact: No funds are at risk, but the app offers a payment type it cannot make and gives wrong advice about why it failed. The same 'lower the amount' hint also appears for other build errors that have nothing to do with the balance: 'Wallet has not been synced yet', 'different consensus branches after syncing; sync again', or an address the engine rejects. Insufficient funds already has its own refusal message (E2E-2).
 - Proposed fix: Until the engine can build multi-step PCZTs, refuse TEX in review(): for `check.kind === 'tex'`, set a new `send.err.address.texUnsupported`. Drop the TEX case from feeFloor and remove TEX from the real-funds checklist. Change `send.failedHint` to a neutral 'Nothing was sent' line and keep ErrorDetails, since insufficient funds is already reported separately.
-- Verified: (pending)
+- Verified: **real, minor**; fix before NU7: no
+- Verifier's evidence: I confirmed the finding by reproducing it natively and tracing the code end to end. I found nothing that refutes it.
+
+ENGINE (reproduced). I wrote a scratch test that copies the setup of engine/zcash_client_memory/src/testing/pczt_branch.rs: a 1 ZEC fake note, NU6.3 active, a 0.5 ZEC payment, propose_transfer with SpendPolicy::default() and no locks, then create_pczt_from_proposal with BundlePadding::DEFAULT. These are the same calls the patched webzjs-wallet makes in Wallet::pczt_create (wallet.rs:875-913 after patches 0001-0004). The change strategy is webzjs's: MultiOutputChangeStrategy, ZIP 317, fallback pool Ironwood. The build used the pinned nightly-2026-10-28, --locked, with features orchard, transparent-inputs and pczt-tests. Output:
+  SPEND-2 t1 (control): proposal steps 1, fees per step [30000]; create_pczt_from_proposal -> Ok(pczt, tx_version 6)
+  SPEND-2 tex: proposal steps 2, fees per step [30000, 10000]; create_pczt_from_proposal -> Err(ProposalNotSupported)
+  test result: ok. 1 passed
+The test is at /tmp/claude-0/-home-user-Zcash-wallet/5e91fe3a-29e4-5243-bea0-135f18bac5ff/scratchpad/core-review/verify-SPEND-2/engine/zcash_client_memory/src/testing/tex_pczt.rs and the log at /tmp/claude-0/-home-user-Zcash-wallet/5e91fe3a-29e4-5243-bea0-135f18bac5ff/scratchpad/core-review/verify-SPEND-2/test2.log.
+
+Why it happens:
+- The wasm enables transparent-inputs on zcash_client_backend (webzjs-wallet/Cargo.toml:57; zcash_client_memory features orchard and transparent-inputs).
+- So Address::Tex takes the ZIP 320 path (input_selection.rs:984-1004) and Proposal::multi_step (2102-2172).
+- zcash_client_backend 0.25 wallet.rs:2987-2990 then rejects any proposal with more than one step ("For now we only support turning single-step proposals into PCZTs").
+- Celari calls only pczt_create, pczt_prove and pczt_send (src/engine/webzjs.ts:308-350). There is no non-PCZT fallback, so a TEX payment can never be built.
+
+APP PATH (traced):
+- checkAddress accepts `tex` as ok (src/lib/address.ts:55).
+- review() only refuses `!check.ok` (src/screens/Send.tsx:228-230), so a TEX draft reaches the confirm screen. That screen shows "TEX · public" (106-107), the texWarn (326) and a 20,000 zat fee floor (78).
+- WebzjsEngine.send sets stage 'building' before pczt_create (webzjs.ts:305).
+- The engine error is "Failed to create Pczt: ProposalNotSupported". buildError (webzjs-errors.ts:84-95) maps only UpgradePending, PcztWrongBranch, PcztExpired and InsufficientFunds, so this error comes back unchanged.
+- SpendSteps.tsx:101 then shows failureHint = send.failedHint (Send.tsx:333): en.ts:247 "The balance may not cover the network fee. Lower the amount slightly and try again." (tr.ts:248 says the same in Turkish). Retrying with any amount fails the same way.
+- Nothing is signed, stored or broadcast: the error comes before pczt_sign, and ephemeral addresses are reserved only in build_proposed_transaction.
+
+The same misleading hint appears for other building-stage errors that have nothing to do with the balance, from catch_up_before_building (wallet.rs:550 "Wallet has not been synced yet", 566 "different consensus branches after syncing"). The balance case already has its own message (INSUFFICIENT_FUNDS refusal, E2E-2), so the generic hint is wrong in every case that still reaches it.
+
+WHY TESTS MISSED IT:
+- tests/unit/spend-refusal.test.ts:16-17 measured TEX on an empty wallet, so it stopped at InsufficientFunds.
+- The fake engine builds TEX payments (fake.ts:144-149 only models a higher fee).
+- tests/e2e/spend.spec.ts uses TEX only for the memo-field check.
+
+DOCS:
+- docs/engine-port.md:351 lists "a TEX address" in the real-funds send checklist that must pass before NU7.
+- Deferred (313-316) says "Celari builds no such pairs". That is true of the engine, but the UI still offers the payment. Neither this nor any other known gap is documented as a deliberate decision.
+
+IMPACT: no funds or privacy at risk, and the transaction is refused before signing. But users cannot pay a TEX address (some exchanges require one for deposits), even though the form presents TEX as supported. They get wrong advice ("lower the amount") and can keep retrying a payment that will never work.
+- Verifier's fix: A TypeScript and docs change only; no engine, wasm or vendor hash change.
+
+1. src/screens/Send.tsx:229-230 in review(): refuse TEX the same way an invalid address is refused:
+   `linkProblem(parsePaymentInput(to)) ?? (check.ok ? (check.kind === 'tex' ? 'send.err.address.texUnsupported' : null) : `send.err.address.${check.reason}`)`
+   Add 'send.err.address.texUnsupported' to en.ts and tr.ts. Suggested text: "Celari cannot pay TEX addresses yet (the payment needs two linked transactions). Nothing was sent; ask the exchange for a t1 address or a unified address." This also covers zcash: payment links, which go through the same review().
+   The 'tex' case in feeFloor (Send.tsx:78) and the TEX notice on the confirm screen (Send.tsx:326) become unreachable and can be dropped.
+
+2. Drop `failureHint={t('send.failedHint')}` at Send.tsx:333 (and remove the send.failedHint key from en.ts:247 and tr.ts:248). SpendSteps.tsx:101 then falls back to the neutral 'send.failedRetry' line ("Nothing was sent. You can try again."), and ErrorDetails still shows the engine text. Insufficient funds keeps its own SpendRefusedError message.
+
+3. Tests:
+   - Make the fake engine reject a tex1 recipient with 'Failed to create Pczt: ProposalNotSupported' (src/engine/fake.ts send).
+   - Add an e2e check in tests/e2e/spend.spec.ts that a TEX recipient is refused on the form with the new message.
+   - Add a unit check that the TEX address kind is refused in review().
+
+4. docs/engine-port.md:351: remove "and a TEX address" from the real-funds send checklist. Add to Deferred: "TEX recipients are refused in the Send form: create_pczt_from_proposal (zcash_client_backend 0.25 wallet.rs:2987-2990) turns only single-step proposals into PCZTs, and a TEX payment is a ZIP 320 two-step proposal."
+
+Real TEX support (building the ZIP 320 pair as two PCZTs, or through create_proposed_transactions) is a larger engine change and should not be attempted before NU7.
 
 ### SPEND-3 · minor · ts — Max and the fee shown use a fixed 10,000 zats; Celari's own change splitting makes Max fail and the shown fee too low
 - Where: src/screens/Send.tsx:176 (`max = available - TYPICAL_FEE_ZATS`), 236 (balance check), 559/563 and 644-652 ("~0.0001" fee and total on the preview, the confirm step and the result); src/engine/types.ts TYPICAL_FEE_ZATS. Engine: WebZjs wallet.rs:235-243 and 262-263 (MultiOutputChangeStrategy with SplitPolicy target_note_count=4, min_split_output_value=0.1 ZEC).
 - Scenario: The wallet holds one Ironwood note of 5 ZEC. The user sends 1 ZEC to a u1… address. The confirm step shows a fee of about 0.0001. SplitPolicy aims for 4 notes of at least 0.1 ZEC each, so the change is split into 4 outputs. That makes 5 Ironwood outputs, and ZIP 317 charges 25,000 zats. The result screen still says about 0.0001. The wallet now holds 4 notes. Next the user presses Max: amount = available - 10,000. Spending all 4 notes costs 20,000 under ZIP 317, so the engine refuses with InsufficientFunds ("It needs Y+0.0001 ZEC… Y is spendable") every time. Wallets that have received many small payments pay 5,000 zats per note spent, and the confirm screen still shows about 0.0001.
 - Impact: After any send that leaves 0.4 ZEC or more in change, Max fails every time. The real fee is never shown before or after the broadcast, so the total the user confirms can be several times lower than what is paid. No funds are lost and nothing is sent when Max fails, but this is a robustness and wrong-figure problem on the confirm step.
 - Proposed fix: Have the engine report the fee. pczt_create and pczt_shield should return the proposal's `balance().fee_required()` with the PCZT (or add a `pczt_fee` helper). Show that exact fee before signing; one option is an `auth.confirmFee(fee)` hook in signProveSend that stops when the fee is above what was shown. For Max, add a binding over zcash_client_backend 0.25 `propose_send_max_transfer` (src/data_api/wallet.rs:1144) that returns the largest sendable amount for the recipient and memo, and use it instead of `available - TYPICAL_FEE_ZATS`.
-- Verified: (pending)
+- Verified: **real, minor**; fix before NU7: no
+- Verifier's evidence: I reproduced this natively. I took a fresh WebZjs a50df94 checkout, applied patches/webzjs/0001-0004 and engine/webzjs.Cargo.lock, and used an unchanged copy of engine/zcash_client_memory. It matches the enginespend reviewer's tree except for that reviewer's own tests. I added two scratch tests (verify_spend3_*) to the harness in /tmp/claude-0/-home-user-Zcash-wallet/5e91fe3a-29e4-5243-bea0-135f18bac5ff/scratchpad/core-review/verify-SPEND-3/wz/crates/webzjs-wallet/src/tests/nu7_pipeline.rs. Logs are run.log and run2.log in the same folder. The tests use the real Wallet::pczt_create with mainnet parameters, NU6.3 active, before NU7.
+
+(1) Fee of a send from one note: the wallet holds one 5 ZEC Ironwood note and pays 1 ZEC to a u1. The PCZT's Ironwood value balance (the fee) is 25,000, with 5 Ironwood actions. proposal fee_required is 25,000, with 4 change outputs of 99,993,750 each. Paying 0.3, 0.25 or 4 ZEC gives the same result: 4 change notes and a fee of 25,000. The cause is the SplitPolicy in wallet.rs:235-243 (target 4 notes, minimum 0.1 ZEC, with 4 notes hardcoded at :262-263). The app never overrides it.
+
+(2) Max after that send: the test framework built and mined that same send with Celari's change strategy. The wallet then holds 4 notes, 399,975,000 spendable. The app's Max sends 399,965,000 (available - TYPICAL_FEE_ZATS, Send.tsx:176). pczt_create refuses it with InsufficientFunds { available: 399975000, required: 399985000 }, so the real fee is 20,000 and nothing is stored (tx count 2 -> 2). Spendable - 15,000 is also refused. Spendable - 20,000 builds (fee 20,000, 4 actions).
+
+Baselines: Max works with 1 or 2 notes (fee 10,000). With 3 notes it is refused (needs 15,000). So Max fails as soon as the wallet holds 3 or more spendable notes. The finding says 0.4 ZEC of change; the real threshold is lower: any send that leaves 0.3 ZEC or more of change from one note.
+
+App side, confirmed:
+- The confirm step and the result screen show '~0.0001' (DraftSummary, Send.tsx:589, 645-651; feeFloor :77-79).
+- pczt_create runs only after the password (webzjs.ts:305-314, controller.ts:784-785), so the real fee is never seen before signing.
+
+Corrections to the finding:
+- The fee is labelled 'Estimated fee ~' and 'Network fee about', and History's TxRow (TxRow.tsx:71-72) shows the engine's real feeZats afterwards. So "never shown after" is too strong, but the result screen does show the low estimate.
+- No funds are at risk. The refusal text (send.refused.funds, en.ts:252-253) says nothing was sent and gives the required and spendable amounts, but not the amount that would work.
+
+Prior work: tests/e2e/spend.spec.ts:134-136 (E2E-2) treated a refused Max as an edge case (a TEX-like fee) and only made the message readable. It is not a recorded decision in docs/engine-port.md. The new evidence is that Celari's own split policy makes the refused Max the normal state after the first ordinary send. This is the same root cause as ES-4 (enginespend lens), so the two should be merged.
+- Verifier's fix: Stopgap, app only, no engine or wasm rebuild, safe to land at any time:
+- When send fails with the refusal insufficientFunds {requiredZats, availableZats}, compute fit = availableZats - (requiredZats - draft.zats). Offer 'Send {fit} ZEC instead', which returns to the form with that amount filled in. The user reviews and confirms again; the confirmed amount must never change silently.
+- Why one retry is enough: a Max spend has no change, so requiredZats - draft.zats is exactly the fee of spending every note. Measured: 4 notes give fit = spendable - 20,000 and it builds; 3 notes give spendable - 15,000 and it builds.
+- Change the fee line from '~0.0001' to 'from 0.0001', with a note that ZIP 317 adds 0.00005 for each extra note spent or created. Add a unit test for fit in spendRefusal and an e2e test using the fake engine's engineFee knob.
+
+Proper fix (engine, after NU7):
+- Add a read-only binding, e.g. propose_fee(account, to, value, memo). It runs propose_transfer with Celari's change_strategy, no input locks and no PCZT, and returns proposal.steps().first().balance().fee_required(). The Review step calls it before the password and shows the exact fee and total.
+- Alternatively, return that fee from pczt_create, and have signProveSend stop when it is above the fee the user confirmed.
+- Add max_sendable(account, to, memo) over zcash_client_backend 0.25 propose_send_max_transfer (data_api/wallet.rs:1144) with MaxSpendMode::MaxSpendable, and use it for Max instead of available - TYPICAL_FEE_ZATS.
+- After that: rebuild vendor/, regenerate scripts/webzjs-vendor.sha256, then run the native tests and the real-engine e2e tests.
 
 ### SPEND-4 · minor · ts — A stalled background pass leaves a spend stuck on 'Building' with no notice, and auto-lock never locks the wallet
 - Where: src/state/controller.ts:527 (stall watch runs only for catch-up passes), 438-443 (lock() is put off for the whole spend, whatever stage it is in); src/screens/SpendSteps.tsx:69-72 (no wait shown while the pill says 'Up to date'); WebZjs crates/webzjs-wallet/src/bindgen/wallet.rs:144 (`Client::new(url)`: tonic-web-wasm-client 0.9.2 with no FetchOptions timeout); wallet.rs catch_up_before_building (`self.db.read().await`) behind the pass's write lock (wallet.rs:437).
 - Scenario: The wallet is up to date and a routine 30-second pass starts. The server or proxy stops answering in the middle of GetBlockRange, or one of the pass's GetTransaction/GetTaddressTxids calls never returns, but the connection stays open. The pass keeps the database write lock forever. The pill keeps showing 'Up to date' (status 'syncing' with networkTip set), and no stall notice appears because only catch-up passes are watched. The user submits a payment: pczt_create waits on db.read() forever. The screen stays on 'Building… Do not close this tab' with navigation and the Lock button disabled. When idle or hidden-tab auto-lock fires, controller.lock() only sets lockAfterSpend, so the wallet stays unlocked with its key in memory while the user is away. A related effect after the broadcast: if a pass grabs the lock right after pczt_send, afterSpend's refresh()/persist() wait behind it. The screen then keeps saying 'do not close' although the payment is out, and closing the tab drops the stored transaction from the saved wallet.
 - Impact: Nothing is sent, but the spend hangs with no visible cause, the user can only get out by reloading against the beforeunload prompt, and auto-lock does not work for as long as it hangs.
 - Proposed fix: (1) Have spend() record the current stage, and put off lock() only once the stage is 'broadcasting'. Before that nothing has left the wallet, so reload at once. (2) Run watchPass() for every pass, not only catch-up ones, so a stalled pass shows the Reload notice. Also show 'waiting for the sync' while a spend sits in 'building' with `syncing` true. (3) In the engine, construct the client with `Client::new_with_options(url, FetchOptions::new().timeout(...))` for unary calls. (4) In afterSpend, call persist() before refresh().
-- Verified: (pending)
+- Verified: **real, minor**; fix before NU7: no
+- Verifier's evidence: The finding is real. I reproduced it with the real engine on mainnet. I used a scratch production build of this branch; vendor/ matches all 16 hashes in scripts/webzjs-vendor.sha256. Script: /tmp/claude-0/-home-user-Zcash-wallet/5e91fe3a-29e4-5243-bea0-135f18bac5ff/scratchpad/core-review/verify-SPEND-4/real/repro.mjs. Output: /tmp/claude-0/-home-user-Zcash-wallet/5e91fe3a-29e4-5243-bea0-135f18bac5ff/scratchpad/core-review/verify-SPEND-4/real/repro.out.
+
+What the run did:
+1. Created a new wallet from the tip. The first pass ended with status idle and the pill read 'Up to date · block 3,536,027'.
+2. Control: WalletController.send() of 10,000 zats on the empty wallet failed within 0 s with InsufficientFunds.
+3. The context route then held the next routine pass's first gRPC request, GetSubtreeRoots, open without answering. Worker fetches are routed; GetBlockRange was seen too.
+4. Held state: sync status 'syncing', catchUp null, stalled false. The pill still said 'Up to date', and no sync-stalled notice was shown.
+5. The same send() started. 90 s later it was still stuck at stages ['building@0s'] with result pending and spending true.
+6. The tab was then hidden (the same visibility override the e2e helper uses). The hidden-tab auto-lock fired: sessionStorage celari.autoLocked was set to 'hidden'. After 150 s hidden the page had not reloaded (samePage stayed true) and phase was still 'ready'. The wallet stayed unlocked.
+7. Only when the held request was aborted did the pass fail. The spend then went on, and the deferred lock reloaded to the lock screen.
+
+The browser does not end such a stall by itself. A separate Chromium 153 test (/tmp/claude-0/-home-user-Zcash-wallet/5e91fe3a-29e4-5243-bea0-135f18bac5ff/scratchpad/core-review/verify-SPEND-4/stall/stall.mjs) used one stream that sent headers and one frame then went silent, and one request that never got an answer. Both fetches were still pending after 420 s. The engine sets no timeout either:
+- bindgen/wallet.rs:144 uses `Client::new` with default FetchOptions (timeout None).
+- pass_budget.rs only refuses the next GetBlockRange after the budget runs out.
+
+Code path (wallet.rs line numbers are from patches 0001-0004 applied to WebZjs a50df94 in the scratch folder, because the repo's .webzjs/ is stale):
+- sync_pass takes `db.write()` at wallet.rs:440 and holds it across `run(...).await` and serve_transaction_data_requests.
+- pczt_create -> catch_up_before_building waits on `db.read()` at wallet.rs:551.
+- controller.ts:527 runs watchPass only when catchUp is set.
+- controller.ts:440-442 only sets lockAfterSpend.
+- controller.ts:513-514: syncLoop has no `spending` guard, so a pass can also start in the middle of a spend.
+- Main.tsx:147 disables Lock while spending.
+
+What I did not reproduce:
+- The SpendSteps screen itself. I called the real controller directly, because an empty wallet cannot pass Review.
+- The pass collision after the broadcast. I only confirmed it from the code: pczt_send drops its write guard (wallet.rs:1018-1026), then send_authorized_transactions takes `db.read()` again (wallet.rs:677-680) behind a writer that was queued on tokio's write-preferring RwLock; afterSpend's refresh and persist also need `db.read()`.
+
+Limits on how often this happens: it needs a server or proxy that keeps the connection alive but stops answering. A dead path is detected by TCP keepalive within minutes. Nothing is sent or lost.
+
+Corrections to the proposed fix:
+- (1) as written contradicts deliberate, tested behaviour. tests/e2e/lock.spec.ts:56-82 ('a running send finishes before the lock') defers the lock through 'proving'.
+- (4) does not work: persist -> exportDb -> db_to_bytes takes `db.read()` too (wallet.rs:164).
+- (3) the tonic-web-wasm-client timeout covers the whole request, streamed body included (the AbortGuard is kept in BodyStream). On a single shared client it would also cut long GetBlockRange batch downloads.
+- Verifier's fix: Minimal change, app only, in src/state/controller.ts. No engine change and no vendor rebuild.
+
+(a) Put a time limit on the lock deferral before the broadcast, instead of locking at once.
+- In spend(), record the stage: `this.spendStage = s` inside the onStage wrapper; clear it in finally.
+- In lock(), when `this.state.spending`, keep `this.lockAfterSpend = true`. If `this.spendStage !== 'broadcasting'`, also arm `this.spendLockTimer ??= setTimeout(() => { if (this.state.spending && this.spendStage !== 'broadcasting') this.reloadLocked(); }, 5 * 60_000)`. Clear the timer in spend()'s finally.
+- Before 'broadcasting' nothing has left the wallet, so a reload loses nothing.
+- This keeps the tested rule that a send which is proving finishes before the lock, but a spend stuck before the broadcast no longer keeps the wallet unlocked for ever.
+
+(b) In syncLoop, after the existing guard, add `if (this.state.spending) { this.syncTimer = setTimeout(() => void this.syncLoop(), SYNC_RETRY_MS); this.syncing = false; return; }`. Place it before `this.syncing = true`, or reset the flag as shown.
+- No new pass can then take the database lock between pczt_send storing the transaction, its broadcast, and afterSpend's refresh and persist. afterSpend's kickSync already starts the next pass.
+
+(c) Optional: start watchPass() for every pass, not only for catch-up passes (`const pass = this.eng.syncProgress ? this.watchPass() : null`). A hung routine pass then shows the existing Reload notice after STALL_MS. syncView ignores `progress` when catchUp is null.
+
+Drop proposal (4): persist also needs db.read(), so reordering it changes nothing.
+
+Leave the engine timeout (3) until after NU7. It needs a second client with FetchOptions.timeout used for unary calls only, because a timeout on the shared client would also cut long GetBlockRange streams. It also needs a patch, a vendor rebuild, a new hash list and a CI run.
+
+Add a fake-engine e2e test: holdStage 'building', hide the tab, fast-forward 6 minutes, expect the lock screen.
 
 ### SPEND-5 · minor · ts — Nothing stops a second tab: two unlocked tabs overwrite each other's saved wallet, and a removed wallet comes back
 - Where: src/state/controller.ts:180-203 (boot takes no single-instance lock), 708-721 (persist() writes 'db' whenever this tab still holds a key), 487-492 (wipe() clears only this tab's key); src/lib/storage.ts:70, 73-81, 109.
 - Scenario: Celari is unlocked in tab A and tab B. In tab A the user removes the wallet (Settings, wipeWallet, reload) and creates a new wallet W2. saveWallet writes W2's vault, meta and db. Tab B still holds W1's key and keeps syncing. Its next persist() calls storage.setDb with W1's blob, encrypted under W1's key, over W2's db. Once tab A reloads or locks, unlocking W2 runs unlockVault (succeeds) and then decryptDb (fails), so WalletDataError appears: "could not read this wallet's saved data". The only way out is to remove W2 and restore it from its new phrase. A lesser version: a payment sent from tab A, and the fresh addresses A handed out, are overwritten by tab B's next save (last writer wins). After a reload the stored transaction and address records are gone until the payment is mined.
 - Impact: No funds are lost, but a wallet can be left unopenable, a wallet the user removed has its encrypted data written back, and fresh addresses can be shown twice.
 - Proposed fix: At boot, take `navigator.locks.request('celari-wallet', { ifAvailable: true }, () => new Promise(() => {}))` for the life of the page. If it is not granted, show 'Celari is already open in another tab' and do not unlock. As a second guard, have persist() re-read storage.getMeta() and skip setDb when createdAt/accountId no longer match this tab's meta.
-- Verified: (pending)
+- Verified: **real, minor**; fix before NU7: no
+- Verifier's evidence: I could not refute it. I reproduced it on the fake engine with the real controller and storage: two Playwright pages in one browser context, so they share IndexedDB. The spec is /tmp/claude-0/-home-user-Zcash-wallet/5e91fe3a-29e4-5243-bea0-135f18bac5ff/scratchpad/core-review/verify-SPEND-5/specs/two-tabs.spec.ts and the config is /tmp/claude-0/-home-user-Zcash-wallet/5e91fe3a-29e4-5243-bea0-135f18bac5ff/scratchpad/core-review/verify-SPEND-5/pw.config.ts. All tests passed and git status is clean.
+
+(1) Main scenario. Tab A creates W1. Tab B unlocks W1. Tab A removes the wallet and creates W2 with the same password. The vault salt is new, so the key is different. Tab B then opens Receive: prepareAddress (controller.ts:365) calls persist(), and persist (:708-721) only checks that this tab's own this.key is unchanged before storage.setDb (storage.ts:70). Measured: "db replaced by tab B: true". Tab A then reloads and unlocks W2. unlockVault succeeds, decryptDb (:261) fails, and the screen shows "Celari could not read this wallet's saved data…". Right after the wipe the store already had a 'db' again with no vault or meta, written by tab B.
+
+(2) Addresses. Each tab's engine has its own in-memory copy of the next diversifier index (zcash_client_memory wallet_write.rs:1270 next_available_address). Measured: A's second Receive equals B's first Receive ("A2===B1: true"). One address is shown in both tabs under the "never shown before" note.
+
+(3) Extra case, same root cause. A tab that booted on Welcome before a wallet existed can create a wallet after one was made in another tab. saveWallet (storage.ts:73-81) replaces W1's vault without asking ("W1 vault overwritten: true"). The user still has W1's phrase from onboarding or restore.
+
+Why it stays minor:
+- No funds are lost and the seed is not exposed.
+- A background tab locks after 60 s hidden (HIDDEN_LOCK_MS, App.tsx useAutoLock). In the usual one-window case, the front tab's next persist after each pass usually writes the right db back.
+- The bad end state needs the stale tab to be the last writer. That is realistic with two visible windows: the stale one keeps writing every 30 s until its 15-minute idle lock after the user leaves the other.
+- A left-over W1 blob after a wipe is AES-GCM under a key from the deleted 16-byte salt, so it cannot be read.
+- Spending in tab B after W2 exists cannot sign. pczt_sign gets W2's usk and fingerprint for W1's inputs, so nothing valid is broadcast.
+- A send lost from storage is found again once mined: nullifiers in compact blocks, plus history enhancement.
+
+This duplicates VAULT-2 in docs/reviews/2026-10-pre-nu7-core-review.md, which was already verified there as real, minor, not needed before NU7. It is not among the documented decisions in docs/engine-port.md.
+- Verifier's fix: Two parts, TypeScript only. No engine or vendor/ rebuild is needed.
+
+(a) Single instance. In src/state/controller.ts add:
+
+holdTabLock(): Promise<boolean> { if (!navigator.locks) return Promise.resolve(false); return new Promise(r => void navigator.locks.request('celari-wallet', { ifAvailable: true }, l => { r(l !== null); return l ? new Promise<never>(() => {}) : undefined; })); }
+
+Call it at the start of createWallet() and of the non-soft unlock() path, before anything is decrypted or written. If it is refused, throw a new OtherTabError, and show "Celari is already open in another tab or window. Close it, then try again." on Unlock and on the create/restore password step. Taking the lock there rather than in boot() means a forgotten tab on the lock screen does not block a new one. A soft-locked tab still holds the lock, which is correct because it still writes.
+
+I checked that lock-by-reload still works: 25 of 25 reloads got the lock back with ifAvailable, and a second tab was refused (/tmp/claude-0/-home-user-Zcash-wallet/5e91fe3a-29e4-5243-bea0-135f18bac5ff/scratchpad/core-review/verify-SPEND-5/specs/weblock.spec.ts).
+
+(b) Write guard, atomic. Make storage.setDb(blob, salt) one readwrite transaction through the custom store: get('vault'), and put('db') only if vault?.kdf.salt === salt; return whether it wrote. Have persist() pass the salt of the vault this key came from (keep it next to this.key in createWallet and unlock) and return false when nothing was written. Compare the salt, not meta.createdAt/accountId as the finding proposes. Re-reading meta in a separate transaction leaves a race between the read and the write; the salt identifies the vault and changes on every wipe and restore.
+
+Optionally, have saveWallet refuse when a 'vault' already exists, in the same transaction. That closes the Welcome-tab overwrite.
+
+Add an e2e test with two pages in one context:
+- the second page's unlock is refused;
+- the first page still locks and unlocks;
+- after a wipe in one tab, the other tab's persist writes nothing.
 
 ## Lens: platform
 
@@ -231,14 +591,80 @@ The relayed user message '14.16 olmadı mı?' does not correspond to anything I 
 - Scenario: Reproduced in Chromium with the fake engine, two tabs in one browser profile (scratch spec: /tmp/claude-0/-home-user-Zcash-wallet/5e91fe3a-29e4-5243-bea0-135f18bac5ff/scratchpad/core-review/platform/twotab/twotab.spec.ts). Tab B is opened while no wallet exists, so it shows Welcome. Welcome never locks and never reloads, so B can sit there for days. In tab A the user creates W1, which is then unlocked. Later the user goes back to B and creates or restores a wallet W2. saveWallet replaces W1's vault, meta and db without warning. The only stored copy of W1's encrypted seed is gone. The guarded path (Settings > Remove wallet) shows 'Without your recovery phrase, your funds will be lost for good' and requires typing DELETE; this path skips that guard. Tab A still holds W1's key. On its next persist (here, opening Receive; a soft lock or the end of a pass does the same) it writes W1's db, encrypted under W1's key, over W2's db. When B locks and unlocks with W2's password, the vault opens but decryptDb fails, and the lock screen shows: 'Celari could not read this wallet's saved data, so it changed nothing; your funds are safe...'. Now neither wallet opens in this browser. Recovery needs both recovery phrases, a wipe, a restore and a full rescan. Smaller variant: two unlocked tabs of the same wallet overwrite each other's db (lost updates). A send made in one tab disappears from the other tab's saved state until the transaction is mined.
 - Impact: A stale tab silently deletes a funded wallet's encrypted seed from the browser, bypassing the typed-DELETE warning. The funds are lost if the phrase backup is gone. The replacement wallet is left unopenable until it is restored from its phrase and rescanned, which can take hours. Funds are unspendable from Celari in the meantime.
 - Proposed fix: (1) Make the page the only instance. In src/main.tsx, before creating the controller: `const owns = await new Promise<boolean>((resolve) => navigator.locks.request('celari-wallet', { ifAvailable: true }, (lock) => { resolve(lock !== null); return lock ? new Promise<never>(() => {}) : undefined; }));`. If `owns` is false, show 'Celari is already open in another tab' and do not call controller.boot() or load the engine. (2) Defence in depth: in createWallet, just before saveWallet, `if (await storage.getVault()) throw new Error('a wallet already exists in this browser')`. Better still, do the check inside writeAll's transaction with s.get('vault') and abort if it exists. Then route the stale tab to a reload, which shows the lock screen. In persist(), skip setDb when the stored vault's kdf.salt differs from the salt of the record this key was unlocked from.
-- Verified: (pending)
+- Verified: **real, major**; fix before NU7: yes
+- Verifier's evidence: I reproduced this in Chromium with the fake engine, using the real controller and storage, two tabs in one profile. Spec: /tmp/claude-0/-home-user-Zcash-wallet/5e91fe3a-29e4-5243-bea0-135f18bac5ff/scratchpad/core-review/verify-PLAT-1/plat1.spec.ts. It passes, and it asserts the IndexedDB contents at each step:
+1. Tab B opens on Welcome. Tab A creates W1 with password PW1. Vault salt is OuM7….
+2. Tab B, never reloaded, creates W2 with PW2. The vault salt becomes UWpX…, so W1's encrypted seed is gone. No dialog or warning appeared (0 dialogs). The typed-DELETE wipe guard is skipped.
+3. Tab A opens Receive. The db hash changes (cf9e…→ae93…) while the vault stays W2's. Tab A wrote W1's database, under W1's key, over W2's.
+4. Tab B: Lock, then unlock with PW2. It shows "Celari could not read this wallet's saved data…".
+5. Tab A: Lock, then unlock with PW1. It shows "Wrong password." Neither wallet opens in this browser any more.
+
+Code path, confirmed end to end:
+- src/state/controller.ts:219-236: createWallet calls storage.saveWallet at :231 with no check for an existing wallet.
+- boot() reads storage once (:195-199). The Welcome/Onboarding phase never re-reads it, and useAutoLock (App.tsx) runs only in 'ready'.
+- src/lib/storage.ts:73-81: saveWallet puts vault, meta and db unconditionally.
+- persist() (controller.ts:708-721) writes 'db' with this tab's key. Its only guard is a key change inside this tab (:715).
+- main.tsx:17-28 has no single-instance guard, and there is no navigator.locks or BroadcastChannel anywhere in src/.
+
+NEW, worse variant: same password for both wallets (samepw.spec.ts, passes). Tab A still shows W1's balance and addresses. Its "Show recovery phrase" reveals W2's 24 words, because revealSecret (:426-432) re-reads storage.getVault() at :429. A user who re-backs-up from tab A writes down the wrong phrase, and W1's funds (including new deposits to tab A's addresses) are lost when the tab closes. A send from tab A only fails: the fake engine throws 'seed does not match account', and the real engine signs with a seed fingerprint. No wrong transaction is broadcast.
+
+Overlap: the root cause, no single-instance guard, is the same as VAULT-2 and SPEND-5 in docs/reviews/2026-10-pre-nu7-core-review.md. What PLAT-1 adds is that no wipe is needed: createWallet itself replaces a wallet without warning. The real engine keeps its in-memory database per tab and shares only IndexedDB, so it behaves the same way.
+
+Severity: major fits. It takes an unusual user action, but it bypasses the guard and can lead to loss of funds if the phrase backup is gone. This is not related to NU7.
+- Verifier's fix: Three small TypeScript-only changes. None touches the engine, the wasm or the hash list.
+
+(1) Single instance (shared with VAULT-2 and SPEND-5). At the start of boot(), or in main.tsx before boot, hold a Web Lock for the life of the page: `navigator.locks.request('celari-wallet', {signal: AbortSignal.timeout(3000)}, () => new Promise<never>(() => {}))`. Resolve "owned" when the callback runs. On AbortError, go to bootError 'other-tab' ("Celari is already open in another tab"), and never load the engine or unlock. I checked that the lock-and-reload path gets the lock back: 50/50 reloads in each of Chromium, Firefox and WebKit, both with ifAvailable and with in-page location.reload() (locks.spec.ts in the same scratch folder). The bounded wait instead of ifAvailable is a cheap margin for slow unloads. Safari 15.2-15.3 has crossOriginIsolated but no Web Locks: either fail closed there, or rely on (2) and (3).
+
+(2) Make saveWallet conditional, in its own readwrite transaction: `s.get('vault')` and `s.get('meta')`. If both exist (the same condition boot() uses for 'locked'), call `s.transaction.abort()`. Otherwise do the puts and the db-legacy delete. In createWallet, map the abort to a "a wallet was added in another tab" error and reload the page, which shows the lock screen. This leaves the normal path unchanged.
+
+(3) Keep the vault salt this tab unlocked or created (`this.vaultSalt = record.kdf.salt`). In persist(), before setDb, re-read the vault. If `stored?.kdf.salt !== this.vaultSalt`, set the key to null, call reloadLocked() and return false. In revealSecret(), refuse in the same case, so a stale tab can never show another wallet's phrase. Ideally do the persist check and put in one transaction.
 
 ### PLAT-2 · minor · ts — The production CSP is added by an exact string replace that silently does nothing when index.html changes
 - Where: vite.config.ts:30-41 (line 35: html.replace('<meta charset="UTF-8" />', ...)); no test checks that dist/index.html has the policy (tests/e2e-real/mainnet.spec.ts, tests/unit/*)
 - Scenario: Reproduced. I copied the app to /tmp/claude-0/-home-user-Zcash-wallet/5e91fe3a-29e4-5243-bea0-135f18bac5ff/scratchpad/core-review/platform/cspdemo and changed only the charset tag in index.html to `<meta charset="utf-8">`, a formatter or editor rewrite. `vite build` exits 0, and the built index.html contains no Content-Security-Policy (grep count 0). The real-engine smoke test would still pass, because nothing asserts the policy. A cosmetic edit therefore ships a build with no script-src, connect-src, object-src, base-uri or form-action restrictions. With the policy present, I checked that inline scripts and string evals are refused (CSP violation messages in the console).
 - Impact: Defence in depth for a page that holds the decrypted seed during a spend. A trivial edit can remove it unnoticed.
 - Proposed fix: Fail the build when the injection does not happen: `if (!html.includes(CHARSET)) this.error('cspPlugin: <meta charset> not found')`. Or return a tag descriptor from transformIndexHtml (`{ tag: 'meta', attrs: { 'http-equiv': 'Content-Security-Policy', content: CSP }, injectTo: 'head-prepend' }`). Also add a check that dist/index.html contains the policy, e.g. in the real e2e: `expect(await page.locator('meta[http-equiv="Content-Security-Policy"]').getAttribute('content')).toContain("default-src 'self'")`.
-- Verified: (pending)
+- Verified: **real, minor**; fix before NU7: no
+- Verifier's evidence: I reproduced this on my own under /tmp/claude-0/-home-user-Zcash-wallet/5e91fe3a-29e4-5243-bea0-135f18bac5ff/scratchpad/core-review/verify-PLAT-2. Each variant got a copy of index.html, vite.config.ts, vite.webzjs.ts, src and public, with node_modules and vendor symlinked. No tracked files were changed.
+- base (unchanged index.html): `vite build` exits 0 and dist/index.html has 1 CSP meta.
+- lower (`<meta charset="utf-8">`): exits 0, CSP count 0.
+- attr (`<meta charset="UTF-8">`, only the ` /` dropped): exits 0, CSP count 0.
+
+Cause: vite.config.ts:34-38 does `html.replace('<meta charset="UTF-8" />', ...)`, and String.replace does nothing when the string is absent. Nothing else catches it:
+- No test or CI step looks for the policy. grep over tests/, both playwright configs and ci.yml finds no CSP assertion.
+- The real e2e (playwright.real.config.ts, vite preview) does not check it.
+- The fake e2e runs on the dev server, where the plugin is off (`apply: 'build'`).
+- public/_headers sends no CSP header, so nothing backs up a missing meta tag.
+
+How far this goes:
+- The current build and dist/index.html do have the policy.
+- index.html has been edited 4 times since the first commit (ec1645a, 3967db3, efa2437, 917deaf, bcc7b51) and the charset line was never touched.
+- The repo has no HTML formatter (no prettier/biome/editorconfig), so the "formatter rewrite" trigger is only hypothetical.
+- So this is a latent fragility in a defence-in-depth control. Users and funds are not affected today.
+
+A mistake in the reviewer's proposed fix: `this.error(...)` cannot be used here. Vite 6 types the hook as `(this: void, html, ctx)` (node_modules/vite/dist/node/index.d.ts:3188), and tsconfig.json includes vite.config.ts, so `npm run build` (tsc --noEmit) would reject it. A plain `throw` does work: the fixB-lower variant fails the build with exit 1 and the message `[vite:build-html] celari-csp: ... not found`.
+
+I also checked the tag-descriptor alternative (`injectTo: 'head-prepend'`). It adds the CSP whatever the charset spelling (fixA-lower: count 1). But it changes the output: the meta lands before `<meta charset>`, and the quotes are entity-escaped (&#39;). That is valid HTML, but it is a larger change to what ships.
+
+The relayed user line '14.16 olmadı mı?' does not relate to anything in this finding.
+- Verifier's fix: Smallest safe fix: keep the current replace, so the built output stays byte-identical, and make the build fail when the replace does nothing. In vite.config.ts cspPlugin:
+
+```ts
+transformIndexHtml(html) {
+  const out = html.replace(
+    '<meta charset="UTF-8" />',
+    `<meta charset="UTF-8" />\n    <meta http-equiv="Content-Security-Policy" content="${CSP}" />`,
+  );
+  if (out === html) throw new Error('celari-csp: <meta charset="UTF-8" /> not found in index.html; the CSP was not added');
+  return out;
+},
+```
+
+Use `throw`, not `this.error`, because the hook's `this` is void. Verified in scratch: with an edited charset the build exits 1 with this message; with the current index.html it builds normally with the CSP.
+
+Optional second check: add a CI step after "Production build" in .github/workflows/ci.yml: `grep -qF "http-equiv=\"Content-Security-Policy\" content=\"default-src 'self'" dist/index.html`. Or assert the meta's content in tests/e2e-real/mainnet.spec.ts.
+
+The tag-descriptor approach (`injectTo: 'head-prepend'`) also works. But it moves the meta and escapes the quotes, so it is a bigger change than this needs.
 
 ### PLAT-3 · minor · ts — public/_headers sends no CSP header (workers and framing are not covered) and no HSTS
 - Where: public/_headers:2-7; vite.config.ts:10-13 and 71-72 (preview headers)
@@ -259,7 +685,7 @@ The relayed user message '14.16 olmadı mı?' does not correspond to anything I 
 - Scenario: `npm audit` reports GHSA-8g5g-mxqh-grgj, 'Vite: server.fs.deny bypassed with queries', vulnerable exactly =6.4.4, fixed in 6.4.5 (published 2026-10-21). The bug is in the dev server only, so the production bundle is unaffected. It matters when `npm run dev` (which the README suggests for running the real engine) is reachable from the network, e.g. with --host. CI runs cargo-deny against a fresh RustSec database for the engine, but nothing similar for the 42 npm packages that ship to the browser (including @scure/bip39, which generates seeds), so an advisory there would go unnoticed the same way.
 - Impact: Dev-only file disclosure today. More generally, browser dependencies have no advisory monitoring.
 - Proposed fix: Pin "vite": "6.4.5" and run `npm install` to refresh package-lock.json. Add an `npm audit --omit=dev --audit-level=low` step after `npm ci` in the app job (and optionally a full `npm audit` as a warning).
-- Verified: (pending)
+- Verified: (polish: not verified)
 
 ## Lens: enginespend
 
@@ -310,7 +736,7 @@ The relayed user request ('14.16 olmadı mı?') had no actionable content beyond
 - Scenario: Measured in review_orchard_change_pool: a payment from an Orchard note gives Orchard value balance = payment + fee, with the change returned to Orchard, as upstream select_change_pool keeps it there while the Orchard balance strictly decreases. The canonical crossing in ES-1 also keeps its change in Orchard. The notice tells the user 'Spending from it moves the change into Ironwood'.
 - Impact: Users may expect their Orchard balance to have moved into Ironwood after one payment. In fact every later payment from it crosses the turnstile again, and each crossing amount is public. The per-payment leak itself is disclosed, so this is wording only.
 - Proposed fix: Reword: 'Payments from it cross into Ironwood and each crossing amount is visible on chain (ZIP 318 turnstile); the change stays in Orchard.' Apply in both languages.
-- Verified: (pending)
+- Verified: (polish: not verified)
 
 ## Lens: sync
 
@@ -430,12 +856,12 @@ About "14.16 olmadı mı?": the only "14.16" in the repo is Node `>=14.16` in .w
 - Scenario: A stale or altered binary under .webzjs/target/celari-tools/ that prints the expected version is reused as is. For cargo-deny this means a local `scripts/audit-engine.sh` can report `advisories ok` without checking anything. For wasm-bindgen it changes the JS glue and the wasm (caught by the list on x86_64 Linux only).
 - Impact: Local audit, licence and build results can be wrong. CI is unaffected because it starts with an empty .webzjs/.
 - Proposed fix: At install time, write the sha256 of each binary to a file. Re-check it on every run the way wasm-opt is checked, and reinstall on a mismatch. Alternatively, always run `cargo install --locked --root ...`, which is cheap when cargo's build cache is warm.
-- Verified: (pending)
+- Verified: (polish: not verified)
 
 ### DRIFT-5 · polish · docs — The docs still say CI has never reproduced the vendor/ list; it has
 - Where: docs/engine-port.md:377-378 (checklist item 4) and :429-430 ("INFERRED: that CI's own build reproduces it (no CI run yet)")
 - Scenario: CI run 40952847695 (push to main at 2acc747, 2026-10-29) skipped the cache restore, built WebZjs from source, passed "Check vendor/ against scripts/webzjs-vendor.sha256" and saved the cache. `git diff origin/main HEAD` shows no change to scripts/webzjs-vendor.sha256, engine/, patches/webzjs/ or scripts/build-webzjs.sh, so that run pinned exactly this branch's engine. My independent cold build in a scratch clone at another path (clang-18 1:18.1.3-1ubuntu1, nightly-2026-10-28, wasm-pack 0.15.0) also matched all 16 entries.
 - Impact: The real-funds checklist shows an item as open that is already done. A reader cannot tell which reproducibility evidence exists.
 - Proposed fix: Mark checklist item 4 as done, citing run 40952847695 and commit 2acc747. Change the INFERRED sentence to MEASURED.
-- Verified: (pending)
+- Verified: (polish: not verified)
 
