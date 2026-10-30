@@ -71,3 +71,27 @@ test('each History row says how private it was, in words and not only in colour'
   ]);
   await expect(page.getByText('Etiketler yalnızca bu cüzdanın kendi çıktılarına bakar')).toBeVisible();
 });
+
+test.describe('the transaction ID', () => {
+  test.use({ permissions: ['clipboard-read', 'clipboard-write'] });
+
+  test('a row shows its transaction ID on request, and copies it', async ({ page }) => {
+    await createWallet(page);
+    await send(page, UA, '0.1');
+    await nav(page, 'History');
+    // Rows are grouped: one not yet in a block, then the month of the first payment.
+    await expect(page.getByTestId('history').locator('.month-head')).toHaveText(['Not in a block yet', /^\w+ \d{4}$/]);
+
+    const row = page.getByTestId('history').locator('.tx').first();
+    const toggle = row.getByRole('button', { name: 'Transaction ID', exact: true });
+    const copy = row.getByRole('button', { name: 'Copy transaction ID' });
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(copy).toBeHidden();
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    const txid = (await row.locator('.txid code').textContent())!;
+    expect(txid).toMatch(/^[0-9a-f]{64}$/);
+    await copy.click();
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(txid);
+  });
+});
