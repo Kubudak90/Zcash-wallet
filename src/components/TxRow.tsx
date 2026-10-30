@@ -26,10 +26,14 @@ export function useTxDate(): (tx: HistoryItem) => string | null {
 /**
  * The style a list of rows needs so their decimal points line up: every
  * fraction is as wide (in ch) as the longest one in the list, separator
- * included, so short ones leave no gap where none is needed.
+ * included, so short ones leave no gap where none is needed. Nothing while
+ * balances are hidden: the masked rows have no fraction to line up, and the
+ * width would tell how many decimals the amounts have.
  */
 export function useFractionWidth(txs: HistoryItem[]): CSSProperties {
   const { lang } = useI18n();
+  const { hidden } = useHideBalances();
+  if (hidden) return {};
   const point = lang === 'tr' ? ',' : '.';
   let widest = 3;
   for (const tx of txs) {
