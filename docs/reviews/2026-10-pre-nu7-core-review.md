@@ -2,6 +2,22 @@
 
 Interim record of the review started on 2026-10-30 (branch `claude/core-engine-review`), saved so that no progress is lost if the session stops. Findings are as reported by each lens reviewer; the "Verified" column is the independent refuting verifier's verdict where it has finished (blank = not verified yet). Nothing here is fixed yet; fixes and the final decisions go to docs/engine-port.md (review round 7).
 
+## State and how to continue (if this session stops)
+
+- `claude/web-wallet-ui` (pushed, CI green on 1762dca): the "Obsidian & Gold" web UI, English first, new logo. Not merged to `main`; the owner decides.
+- `claude/core-engine-review` (this branch, on top of the UI branch): this review. Done so far: six lens reviews (this file) and part of the verification.
+- Remaining, in order:
+  1. Verify each non-polish finding below by trying to refute it.
+  2. Fix the confirmed TypeScript/CI findings, with regression tests, then run typecheck, unit, e2e and build.
+  3. Fix the confirmed engine findings that must land before NU7 (block 3,543,405), only if the change is low-risk.
+     - Engine changes go in `engine/zcash_client_memory` or `patches/webzjs`.
+     - Then run, in order: `scripts/build-webzjs.sh`, regenerate `scripts/webzjs-vendor.sha256`, `scripts/test-engine-native.sh` (both modes), `scripts/audit-engine.sh`, `scripts/gen-licenses.sh --check`, `npm run test:e2e:real`.
+  4. Record every finding as fixed or deferred, and why, in `docs/engine-port.md` (review round 7).
+  5. Have an independent check of the diff done.
+  6. Push the branch, then run `ci.yml` with workflow_dispatch: CI does not run on branch pushes. Use `full_rebuild=true` if `vendor/` changed.
+- Do not touch Vercel, the `vercel-preview` branch or the `celari-preview` project: the owner still has funds in that deployment.
+
+
 ## Lens: vault
 
 Coverage: Read in full: src/lib/vault.ts, seed.ts, bytes.ts, storage.ts, birthday.ts, autoLock.ts, clipboard.ts; src/state/controller.ts, autoLockNotice.ts, wallet.tsx; src/App.tsx, src/main.tsx; the secret-handling parts of src/engine/webzjs.ts, webzjs-errors.ts, fake.ts; src/screens/Settings.tsx (PasswordGate, ViewingKey, WipeWallet), Unlock.tsx, CreateWallet.tsx, RestoreWallet.tsx, PasswordSetup.tsx, SpendSteps.tsx, the confirm step of Send.tsx; src/components/ui.tsx (CopyButton, PasswordField, ErrorDetails). Also docs/engine-port.md (all decisions and deferred items), the relevant parts of README.md, git history of the clipboard and lock commits, and in .webzjs the create_account and usk_from_seed_str paths (they do not store or echo the seed). None of the six findings is among the documented decisions or deferred items; Decision 18 covers only the rescan pausing at locks.
