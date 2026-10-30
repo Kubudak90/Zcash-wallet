@@ -232,7 +232,9 @@ svg {
   fill: var(--brand-facet);
 }
 
-/* Mark and name in the logo files' proportions, from the mark's height. */
+/* Mark and name in the logo files' proportions, from the mark's height. --brand-h
+   is the only size the lockup takes, set per placement; its drawing is fixed in
+   Brand.tsx, so tests/unit/brand.test.ts keeps every --brand-h in that drawing's range. */
 .brand-lockup {
   --brand-h: 28px;
   display: inline-flex;

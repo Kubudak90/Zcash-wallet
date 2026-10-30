@@ -63,7 +63,7 @@ export function Welcome({ onCreate, onRestore }: { onCreate: () => void; onResto
     <div className="welcome">
       <section className="w-brand" aria-labelledby={ids.title}>
         <EngravedC className="w-motif" />
-        <BrandLockup size={32} />
+        <BrandLockup />
         <div className="w-statement">
           <p className="eyebrow w-eyebrow">{t('welcome.eyebrow')}</p>
           <h1 className="w-title" id={ids.title}>
