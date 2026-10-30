@@ -3,6 +3,7 @@ import { useId, useState, type FocusEvent, type FormEvent, type ReactNode } from
 import { ErrorDetails, Notice, PasswordField, Screen, Spinner, StrengthMeter } from '../components/ui';
 import { useI18n } from '../i18n';
 import { MIN_PASSWORD_LENGTH } from '../lib/vault';
+import { Flow } from './AccountLayout';
 
 export function PasswordSetup({
   onSubmit,
@@ -49,60 +50,63 @@ export function PasswordSetup({
     }
   }
 
+  // The last step of Create and of Restore alike.
   return (
-    <Screen title={t('password.title')} onBack={busy ? undefined : onBack}>
-      <p className="muted">{t(viewOnly ? 'password.introView' : 'password.intro')}</p>
-      {note}
-      <form onSubmit={submit} className="stack" onFocus={trackRepeat(true)} onBlur={trackRepeat(false)}>
-        <PasswordField
-          label={t('common.password')}
-          name="new-password"
-          autoComplete="new-password"
-          value={password}
-          onChange={setPassword}
-          autoFocus
-          invalid={showTooShort}
-          describedBy={showTooShort ? tooShortId : undefined}
-        />
-        <StrengthMeter password={password} />
-        {/* The error slots stay mounted (empty when valid) so the polite live region exists before its text. */}
-        <p id={tooShortId} className="field-error" aria-live="polite">
-          {showTooShort && t('password.tooShort', { n: MIN_PASSWORD_LENGTH })}
-        </p>
-        <PasswordField
-          label={t('password.repeat')}
-          name="repeat-password"
-          autoComplete="new-password"
-          value={repeat}
-          onChange={setRepeat}
-          invalid={mismatch}
-          describedBy={mismatch ? mismatchId : undefined}
-        />
-        <p id={mismatchId} className="field-error" aria-live="polite">
-          {mismatch && t('password.mismatch')}
-        </p>
-        {error != null && (
-          <Notice tone="error">
-            {t('common.genericError')}
-            <ErrorDetails error={error} />
-          </Notice>
-        )}
-        {/* aria-disabled while busy: a disabled button would drop focus to <body>. */}
-        <button
-          type="submit"
-          className="primary"
-          disabled={tooShort || password !== repeat}
-          aria-disabled={busy || undefined}
-        >
-          {busy ? (
-            <>
-              <Spinner /> {t('password.creating')}
-            </>
-          ) : (
-            t('password.finish')
+    <Flow step={3}>
+      <Screen title={t('password.title')} onBack={busy ? undefined : onBack}>
+        <p className="muted">{t(viewOnly ? 'password.introView' : 'password.intro')}</p>
+        {note}
+        <form onSubmit={submit} className="stack" onFocus={trackRepeat(true)} onBlur={trackRepeat(false)}>
+          <PasswordField
+            label={t('common.password')}
+            name="new-password"
+            autoComplete="new-password"
+            value={password}
+            onChange={setPassword}
+            autoFocus
+            invalid={showTooShort}
+            describedBy={showTooShort ? tooShortId : undefined}
+          />
+          <StrengthMeter password={password} />
+          {/* The error slots stay mounted (empty when valid) so the polite live region exists before its text. */}
+          <p id={tooShortId} className="field-error" aria-live="polite">
+            {showTooShort && t('password.tooShort', { n: MIN_PASSWORD_LENGTH })}
+          </p>
+          <PasswordField
+            label={t('password.repeat')}
+            name="repeat-password"
+            autoComplete="new-password"
+            value={repeat}
+            onChange={setRepeat}
+            invalid={mismatch}
+            describedBy={mismatch ? mismatchId : undefined}
+          />
+          <p id={mismatchId} className="field-error" aria-live="polite">
+            {mismatch && t('password.mismatch')}
+          </p>
+          {error != null && (
+            <Notice tone="error">
+              {t('common.genericError')}
+              <ErrorDetails error={error} />
+            </Notice>
           )}
-        </button>
-      </form>
-    </Screen>
+          {/* aria-disabled while busy: a disabled button would drop focus to <body>. */}
+          <button
+            type="submit"
+            className="primary"
+            disabled={tooShort || password !== repeat}
+            aria-disabled={busy || undefined}
+          >
+            {busy ? (
+              <>
+                <Spinner /> {t('password.creating')}
+              </>
+            ) : (
+              t('password.finish')
+            )}
+          </button>
+        </form>
+      </Screen>
+    </Flow>
   );
 }

@@ -4,109 +4,750 @@
  * components live in src/styles.css.
  */
 
-/* --- screens outside the wallet shell ------------------------------------ */
-
-/* Onboarding, the lock screen and boot: one centred column on the page. */
-.app > .screen {
-  width: 100%;
-  max-width: 560px;
-  margin: 0 auto;
-  padding: max(28px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
-    max(48px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+/* The danger zone's outline: at least 3:1 against the card in both themes. */
+:root {
+  --danger-line: color-mix(in srgb, var(--error) 78%, var(--surface));
+  --danger-wash: color-mix(in srgb, var(--error) 5%, var(--surface));
 }
 
-.app > .screen.welcome {
-  max-width: 460px;
-  min-height: 100vh;
-  min-height: 100dvh;
-  justify-content: center;
-  gap: 18px;
-}
+/* --- shared pieces ------------------------------------------------------- */
 
-.app > .screen.center {
-  min-height: 100vh;
-  min-height: 100dvh;
-  justify-content: center;
+.brand-mark {
+  display: inline-flex;
   align-items: center;
-  text-align: center;
+  gap: 11px;
+  min-width: 0;
 }
 
-.app > .screen.center .muted {
-  display: flex;
+.brand-mark img {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+}
+
+.brand-mark span {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-size: 1.5rem;
+  font-weight: 420;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  color: var(--text);
+}
+
+/* The engraved C: decoration behind the content, in the brand's gold. */
+.engraved-c {
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
+  color: var(--accent-mark);
+}
+
+.engraved-dot {
+  fill: var(--accent-mark);
+  fill-opacity: 0.75;
+}
+
+/* The card's gold hairline (the one ornament of these screens). */
+.flow-card::before,
+.lock-card::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: 28px;
+  right: 28px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent-line) 18%, var(--accent-line) 50%, transparent 92%);
+}
+
+/* --- language switch (Welcome, the lock screen, Settings) ---------------- */
+
+.lang-switch {
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
+  align-self: flex-start;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--input-border);
+  border-radius: var(--r-md);
+  background: var(--inset);
 }
 
-@media (min-width: 600px) {
-  .app > .screen {
-    padding: max(48px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right))
-      max(64px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
-  }
+.lang-globe {
+  width: 16px;
+  height: 16px;
+  margin: 0 3px 0 7px;
+  color: var(--subtle);
 }
 
-/* The lock screen's heading sits under the centred logo. */
-.app > .screen.welcome > h1 {
-  text-align: center;
+button.chip {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.875rem;
+  font-weight: 520;
 }
 
-.welcome-top {
-  display: flex;
-  justify-content: flex-end;
+button.chip:hover {
+  background: none;
+  color: var(--text);
 }
 
-.logo {
-  align-self: center;
+button.chip.active {
+  background: var(--raised);
+  color: var(--text);
+  box-shadow:
+    var(--shadow-1),
+    inset 0 0 0 1px var(--border-2);
 }
 
 /* --- Welcome --------------------------------------------------------------- */
 
-h1.brand {
-  font-family: var(--font-display);
-  font-optical-sizing: auto;
-  font-size: 2.75rem;
-  font-weight: 380;
-  letter-spacing: -0.02em;
-  text-align: center;
+.welcome {
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
 }
 
-.tagline {
-  color: var(--muted);
-  text-align: center;
+/* The brand statement. */
+.w-brand {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: max(20px, env(safe-area-inset-top)) max(20px, calc((100% - 680px) / 2)) 28px;
+  border-bottom: 1px solid var(--border);
+}
+
+.w-brand > :not(.w-motif) {
+  position: relative;
+  z-index: 1;
+}
+
+.w-motif {
+  width: 720px;
+  height: 720px;
+  right: -270px;
+  top: -200px;
+  opacity: 0.85;
+}
+
+/* Phones and tablets: the letter stands in the room above the statement, its mouth in view. */
+.w-statement {
+  padding: 172px 0 32px;
+  max-width: 640px;
+}
+
+.w-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.w-eyebrow::before {
+  content: '';
+  flex: none;
+  width: 28px;
+  height: 1px;
+  background: var(--accent-mark);
+}
+
+.w-title {
+  margin-top: 22px;
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-size: clamp(2.125rem, 1.35rem + 3.4vw, 2.75rem);
+  font-weight: 330;
+  letter-spacing: -0.028em;
+  line-height: 1.06;
+  text-wrap: balance;
+}
+
+.w-title em {
+  font-style: italic;
+  font-weight: 300;
+  color: color-mix(in srgb, var(--text) 78%, var(--accent-mark));
 }
 
 .pillars {
-  margin: 4px 0 8px;
+  margin: 0;
   padding: 0;
   list-style: none;
-  display: flex;
-  flex-direction: column;
-  border-top: 1px solid var(--border);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .pillars li {
-  display: flex;
-  gap: 12px;
-  align-items: baseline;
-  padding: 12px 2px;
-  border-bottom: 1px solid var(--border);
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+  align-content: start;
+  padding: 14px 0;
+  border-top: 1px solid var(--border-2);
   color: var(--muted);
-  font-size: 0.875rem;
+  font-size: 0.9375rem;
+  line-height: 1.5;
 }
 
-.pillars li::before {
-  content: '';
-  flex: none;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--accent-mark);
-  transform: translateY(-2px);
+.pillars .icon {
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  color: var(--subtle);
 }
 
-/* --- Create ---------------------------------------------------------------- */
+/* One switch at every width: top right of the page, in line with the brand. */
+.w-lang {
+  position: absolute;
+  z-index: 2;
+  top: max(13px, env(safe-area-inset-top));
+  right: max(16px, calc((100% - 680px) / 2));
+}
 
-.seed-wrap {
+/* The decision. */
+.w-panel {
+  display: flex;
+  flex-direction: column;
+  padding: 0 max(20px, calc((100% - 680px) / 2)) max(28px, env(safe-area-inset-bottom));
+}
+
+.w-choose {
+  width: 100%;
+  padding: 32px 0 28px;
+}
+
+.w-choose h2 {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-size: 1.75rem;
+  font-weight: 360;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.w-lead {
+  margin-top: 10px;
+  color: var(--muted);
+}
+
+.options {
+  margin-top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* A tile: the button is its title and line; the whole tile is its click target. */
+.option {
   position: relative;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-2);
+  transition:
+    border-color 0.12s var(--ease),
+    background-color 0.12s var(--ease);
+}
+
+.option:hover {
+  border-color: var(--input-border);
+  background: var(--surface-2);
+}
+
+.option:has(.option-button:focus-visible) {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+button.option-button {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 20px;
+  gap: 14px;
+  align-items: center;
+  width: 100%;
+  min-height: 0;
+  padding: 16px 16px 16px 14px;
+  border: 0;
+  border-radius: inherit;
+  background: none;
+  color: var(--text);
+  font-weight: inherit;
+  text-align: left;
+  letter-spacing: normal;
+}
+
+button.option-button:hover {
+  background: none;
+  border-color: transparent;
+}
+
+button.option-button:focus-visible {
+  outline: none;
+}
+
+/* The steps under the Create tile are part of its click target too. */
+button.option-button::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.option-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--border-2);
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--muted);
+}
+
+.option-text {
+  min-width: 0;
+}
+
+.option-title {
+  display: block;
+  font-size: 1.0625rem;
+  font-weight: 580;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+}
+
+.option-sub {
+  display: block;
+  margin-top: 3px;
+  color: var(--subtle);
+  font-size: 0.8125rem;
+  font-weight: 450;
+  line-height: 1.45;
+}
+
+.option-arrow {
+  color: var(--subtle);
+}
+
+/* Create is the screen's one primary action. */
+.option-primary {
+  border-color: var(--accent-line);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent) 7%, transparent), transparent 70%), var(--surface);
+}
+
+.option-primary:hover {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--accent) 9%, transparent), transparent 70%), var(--surface-2);
+}
+
+.option-primary .option-icon {
+  border-color: transparent;
+  background: var(--accent);
+  color: var(--accent-text);
+  box-shadow: var(--shadow-gold);
+}
+
+.option-primary .option-arrow {
+  color: var(--accent-fg);
+}
+
+.option-steps {
+  margin: 0 16px 0 72px;
+  padding: 12px 0 15px;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.8125rem;
+  line-height: 1.35;
+}
+
+.option-steps li {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.option-step-n {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  color: var(--subtle);
+  font-variant-numeric: tabular-nums;
+}
+
+.w-foot {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+  color: var(--subtle);
+  font-size: 0.8125rem;
+}
+
+.w-foot-end {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 20px;
+}
+
+.w-foot a {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-weight: 520;
+  text-decoration: none;
+}
+
+.w-foot a:hover {
+  color: var(--text);
+}
+
+.w-foot a .icon {
+  width: 15px;
+  height: 15px;
+}
+
+/* The narrowest phones: the switch drops its globe to stay clear of the brand. */
+@media (max-width: 379px) {
+  .w-lang .lang-globe {
+    display: none;
+  }
+}
+
+/* Desktop: the statement on the left, the decision on the right. */
+@media (min-width: 1024px) {
+  .welcome {
+    grid-template-columns: minmax(0, 1.18fr) minmax(440px, 1fr);
+  }
+
+  .w-brand {
+    padding: 40px clamp(40px, 5vw, 80px) 44px;
+    border-right: 1px solid var(--border);
+    border-bottom: 0;
+  }
+
+  .w-brand .brand-mark img {
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+  }
+
+  /* Beside the statement, the letter's mouth and dot well inside the panel at every width. */
+  .w-brand {
+    --m: clamp(880px, 83.4vw, 1200px);
+  }
+
+  .w-motif {
+    width: var(--m);
+    height: var(--m);
+    right: calc(var(--m) * -0.41);
+    top: 50%;
+    margin-top: calc(var(--m) * -0.533);
+    opacity: 1;
+  }
+
+  /* The statement ends before the letter's outer stroke (at 0.175 of the motif from the panel's edge). */
+  .w-statement {
+    margin: auto 0;
+    padding: 48px 0;
+    max-width: min(640px, calc(100% - var(--m) * 0.175 + clamp(40px, 5vw, 80px) - 4px));
+  }
+
+  .w-title {
+    margin-top: 24px;
+    font-size: clamp(2.75rem, 1rem + 2.9vw, 4rem);
+  }
+
+  .pillars {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 24px;
+    max-width: 760px;
+  }
+
+  .pillars li {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    padding: 16px 0 0;
+    font-size: 0.875rem;
+  }
+
+  .w-lang {
+    top: 32px;
+    right: clamp(32px, 4vw, 64px);
+  }
+
+  .w-panel {
+    padding: 32px clamp(32px, 4vw, 64px) 36px;
+    background: var(--side);
+  }
+
+  .w-choose {
+    margin: auto 0;
+    max-width: 440px;
+    align-self: center;
+    padding: 40px 0;
+  }
+
+  .w-choose h2 {
+    font-size: 2rem;
+  }
+
+  .options {
+    margin-top: 32px;
+  }
+
+  button.option-button {
+    gap: 16px;
+    padding: 20px 20px 20px 18px;
+  }
+
+  .option-steps {
+    margin: 0 20px 0 78px;
+    padding: 13px 0 16px;
+  }
+
+  .w-foot {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    padding-top: 0;
+    border-top: 0;
+  }
+
+  .w-foot-end {
+    flex: none;
+    flex-wrap: nowrap;
+    white-space: nowrap;
+  }
+}
+
+/* --- Create and Restore: one step at a time, in a card ------------------- */
+
+.flow {
+  position: relative;
+  overflow: clip;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 max(12px, env(safe-area-inset-right)) max(32px, env(safe-area-inset-bottom))
+    max(12px, env(safe-area-inset-left));
+}
+
+.flow-motif {
+  display: none;
+}
+
+.flow-top {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: max(16px, env(safe-area-inset-top)) 6px 16px;
+}
+
+.flow-top .brand-mark img {
+  width: 30px;
+  height: 30px;
+}
+
+.flow-top .brand-mark span {
+  font-size: 1.375rem;
+}
+
+.flow-step {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--subtle);
+  font-size: 0.8125rem;
+  font-weight: 520;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.flow-rule {
+  display: flex;
+  gap: 4px;
+}
+
+.flow-rule span {
+  width: 18px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--border-2);
+}
+
+.flow-rule span.on {
+  background: var(--muted);
+}
+
+.flow-card {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 620px);
+  margin: 8px 0 auto;
+  padding: 22px 18px 26px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: var(--shadow-2);
+}
+
+.flow-card .screen {
+  gap: 18px;
+}
+
+.flow-card .screen-head {
+  gap: 10px;
+  margin-bottom: 2px;
+}
+
+.flow-card .screen-head h1 {
+  font-size: 1.75rem;
+  font-weight: 380;
+  text-wrap: balance;
+}
+
+.flow-card .screen > .muted {
+  margin-top: -6px;
+}
+
+.flow-card .notice ul.plain {
+  padding-left: 16px;
+}
+
+.flow-card button.primary {
+  min-height: 50px;
+}
+
+@media (min-width: 600px) {
+  .flow {
+    padding-inline: 24px;
+  }
+
+  .flow-top {
+    padding: 28px 16px 20px;
+  }
+
+  .flow-card {
+    margin: auto 0;
+    padding: 30px 40px 38px;
+  }
+
+  .flow-card .screen-head h1 {
+    font-size: 2rem;
+  }
+
+  /* Optical centre: a little above the middle. */
+  .flow::after {
+    content: '';
+    flex: none;
+    height: 28px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .flow-top {
+    padding: 32px 24px 20px;
+  }
+
+  /* The letter to the left of the card, its mouth towards it. */
+  .flow-motif {
+    display: block;
+    width: 1300px;
+    height: 1300px;
+    left: 50%;
+    top: 50%;
+    margin: -650px 0 0 -1250px;
+    opacity: 0.45;
+  }
+}
+
+/* The recovery words: a ruled sheet, 2 x 12, 3 x 8 or 4 x 6 as room allows.
+   Wide enough for the longest BIP39 word (8 letters) and its number. */
+.seed-wrap,
+.seed-holder {
+  position: relative;
+  container-type: inline-size;
+}
+
+.seed-grid {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  background: var(--border);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-lg);
+}
+
+@container (min-width: 400px) {
+  .seed-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@container (min-width: 500px) {
+  .seed-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.seed-grid li {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 0;
+  background: var(--surface-2);
+  font-family: var(--font-mono);
+  font-variant-ligatures: none;
+}
+
+.seed-index {
+  flex: none;
+  min-width: 2ch;
+  color: var(--subtle);
+  font-size: 0.6875rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.seed-word {
+  color: var(--text);
+  font-size: 0.9375rem;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+/* Hidden until "Reveal words": blurred (styles.css), clipped to its sheet. */
+.seed-wrap.covered {
+  overflow: clip;
+  border-radius: var(--r-lg);
 }
 
 .seed-wrap .reveal {
@@ -115,10 +756,52 @@ h1.brand {
   width: fit-content;
   height: fit-content;
   margin: auto;
+  box-shadow: var(--shadow-2);
 }
 
-/* --- Restore: recovery phrase or viewing key ----------------------------- */
+/* Check your backup: the three words side by side where they fit. */
+.verify-words {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+}
 
+@media (min-width: 600px) {
+  .verify-words {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* The password's strength as three segments. */
+.flow-card .strength-bar {
+  height: 4px;
+  -webkit-mask: linear-gradient(
+    90deg,
+    #000 0 32.4%,
+    transparent 32.4% 33.8%,
+    #000 33.8% 66%,
+    transparent 66% 67.4%,
+    #000 67.4%
+  );
+  mask: linear-gradient(
+    90deg,
+    #000 0 32.4%,
+    transparent 32.4% 33.8%,
+    #000 33.8% 66%,
+    transparent 66% 67.4%,
+    #000 67.4%
+  );
+}
+
+.flow-card .strength-weak .strength-bar span {
+  width: 33.8%;
+}
+
+.flow-card .strength-fair .strength-bar span {
+  width: 67.4%;
+}
+
+/* Restore: recovery phrase or viewing key. */
 .segmented {
   display: flex;
   gap: 2px;
@@ -153,70 +836,757 @@ h1.brand {
     inset 0 0 0 1px var(--border-2);
 }
 
-/* --- language switch (Welcome, the lock screen, Settings) ---------------- */
-
-.lang-switch {
-  display: inline-flex;
-  align-self: flex-start;
-  gap: 2px;
-  padding: 3px;
-  border: 1px solid var(--input-border);
+/* Restore's two choices on the month step, as ruled rows. */
+.choices {
+  border: 1px solid var(--border-2);
   border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+
+.choice {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+}
+
+.choice + .choice {
+  border-top: 1px solid var(--border-2);
+}
+
+.choice > p {
+  padding-left: 32px;
+}
+
+/* --- the lock screen ------------------------------------------------------- */
+
+.lock-page {
+  position: relative;
+  overflow: clip;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+}
+
+.lock-motif,
+.boot-motif {
+  width: 960px;
+  height: 960px;
+  left: 50%;
+  top: 50%;
+  margin: -560px 0 0 -760px;
+  opacity: 0.7;
+}
+
+.lock-top {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: max(14px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 14px
+    max(16px, env(safe-area-inset-left));
+}
+
+.lock-top .brand-mark img {
+  width: 30px;
+  height: 30px;
+}
+
+.lock-top .brand-mark span {
+  font-size: 1.375rem;
+}
+
+.lock-center {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  padding: 16px max(12px, env(safe-area-inset-right)) 32px max(12px, env(safe-area-inset-left));
+}
+
+.lock-card {
+  position: relative;
+  width: min(100%, 440px);
+  display: flex;
+  flex-direction: column;
+  padding: 28px 22px 24px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow:
+    var(--shadow-2),
+    0 30px 80px -40px rgba(0, 0, 0, 0.55);
+}
+
+.lock-mark {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border: 1px solid var(--border-2);
+  border-radius: 14px;
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.lock-mark .icon {
+  width: 22px;
+  height: 22px;
+}
+
+.lock-card h1 {
+  margin-top: 22px;
+  font-size: 1.75rem;
+  font-weight: 370;
+}
+
+.lock-reasons {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lock-reason {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  color: var(--muted);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.lock-reason .icon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  color: var(--subtle);
+}
+
+.lock-card > .network-live,
+.lock-card > .notice {
+  margin-top: 16px;
+}
+
+.lock-card > .network-live:empty {
+  margin: 0;
+}
+
+.lock-form {
+  margin-top: 26px;
+  gap: 14px;
+}
+
+.lock-form button.primary {
+  min-height: 50px;
+}
+
+/* For a keyboard on a wide screen only. */
+.lock-hint {
+  display: none;
+  margin-top: -2px;
+  color: var(--subtle);
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+.lock-hint kbd {
+  display: inline-block;
+  margin: 0 5px;
+  padding: 1px 6px;
+  border: 1px solid var(--border-2);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  line-height: 1.5;
+}
+
+button.lock-forgot {
+  align-self: center;
+  margin-top: 16px;
+  padding: 4px 6px;
+  color: var(--muted);
+  font-size: 0.875rem;
+  text-decoration-color: var(--input-border);
+  text-underline-offset: 4px;
+}
+
+button.lock-forgot:hover {
+  color: var(--text);
+}
+
+/* Starting over: a card outlined in the error colour (3:1 or more). */
+.danger-panel {
+  margin-top: 14px;
+  padding: 16px;
+  border: 1px solid var(--danger-line);
+  border-radius: var(--r-md);
+  background: var(--danger-wash);
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.lock-foot {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  justify-content: center;
+  padding: 0 24px max(28px, env(safe-area-inset-bottom));
+}
+
+.lock-foot p {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  max-width: 520px;
+  color: var(--subtle);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.lock-foot .icon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+}
+
+@media (min-width: 600px) {
+  .lock-card {
+    padding: 40px 36px 30px;
+  }
+
+  .lock-card h1 {
+    font-size: 2rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .lock-top {
+    padding: 32px 40px;
+  }
+
+  .lock-motif,
+  .boot-motif {
+    width: 1500px;
+    height: 1500px;
+    margin: -750px 0 0 -1240px;
+    opacity: 0.85;
+  }
+
+  .lock-center {
+    padding-bottom: 48px;
+  }
+
+  .lock-hint {
+    display: block;
+  }
+}
+
+/* --- boot ------------------------------------------------------------------ */
+
+.boot {
+  position: relative;
+  overflow: clip;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+}
+
+.boot-body {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 26px;
+  /* The logo at the middle of the page, the status under it. */
+  padding-top: 52px;
+}
+
+.boot-body .logo {
+  border-radius: 14px;
+}
+
+.boot-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.boot-card {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 480px);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 28px 24px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  box-shadow: var(--shadow-2);
+}
+
+.boot-card .brand-mark {
+  margin-bottom: 10px;
+}
+
+.boot-card .brand-mark img {
+  width: 30px;
+  height: 30px;
+}
+
+.boot-card .brand-mark span {
+  font-size: 1.375rem;
+}
+
+.boot-card .error-code {
+  padding: 10px 12px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-sm);
   background: var(--inset);
 }
 
-button.chip {
-  min-height: 32px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--muted);
-  font-size: 0.875rem;
-  font-weight: 520;
-}
-
-button.chip:hover {
-  background: none;
-  color: var(--text);
-}
-
-button.chip.active {
-  background: var(--raised);
-  color: var(--text);
-  box-shadow:
-    var(--shadow-1),
-    inset 0 0 0 1px var(--border-2);
+.boot-card button.primary {
+  margin-top: 6px;
 }
 
 /* --- Settings -------------------------------------------------------------- */
+
+/* Settings is wider than the other screens' reading measure: an index and the sections. */
+@media (min-width: 1024px) {
+  .content > .screen:has(> .settings-layout):not(.home) > * {
+    max-width: 1040px;
+  }
+}
+
+.settings-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+}
+
+/* The sections' index: a row of chips on a phone, a sticky list on a wide screen. */
+.settings-index {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.settings-index::-webkit-scrollbar {
+  display: none;
+}
+
+.settings-index a {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 34px;
+  padding: 0 13px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-pill);
+  color: var(--muted);
+  font-size: 0.8125rem;
+  font-weight: 520;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.settings-index a:hover {
+  color: var(--text);
+}
+
+.settings-index a:focus-visible {
+  outline-offset: -2px;
+}
+
+.settings-index a[aria-current='true'] {
+  border-color: var(--input-border);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.settings-index a.index-danger {
+  color: var(--error);
+}
+
+.settings-sections {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
 
 .settings-group {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 20px;
+  scroll-margin-top: 16px;
+}
+
+.settings-group > h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: 2px;
+  color: var(--muted);
+  font-size: 0.875rem;
+  font-weight: 560;
+  letter-spacing: 0;
+}
+
+.settings-group > h2 .icon {
+  width: 17px;
+  height: 17px;
+  color: var(--subtle);
+}
+
+.settings-danger > h2,
+.settings-danger > h2 .icon {
+  color: var(--error);
+}
+
+.settings-card {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--r-lg);
   box-shadow: var(--shadow-2);
 }
 
-.settings-group h2 {
-  font-size: 1.0625rem;
+.settings-card.danger-card {
+  border-color: var(--danger-line);
 }
 
-.settings-group > button,
-.settings-group > .stack > button {
+/* A row: what it is and what it does on the left, its control on the right
+   (under it on a phone). */
+.set-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+  padding: 18px 16px;
+}
+
+.set-row + .set-row {
+  border-top: 1px solid var(--border);
+}
+
+.set-text {
+  min-width: 0;
+}
+
+.set-label {
+  display: block;
+  color: var(--text);
+  font-size: 0.9375rem;
+  font-weight: 550;
+  line-height: 1.4;
+}
+
+.set-help {
+  margin-top: 4px;
+  max-width: 68ch;
+  color: var(--subtle);
+  font-size: 0.8125rem;
+  line-height: 1.55;
+}
+
+.set-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.set-control select {
+  width: auto;
+  min-width: 168px;
+  min-height: 42px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+  font-size: 0.9375rem;
+}
+
+/* A password gate: its button in the row, its form or value across the row. */
+.set-row > button.gate-open {
+  justify-self: start;
+  min-height: 40px;
+  padding: 0 14px;
+  font-size: 0.875rem;
+}
+
+.set-row > button.gate-open .icon {
+  width: 16px;
+  height: 16px;
+  color: var(--subtle);
+}
+
+.set-row > .gate-panel {
+  grid-column: 1 / -1;
+  padding-top: 4px;
+}
+
+.gate-panel > button.gate-close,
+.gate-actions {
   align-self: flex-start;
 }
 
-.danger p {
+.gate-actions > * {
+  flex: 0 1 auto;
+}
+
+/* A checkbox drawn as a switch; it is still a checkbox to assistive tech. */
+input[type='checkbox'].switch {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 46px;
+  height: 28px;
+  border: 1px solid var(--input-border);
+  border-radius: var(--r-pill);
+  background-color: var(--surface-2);
+  background-image: radial-gradient(circle closest-side, var(--muted) 96%, transparent 100%);
+  background-size: 20px 20px;
+  background-position: 3px center;
+  background-repeat: no-repeat;
+  accent-color: auto;
+  transition:
+    background-position 0.18s var(--ease),
+    background-color 0.18s var(--ease),
+    border-color 0.18s var(--ease);
+}
+
+input[type='checkbox'].switch:checked {
+  border-color: var(--text);
+  background-color: var(--text);
+  background-image: radial-gradient(circle closest-side, var(--surface) 96%, transparent 100%);
+  background-position: 21px center;
+}
+
+.server-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+}
+
+.server-row input {
+  grid-column: 1 / -1;
+  min-height: 46px;
+  font-size: 0.9375rem;
+}
+
+.server-row button {
+  min-height: 46px;
+  padding: 0 12px;
+  white-space: normal;
+  text-align: center;
+}
+
+button.secondary.quiet {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  color: var(--muted);
+}
+
+button.secondary.quiet:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.about-text {
+  color: var(--muted);
+  font-size: 0.875rem;
+  max-width: 68ch;
+}
+
+.about-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 22px;
+  font-size: 0.875rem;
+}
+
+.about-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text);
+  font-weight: 500;
+  text-decoration-color: color-mix(in srgb, var(--text) 30%, transparent);
+}
+
+.about-links a .icon {
+  width: 15px;
+  height: 15px;
+  color: var(--subtle);
+}
+
+.about-version {
+  width: 100%;
+  color: var(--subtle);
+  font-size: 0.8125rem;
+}
+
+/* Removing the wallet (Settings' danger zone, the lock screen's "I forgot my password"). */
+.wipe-help {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
   color: var(--error);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.wipe-help .icon {
+  flex: none;
+  width: 17px;
+  height: 17px;
+  margin-top: 1px;
+}
+
+.wipe-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  align-items: end;
+}
+
+.wipe-row button.danger-button {
+  white-space: normal;
+}
+
+.wipe-row button.danger-button .icon {
+  width: 17px;
+  height: 17px;
 }
 
 @media (min-width: 600px) {
-  .settings-group {
-    padding: 22px 24px;
+  .set-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 24px;
+    padding: 20px 24px;
+  }
+
+  .set-row.set-row-stack {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+  }
+
+  .set-control {
+    justify-content: flex-end;
+  }
+
+  .set-row > button.gate-open {
+    justify-self: end;
+  }
+
+  .server-row {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+  }
+
+  .server-row input {
+    grid-column: auto;
+  }
+
+  .server-row button {
+    white-space: nowrap;
+  }
+
+  .about-version {
+    width: auto;
+    margin-left: auto;
+  }
+
+  .settings-card .wipe-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+}
+
+@media (min-width: 1024px) {
+  .settings-layout {
+    grid-template-columns: 184px minmax(0, 1fr);
+    gap: 40px;
+    align-items: start;
+  }
+
+  .settings-index {
+    position: sticky;
+    top: 44px;
+    flex-direction: column;
+    gap: 2px;
+    overflow: visible;
+    padding-top: 2px;
+  }
+
+  .settings-index a {
+    position: relative;
+    height: 34px;
+    padding: 0 12px;
+    border: 0;
+    border-radius: var(--r-sm);
+    color: var(--subtle);
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+
+  .settings-index a:hover {
+    background: var(--surface-2);
+  }
+
+  .settings-index a[aria-current='true'] {
+    background: none;
+    color: var(--text);
+  }
+
+  .settings-index a[aria-current='true']::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 9px;
+    bottom: 9px;
+    width: 2px;
+    border-radius: 2px;
+    background: var(--accent-mark);
+  }
+
+  .settings-index a.index-danger {
+    color: var(--error);
+  }
+
+  .settings-sections {
+    gap: 32px;
+  }
+}
+
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .settings-layout {
+    grid-template-columns: 160px minmax(0, 1fr);
+    gap: 28px;
+  }
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
+/* The narrowest phones: the server's buttons one under the other, each on one line. */
+@media (max-width: 419px) {
+  .server-row {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

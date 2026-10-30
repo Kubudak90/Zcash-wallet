@@ -14,6 +14,7 @@ import {
 import { isValidSeedPhrase, normalizeSeedPhrase } from '../lib/seed';
 import type { Secret } from '../lib/vault';
 import { useController, useWallet } from '../state/wallet';
+import { Flow } from './AccountLayout';
 import { PasswordSetup } from './PasswordSetup';
 
 type Step = 'secret' | 'birthday' | 'password';
@@ -120,120 +121,130 @@ export function RestoreWallet({ onCancel }: { onCancel: () => void }) {
 
   if (step === 'secret') {
     return (
-      <Screen title={t('restore.title')} onBack={onCancel}>
-        <div className="segmented" role="tablist">
-          {(['seed', 'view'] as const).map((m) => (
-            <button
-              key={m}
-              type="button"
-              role="tab"
-              aria-selected={mode === m}
-              className={mode === m ? 'active' : ''}
-              onClick={() => {
-                setMode(m);
-                setInputError(false);
-              }}
-            >
-              {t(m === 'seed' ? 'restore.modeSeed' : 'restore.modeView')}
+      <Flow step={1}>
+        <Screen title={t('restore.title')} onBack={onCancel}>
+          <div className="segmented" role="tablist">
+            {(['seed', 'view'] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                role="tab"
+                aria-selected={mode === m}
+                className={mode === m ? 'active' : ''}
+                onClick={() => {
+                  setMode(m);
+                  setInputError(false);
+                }}
+              >
+                {t(m === 'seed' ? 'restore.modeSeed' : 'restore.modeView')}
+              </button>
+            ))}
+          </div>
+          <form className="stack" onSubmit={submitSecret}>
+            {mode === 'view' && <p className="muted">{t('restore.viewHelp')}</p>}
+            <label className="field">
+              <span>{t(mode === 'seed' ? 'restore.seedLabel' : 'restore.viewLabel')}</span>
+              <textarea
+                name={mode === 'seed' ? 'seed-phrase' : 'viewing-key'}
+                rows={mode === 'seed' ? 4 : 5}
+                value={input}
+                autoComplete="off"
+                autoCapitalize="none"
+                spellCheck={false}
+                onChange={(e) => setInput(e.target.value)}
+              />
+            </label>
+            {inputError && (
+              <Notice tone="error">{t(mode === 'seed' ? 'restore.seedInvalid' : 'restore.viewInvalid')}</Notice>
+            )}
+            <button type="submit" className="primary" disabled={busy || input.trim() === ''}>
+              {t('common.continue')}
             </button>
-          ))}
-        </div>
-        <form className="stack" onSubmit={submitSecret}>
-          {mode === 'view' && <p className="muted">{t('restore.viewHelp')}</p>}
-          <label className="field">
-            <span>{t(mode === 'seed' ? 'restore.seedLabel' : 'restore.viewLabel')}</span>
-            <textarea
-              name={mode === 'seed' ? 'seed-phrase' : 'viewing-key'}
-              rows={mode === 'seed' ? 4 : 5}
-              value={input}
-              autoComplete="off"
-              autoCapitalize="none"
-              spellCheck={false}
-              onChange={(e) => setInput(e.target.value)}
-            />
-          </label>
-          {inputError && (
-            <Notice tone="error">{t(mode === 'seed' ? 'restore.seedInvalid' : 'restore.viewInvalid')}</Notice>
-          )}
-          <button type="submit" className="primary" disabled={busy || input.trim() === ''}>
-            {t('common.continue')}
-          </button>
-        </form>
-      </Screen>
+          </form>
+        </Screen>
+      </Flow>
     );
   }
 
   if (step === 'birthday') {
     return (
-      <Screen title={t('restore.birthdayTitle')} onBack={busy ? undefined : () => setStep('secret')}>
-        <p className="muted">{t('restore.birthdayHelp')}</p>
-        <form className="stack" onSubmit={submitBirthday}>
-          <label className="field">
-            <span>{t('restore.birthdayMonth')}</span>
-            <input
-              type="month"
-              name="birthday-month"
-              min={SAPLING_MONTH}
-              max={currentMonth()}
-              placeholder={t('restore.birthdayPlaceholder')}
-              value={month}
-              disabled={unknown}
-              aria-invalid={monthError}
-              aria-describedby={monthError ? monthErrorId : showLongScan ? longScanId : undefined}
-              onChange={(e) => setMonth(e.target.value)}
-              onBlur={() => setMonthTouched(true)}
-            />
-          </label>
-          {monthError && (
-            <p id={monthErrorId} className="field-error">
-              {t('restore.birthdayInvalid')}
-            </p>
-          )}
-          {showLongScan && parsedMonth && (
-            <Notice tone="warn">
-              <span id={longScanId} data-testid="long-scan">
-                {t('restore.longScan', {
-                  month: parsedMonth,
-                  blocks: (Math.round(longScan / 10_000) * 10_000).toLocaleString(lang === 'tr' ? 'tr-TR' : 'en-US'),
-                })}
-              </span>
-            </Notice>
-          )}
-          <label className="check">
-            <input type="checkbox" checked={unknown} onChange={(e) => setUnknown(e.target.checked)} />
-            {t('restore.birthdayUnknown')}
-          </label>
-          {unknown && <Notice tone="warn">{t('restore.birthdayUnknownHelp')}</Notice>}
-          <label className="check">
-            <input
-              type="checkbox"
-              name="history-enhancement"
-              checked={historyEnhancement}
-              aria-describedby={historyHelpId}
-              onChange={(e) => setHistoryChoice(e.target.checked)}
-            />
-            {t('settings.historyEnhancement')}
-          </label>
-          <p id={historyHelpId} className="muted small">
-            {t('restore.historyEnhancementHelp')}
-          </p>
-          {error != null && (
-            <Notice tone="error">
-              {t('common.genericError')}
-              <ErrorDetails error={error} />
-            </Notice>
-          )}
-          <button type="submit" className="primary" disabled={busy || (!unknown && !parsedMonth)}>
-            {busy ? (
-              <>
-                <Spinner /> {unknown ? t('restore.birthdayDetecting') : t('common.continue')}
-              </>
-            ) : (
-              t('common.continue')
+      <Flow step={2}>
+        <Screen title={t('restore.birthdayTitle')} onBack={busy ? undefined : () => setStep('secret')}>
+          <p className="muted">{t('restore.birthdayHelp')}</p>
+          <form className="stack" onSubmit={submitBirthday}>
+            <label className="field">
+              <span>{t('restore.birthdayMonth')}</span>
+              <input
+                type="month"
+                name="birthday-month"
+                min={SAPLING_MONTH}
+                max={currentMonth()}
+                placeholder={t('restore.birthdayPlaceholder')}
+                value={month}
+                disabled={unknown}
+                aria-invalid={monthError}
+                aria-describedby={monthError ? monthErrorId : showLongScan ? longScanId : undefined}
+                onChange={(e) => setMonth(e.target.value)}
+                onBlur={() => setMonthTouched(true)}
+              />
+            </label>
+            {monthError && (
+              <p id={monthErrorId} className="field-error">
+                {t('restore.birthdayInvalid')}
+              </p>
             )}
-          </button>
-        </form>
-      </Screen>
+            {showLongScan && parsedMonth && (
+              <Notice tone="warn">
+                <span id={longScanId} data-testid="long-scan">
+                  {t('restore.longScan', {
+                    month: parsedMonth,
+                    blocks: (Math.round(longScan / 10_000) * 10_000).toLocaleString(lang === 'tr' ? 'tr-TR' : 'en-US'),
+                  })}
+                </span>
+              </Notice>
+            )}
+            <div className="choices">
+              <div className="choice">
+                <label className="check">
+                  <input type="checkbox" checked={unknown} onChange={(e) => setUnknown(e.target.checked)} />
+                  {t('restore.birthdayUnknown')}
+                </label>
+                {unknown && <Notice tone="warn">{t('restore.birthdayUnknownHelp')}</Notice>}
+              </div>
+              <div className="choice">
+                <label className="check">
+                  <input
+                    type="checkbox"
+                    name="history-enhancement"
+                    checked={historyEnhancement}
+                    aria-describedby={historyHelpId}
+                    onChange={(e) => setHistoryChoice(e.target.checked)}
+                  />
+                  {t('settings.historyEnhancement')}
+                </label>
+                <p id={historyHelpId} className="muted small">
+                  {t('restore.historyEnhancementHelp')}
+                </p>
+              </div>
+            </div>
+            {error != null && (
+              <Notice tone="error">
+                {t('common.genericError')}
+                <ErrorDetails error={error} />
+              </Notice>
+            )}
+            <button type="submit" className="primary" disabled={busy || (!unknown && !parsedMonth)}>
+              {busy ? (
+                <>
+                  <Spinner /> {unknown ? t('restore.birthdayDetecting') : t('common.continue')}
+                </>
+              ) : (
+                t('common.continue')
+              )}
+            </button>
+          </form>
+        </Screen>
+      </Flow>
     );
   }
 
