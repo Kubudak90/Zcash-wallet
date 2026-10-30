@@ -1,62 +1,1387 @@
 /*
  * Money screens: Send, Shield, the spend steps, Receive and the History page.
- * Tokens, controls, cards, transaction rows, stages, the summary and the QR
- * frame are shared and live in src/styles.css.
+ * Tokens, controls, cards, transaction rows, the summary and the QR frame
+ * are shared and live in src/styles.css; this sheet lays these screens out
+ * and refines those pieces where only these screens use them.
  */
 
-/* --- Send ---------------------------------------------------------------- */
+/* --- page frame ----------------------------------------------------------- */
+
+/* These screens lay out their own columns: wider than the shared reading measure. */
+.content > .screen:not(.home) > .spend-layout,
+.content > .screen:not(.home) > .receive-layout,
+.content > .screen:not(.home) > .history-card,
+.content > .screen:not(.home) > .history-empty {
+  max-width: none;
+}
+
+.content > .screen:not(.home) > .spend-done {
+  width: 100%;
+  max-width: 600px;
+}
+
+/* The gold hairline over the one card a screen is about. */
+.spend-summary::before,
+.receive-card::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: 24px;
+  right: 24px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent-line) 18%, var(--accent-line) 50%, transparent 92%);
+  pointer-events: none;
+}
+
+/* Collapsed parts stay collapsed, whatever display their class gives them. */
+.address[hidden],
+.tx-detail[hidden] {
+  display: none;
+}
+
+/* --- fields (Send) -------------------------------------------------------- */
+
+.field-label {
+  font-size: 0.875rem;
+  font-weight: 550;
+  color: var(--text);
+}
+
+.field-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.field-help {
+  margin: 0;
+  color: var(--subtle);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.field-help.with-icon {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.field-help.with-icon .icon {
+  width: 15px;
+  height: 15px;
+  margin-top: 2px;
+}
+
+.send-form .field-error,
+.send-form .field-warn {
+  margin: 0;
+}
+
+/* The recipient, in the monospace face, as tall as the address it holds. */
+textarea.address-input {
+  min-height: 0;
+  font-size: 0.875rem;
+  line-height: 1.65;
+  letter-spacing: 0.01em;
+}
+
+@supports (field-sizing: content) {
+  textarea.address-input {
+    field-sizing: content;
+    min-height: calc(3lh + 26px);
+    resize: none;
+  }
+}
 
 /* A memo is prose, not an address: the body font, wrapped at words. */
 textarea.memo {
+  min-height: 96px;
   font-family: inherit;
+  font-size: 0.9375rem;
   word-break: normal;
   overflow-wrap: anywhere;
 }
 
-.memo-info {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  margin: -4px 0 0;
+@supports (field-sizing: content) {
+  textarea.memo {
+    field-sizing: content;
+    resize: none;
+  }
 }
 
 .memo-count {
   flex: none;
+  color: var(--subtle);
+  font-size: 0.8125rem;
 }
 
 .memo-count.over {
   color: var(--error);
 }
 
-/* The amount and its Max button. */
-.input-row {
+/* The amount: a large tabular figure, its unit and Max inside one field. */
+.amount-box {
   display: flex;
-  gap: 8px;
+  align-items: stretch;
+  border: 1px solid var(--input-border);
+  border-radius: var(--r-md);
+  background: var(--inset);
+  transition: border-color 0.12s var(--ease);
 }
 
-.input-row input {
+.amount-box:has(input:focus) {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+  border-color: var(--focus);
+}
+
+.amount-box:has(input[aria-invalid='true']) {
+  border-color: var(--error);
+}
+
+.amount-box input {
   flex: 1;
   min-width: 0;
+  min-height: 56px;
+  padding: 0 14px;
+  border: 0;
+  background: transparent;
+  font-size: 1.375rem;
+  font-weight: 450;
+  letter-spacing: -0.01em;
   font-variant-numeric: lining-nums tabular-nums;
 }
 
-.input-row button {
+/* The ring is on the whole field, unit and Max included. */
+.amount-box input:focus {
+  outline: none;
+}
+
+.amount-unit {
+  display: flex;
+  align-items: center;
+  padding-right: 12px;
+  color: var(--subtle);
+  font-size: 0.8125rem;
+  font-weight: 560;
+  letter-spacing: 0.06em;
+}
+
+.amount-box button.amount-max {
+  align-self: center;
+  min-height: 40px;
+  margin-right: 7px;
+  padding: 0 14px;
+  border-radius: var(--r-sm);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+/* An address's type and privacy: a mark and words, the tone over both. */
+.kind-tag {
+  --tone: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 26px;
+  padding: 2px 10px;
+  border: 1px solid color-mix(in srgb, var(--tone) 40%, transparent);
+  border-radius: var(--r-pill);
+  color: var(--tone);
+  font-size: 0.8125rem;
+  font-weight: 540;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.kind-shielded {
+  --tone: var(--shielded);
+}
+
+.kind-public {
+  --tone: var(--transparent);
+}
+
+.kind-unknown {
+  --tone: var(--muted);
+}
+
+.kind-mark {
   flex: none;
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid var(--tone);
+  border-radius: 50%;
+}
+
+.kind-shielded .kind-mark {
+  background: var(--tone);
+}
+
+.kind-unknown .kind-mark {
+  border-style: dashed;
+}
+
+.field-tag {
+  margin: 2px 0 0;
+}
+
+/* --- Send and Shield: the two-column frame --------------------------------- */
+
+.spend-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.send-form {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  padding: 20px;
+}
+
+.send-form .notice {
+  margin-top: -4px;
+}
+
+.memo-unavailable {
+  margin-top: -14px;
+}
+
+/* The preview: what Review will show, never armed. */
+.send-preview {
+  display: flex;
+  flex-direction: column;
+  padding: 22px 20px 20px;
+}
+
+.preview-figure {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.figure {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-variation-settings: 'opsz' 144;
+  font-weight: 330;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.preview-figure .figure {
+  font-size: 2.75rem;
+}
+
+.preview-figure.empty .figure {
+  color: var(--subtle);
+}
+
+.preview-figure .unit,
+.summary-amount .unit {
+  color: var(--subtle);
+  font-size: 0.8125rem;
+  font-weight: 560;
+  letter-spacing: 0.08em;
+}
+
+.preview-rows {
+  margin: 20px 0 0;
+  border-top: 1px solid var(--border);
+}
+
+.preview-rows > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 46px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.875rem;
+}
+
+.preview-rows dt {
+  flex: none;
+  color: var(--muted);
+}
+
+.preview-rows dd {
+  margin: 0;
+  min-width: 0;
+  text-align: right;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.preview-rows dd.preview-memo {
+  overflow: hidden;
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-size: 0.9375rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview-none {
+  color: var(--subtle);
+}
+
+.preview-total dt,
+.preview-total dd {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.preview-privacy {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin-top: 16px;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.preview-privacy .kind-mark {
+  margin-top: 0.42em;
+}
+
+.send-preview button.primary {
+  width: 100%;
+  min-height: 52px;
+  margin-top: 20px;
+}
+
+.preview-note {
+  margin-top: 10px;
+  color: var(--subtle);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  text-align: center;
+}
+
+/* --- the armed step: summary, then the confirm panel ---------------------- */
+
+.spend-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 22px 20px;
+}
+
+/* In these cards the summary is the card's own content, not a card in a card. */
+.spend-summary .summary,
+.spend-done .summary {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+
+.spend-summary .summary > div,
+.spend-done .summary > div {
+  align-items: baseline;
+  font-size: 0.875rem;
+}
+
+.spend-summary .summary dt,
+.spend-done .summary dt {
+  flex: none;
+}
+
+.summary-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 16px;
+}
+
+.summary-hero > div {
+  grid-column: 1 / -1;
+}
+
+.summary > div.summary-amount {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.summary-hero > div.summary-amount {
+  grid-column: 1;
+  grid-row: 1;
+  padding: 0 0 16px;
+  border-bottom: 0;
+}
+
+/* From and To on Shield: a mark and words, no outline (a list of two, not tags). */
+.summary-move .kind-tag {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  font-size: inherit;
+}
+
+.summary-hero > div.summary-privacy {
+  grid-column: 2;
+  grid-row: 1;
+  align-self: start;
+  padding: 0;
+  border: 0;
+}
+
+.summary-hero > div.summary-amount dt {
+  color: var(--subtle);
+  font-size: 0.75rem;
+  font-weight: 560;
+  letter-spacing: 0.085em;
+  text-transform: uppercase;
+}
+
+.summary-hero > div.summary-amount dd {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  text-align: left;
+}
+
+.summary-hero .summary-amount .figure {
+  font-size: 2.5rem;
+}
+
+.summary-hero > div.summary-to,
+.summary-hero > div.summary-move:first-child {
+  border-top: 1px solid var(--border);
+}
+
+.spend-summary .summary + .summary {
+  border-top: 1px solid var(--border);
+}
+
+.summary-lead {
+  color: var(--muted);
+  font-size: 0.875rem;
+  line-height: 1.55;
+}
+
+/* The recipient: the short form to compare, the whole address on request. */
+.summary > div.summary-to {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 16px;
+}
+
+.summary-to dd {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  min-width: 0;
+  word-break: normal;
+}
+
+.summary-to .address-short {
+  font-size: 0.8125rem;
+  letter-spacing: 0.01em;
+  word-break: break-all;
+}
+
+.summary-to-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: baseline;
+  column-gap: 12px;
+  font-size: 0.8125rem;
+}
+
+.summary-to button.link {
+  align-self: auto;
+  padding: 2px 0;
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+.summary-to .address-groups {
+  align-self: stretch;
+  margin-top: 8px;
+  padding: 12px 14px;
+  font-size: 0.8125rem;
+  line-height: 1.7;
+  text-align: left;
+}
+
+/* A memo reads as a quote, beside its label while it fits on the line; the
+   quotation marks are drawn, so the text stays the memo. */
+.spend-summary .summary > div.summary-memo,
+.spend-done .summary > div.summary-memo {
+  flex-flow: row wrap;
+  justify-content: space-between;
+  column-gap: 16px;
+  row-gap: 4px;
+}
+
+.spend-summary .summary-memo dd,
+.spend-done .summary-memo dd {
+  margin-left: auto;
+  max-width: 100%;
+  text-align: right;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-size: 1rem;
+  line-height: 1.45;
+}
+
+.spend-summary .summary-memo dd::before,
+.spend-done .summary-memo dd::before {
+  content: '\201C';
+}
+
+.spend-summary .summary-memo dd::after,
+.spend-done .summary-memo dd::after {
+  content: '\201D';
+}
+
+.summary > div.summary-total dt,
+.summary > div.summary-total dd {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.summary > div.summary-total dd {
+  font-size: 0.9375rem;
+}
+
+.spend-summary > .notice {
+  margin-top: 2px;
+}
+
+.confirm-panel {
+  padding: 22px 20px;
+}
+
+.spend-note {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.spend-note .icon {
+  width: 17px;
+  height: 17px;
+  margin-top: 1px;
+  color: var(--subtle);
+}
+
+.spend-form {
+  gap: 16px;
+}
+
+.confirm-panel button.spend-submit,
+.confirm-panel > button.primary {
+  width: 100%;
+  min-height: 52px;
+}
+
+.confirm-panel > button.primary {
+  margin-top: 16px;
+}
+
+/* --- the stages ----------------------------------------------------------- */
+
+.spend-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.stages {
+  gap: 0;
+}
+
+/* A fixed mark column (spend.spec checks every label starts at the same x). */
+.stages li {
+  position: relative;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 14px;
+  padding-bottom: 18px;
+  color: var(--subtle);
+  font-size: 0.9375rem;
+}
+
+.stages li:last-child {
+  padding-bottom: 0;
+}
+
+.stages li > span:last-child {
+  padding-top: 3px;
+  line-height: 1.45;
+}
+
+/* The thread between marks. */
+.stages li:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  top: 31px;
+  bottom: 3px;
+  left: 13.5px;
+  width: 1px;
+  background: var(--border-2);
+}
+
+.stages li.done:not(:last-child)::after {
+  background: color-mix(in srgb, var(--ok) 45%, transparent);
+}
+
+.stages .stage-icon {
+  position: relative;
+  z-index: 1;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--input-border);
+  border-radius: 50%;
+  background: var(--surface);
+}
+
+.stages .stage-icon:empty::before {
+  content: none;
+}
+
+.stages li.done .stage-icon {
+  border-color: color-mix(in srgb, var(--ok) 45%, transparent);
+  color: var(--ok);
+}
+
+.stages li.done .stage-icon .icon {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.2;
+}
+
+.stages li.current {
+  color: var(--text);
+}
+
+.stages li.current .stage-icon {
+  border-color: var(--text);
+}
+
+.stages li.current .spinner {
+  width: 14px;
+  height: 14px;
+  border-width: 1.75px;
+}
+
+.stages li.done {
+  color: var(--muted);
+}
+
+.spend-progress .notice strong {
+  font-weight: 560;
+}
+
+/* --- the outcome ----------------------------------------------------------- */
+
+.spend-done {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 32px 20px 24px;
+}
+
+.spend-done .result-icon {
+  width: 60px;
+  height: 60px;
+}
+
+.spend-done .result-icon .icon {
+  width: 26px;
+  height: 26px;
+}
+
+.spend-done .result h2 {
+  font-size: 1.75rem;
+}
+
+.spend-done .summary {
+  border-top: 1px solid var(--border);
+}
+
+.spend-done .summary > div.summary-amount {
+  flex-direction: row;
+  align-items: baseline;
+}
+
+.spend-done .summary-amount .figure {
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+}
+
+.spend-done .summary-amount .unit {
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+}
+
+.content .spend-done-actions {
+  justify-content: stretch;
+}
+
+.content .spend-done-actions > * {
+  flex: 1 1 0;
   min-height: 48px;
 }
 
-/* --- Receive ------------------------------------------------------------- */
+@media (min-width: 600px) {
+  .send-form {
+    padding: 28px;
+  }
+
+  .send-preview,
+  .spend-summary,
+  .confirm-panel {
+    padding: 26px 28px;
+  }
+
+  .spend-done {
+    padding: 40px 36px 32px;
+  }
+}
+
+/* Phones and tablets, while the spend runs: the stages come first, right under the title. */
+@media (max-width: 1023px) {
+  .confirm-layout:has(.stages) > .confirm-panel {
+    order: -1;
+  }
+}
+
+@media (min-width: 1024px) {
+  .spend-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 380px;
+    gap: 24px;
+    align-items: start;
+  }
+
+  .send-form {
+    gap: 28px;
+    padding: 32px;
+  }
+
+  .send-preview,
+  .confirm-panel {
+    position: sticky;
+    top: 44px;
+  }
+
+  .send-preview,
+  .spend-summary,
+  .confirm-panel {
+    padding: 28px;
+  }
+
+  .preview-figure .figure,
+  .summary-hero .summary-amount .figure {
+    font-size: 3.25rem;
+  }
+
+  .spend-summary .summary > div,
+  .spend-done .summary > div {
+    font-size: 0.9375rem;
+  }
+}
+
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .spend-layout {
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: 20px;
+  }
+
+  .send-form {
+    padding: 28px;
+  }
+
+  .send-preview,
+  .spend-summary,
+  .confirm-panel {
+    padding: 24px;
+  }
+}
+
+/* --- Receive ---------------------------------------------------------------- */
+
+.receive-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.receive-card {
+  --qr-paper: #f7f2e7;
+  --qr-ink: #15120d;
+  --qr-edge: 0 0 0 1px rgba(0, 0, 0, 0.35), 0 18px 40px -24px rgba(0, 0, 0, 0.8);
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  padding: 20px;
+}
+
+.receive-card.is-transparent::before {
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--transparent) 45%, transparent) 18%,
+    color-mix(in srgb, var(--transparent) 45%, transparent) 50%,
+    transparent 92%
+  );
+}
+
+@media (prefers-color-scheme: light) {
+  .receive-card {
+    --qr-paper: #ffffff;
+    --qr-edge: 0 0 0 1px var(--border-2), 0 10px 28px -18px rgba(60, 45, 20, 0.3);
+  }
+}
+
+.receive-qr {
+  display: flex;
+  justify-content: center;
+}
+
+/* Ivory paper with dark ink in both themes, and a quiet zone every camera reads.
+   Only the colours change: the element still holds the qrcode SVG alone. */
+.receive-card .qr {
+  align-self: auto;
+  width: min(100%, 264px);
+  padding: 18px;
+  border-radius: var(--r-lg);
+  background: var(--qr-paper);
+  box-shadow: var(--qr-edge);
+}
+
+.receive-card .qr svg path[fill='#ffffff'] {
+  fill: transparent;
+}
+
+.receive-card .qr svg path[stroke='#000000'] {
+  stroke: var(--qr-ink);
+}
+
+.qr-wait {
+  display: grid;
+  place-items: center;
+  width: min(100%, 264px);
+  aspect-ratio: 1;
+  border: 1px dashed var(--border-2);
+  border-radius: var(--r-lg);
+  color: var(--subtle);
+}
+
+.receive-main {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.receive-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
 
 .address-kind {
   font-size: 1.0625rem;
 }
 
-/* --- History ------------------------------------------------------------- */
+.receive-preparing {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
 
-/* The page's list: one card, rows divided by hairlines. */
+/* An address in groups of four: wraps between groups, never inside one. */
+.address-groups {
+  word-break: normal;
+  overflow-wrap: normal;
+}
+
+.address-groups .g {
+  display: inline-block;
+  margin-right: 0.5em;
+  color: var(--muted);
+}
+
+.address-groups .g:last-child {
+  margin-right: 0;
+}
+
+.address-groups .g-edge {
+  color: var(--text);
+  font-weight: 560;
+}
+
+.receive-card .address {
+  padding: 16px 18px;
+  font-size: 0.9375rem;
+  line-height: 1.8;
+}
+
+.receive-actions {
+  display: flex;
+}
+
+/* Copy is the screen's one primary action. */
+.receive-card button.copy-button {
+  flex: 1;
+  min-height: 50px;
+  padding: 0 24px;
+  border-color: transparent;
+  background: var(--accent);
+  color: var(--accent-text);
+  box-shadow: var(--shadow-gold);
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.receive-card button.copy-button:hover {
+  border-color: transparent;
+  background: var(--accent-hover);
+}
+
+.receive-card button.copy-button:active {
+  background: var(--accent-press);
+}
+
+.receive-card button.copy-button .icon {
+  width: 18px;
+  height: 18px;
+  color: currentColor;
+}
+
+.receive-card .notice {
+  margin-top: 2px;
+}
+
+.receive-about {
+  display: flex;
+  flex-direction: column;
+}
+
+.about-sec {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 22px 20px;
+}
+
+.about-sec + .about-sec {
+  border-top: 1px solid var(--border);
+}
+
+h2.about-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.9375rem;
+  font-weight: 560;
+}
+
+.about-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.about-icon.shielded {
+  color: var(--shielded);
+}
+
+.about-icon.public {
+  color: var(--transparent);
+}
+
+.about-sec p {
+  color: var(--muted);
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+button.receive-toggle {
+  margin-top: 8px;
+  min-height: 40px;
+  padding: 0 14px;
+  font-size: 0.875rem;
+}
+
+button.receive-toggle .icon {
+  width: 16px;
+  height: 16px;
+  color: var(--muted);
+}
+
+@media (min-width: 600px) {
+  .receive-card {
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr);
+    align-items: start;
+    gap: 28px;
+    padding: 28px;
+  }
+
+  .receive-qr {
+    display: block;
+  }
+
+  .receive-card .qr,
+  .qr-wait {
+    width: 100%;
+  }
+
+  .receive-card button.copy-button {
+    flex: 0 1 auto;
+    min-width: 168px;
+  }
+
+  .receive-about {
+    display: grid;
+    grid-auto-columns: minmax(0, 1fr);
+    grid-auto-flow: column;
+  }
+
+  .about-sec {
+    padding: 24px 26px;
+  }
+
+  .about-sec + .about-sec {
+    border-top: 0;
+    border-left: 1px solid var(--border);
+  }
+}
+
+@media (min-width: 1024px) {
+  .receive-card {
+    grid-template-columns: 240px minmax(0, 1fr);
+    gap: 36px;
+    padding: 32px;
+  }
+}
+
+@media (min-width: 1280px) {
+  .receive-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    align-items: start;
+    gap: 24px;
+  }
+
+  .receive-layout > .notice {
+    grid-column: 1 / -1;
+  }
+
+  .receive-card {
+    grid-template-columns: 264px minmax(0, 1fr);
+    gap: 40px;
+  }
+
+  .receive-about {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .about-sec + .about-sec {
+    border-top: 1px solid var(--border);
+    border-left: 0;
+  }
+}
+
+/* --- History ---------------------------------------------------------------- */
+
+.history-card {
+  --hist-cols: 36px minmax(0, 1fr) 150px 200px 140px 36px;
+  padding: 0;
+}
+
+.tx-head {
+  display: none;
+}
+
 .history {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-  box-shadow: var(--shadow-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tx-month + .tx-month {
+  border-top: 1px solid var(--border);
+}
+
+h2.month-head {
+  padding: 12px 16px 9px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--subtle);
+  font-size: 0.75rem;
+  font-weight: 560;
+  letter-spacing: 0.085em;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+.tx-month:first-child h2.month-head {
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+}
+
+/* Phones: the privacy words get the row's whole width; the chevron shares
+   their line at the right edge, where the words never reach. */
+.history .tx {
+  grid-template-areas:
+    'icon main value'
+    'icon date value'
+    'icon privacy privacy'
+    'icon detail detail';
+}
+
+.history .tx > .privacy {
+  max-width: calc(100% - 44px);
+}
+
+/* The memo is read here in full, as a quote. */
+.history .tx-memo {
+  color: var(--text);
+}
+
+.history .tx:has(> .tx-more[aria-expanded='true']) {
+  background: var(--surface-2);
+}
+
+.history .tx-month:last-child .tx:last-child {
+  border-radius: 0 0 var(--r-lg) var(--r-lg);
+}
+
+button.tx-more {
+  grid-area: privacy;
+  justify-self: end;
+  align-self: center;
+  width: 36px;
+  height: 36px;
+  min-height: 0;
+  margin: 2px -6px -6px 0;
+  padding: 0;
+  border-color: transparent;
+  border-radius: var(--r-sm);
+  background: none;
+  color: var(--subtle);
+}
+
+button.tx-more:hover {
+  border-color: var(--border-2);
+  background: var(--raised);
+  color: var(--text);
+}
+
+button.tx-more .icon {
+  width: 18px;
+  height: 18px;
+  transition: transform 0.15s var(--ease);
+}
+
+button.tx-more[aria-expanded='true'] .icon {
+  transform: rotate(180deg);
+}
+
+.tx-detail {
+  grid-area: detail;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border-2);
+}
+
+.txid {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  color: var(--subtle);
+  font-size: 0.8125rem;
+}
+
+.txid code {
+  color: var(--muted);
+  font-size: 0.8125rem;
+  word-break: break-all;
+}
+
+.tx-detail button.copy-button {
+  flex: none;
+  white-space: nowrap;
+}
+
+.history .status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.history .status-pending::before {
+  content: '';
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 1.4s linear infinite;
+}
+
+/* Expired: never mined, so the funds stayed. The amount is struck, not alarming. */
+.history .status-expired {
+  color: var(--subtle);
+}
+
+.history .tx:has(.status-expired) .tx-amount {
+  color: var(--subtle);
+}
+
+/* Drawn, not text-decoration: that would not reach the sign and fraction slots (inline blocks). */
+.history .tx:has(.status-expired) .amt {
+  position: relative;
+}
+
+.history .tx:has(.status-expired) .amt::after {
+  content: '';
+  position: absolute;
+  top: 55%;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: currentColor;
+}
+
+.history-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 48px 24px;
+  text-align: center;
+}
+
+.history-empty-icon {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  margin-bottom: 10px;
+  border: 1px solid var(--border-2);
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--subtle);
+}
+
+@media (max-width: 379px) {
+  .history .tx {
+    column-gap: 12px;
+    padding-inline: 12px;
+  }
+
+  h2.month-head {
+    padding-inline: 12px;
+  }
+}
+
+@media (min-width: 600px) {
+  h2.month-head {
+    padding-inline: 20px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .tx-head {
+    display: grid;
+    grid-template-columns: var(--hist-cols);
+    column-gap: 20px;
+    padding: 14px 24px 12px;
+    border-bottom: 1px solid var(--border);
+    color: var(--subtle);
+    font-size: 0.75rem;
+    font-weight: 560;
+    letter-spacing: 0.085em;
+    text-transform: uppercase;
+  }
+
+  .tx-head-amount {
+    text-align: right;
+  }
+
+  h2.month-head {
+    padding: 10px 24px 8px;
+  }
+
+  .tx-month:first-child h2.month-head {
+    border-radius: 0;
+  }
+
+  .history .tx {
+    grid-template-columns: var(--hist-cols);
+    grid-template-areas:
+      'icon main date privacy value more'
+      '. detail detail detail detail detail';
+    column-gap: 20px;
+    padding: 16px 24px;
+  }
+
+  button.tx-more {
+    grid-area: more;
+    margin: 0 -6px 0 0;
+  }
+
+  .history .tx > .privacy {
+    max-width: none;
+  }
+
+  .tx-detail {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+  }
+
+  .txid {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 12px;
+  }
+
+  .txid-label {
+    flex: none;
+  }
+}
+
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .history-card {
+    --hist-cols: 36px minmax(0, 1fr) 128px 176px 116px 36px;
+  }
+
+  .tx-head,
+  .history .tx {
+    column-gap: 16px;
+  }
 }

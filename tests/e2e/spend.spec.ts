@@ -411,6 +411,40 @@ test('a payment link fills in its memo, and only for its own recipient', async (
   await expect(page.getByTestId('confirm-amount')).toHaveText('0.20 ZEC');
 });
 
+test('the form only previews a payment; the confirm step replaces it and shows the payment in full', async ({ page }) => {
+  await createWallet(page);
+  await nav(page, 'Send');
+  const preview = page.locator('.send-preview');
+
+  // The preview follows the form, with the privacy the address type gives, and is never armed.
+  await page.getByLabel('Recipient address').fill(T1);
+  await page.getByLabel('Amount (ZEC)').fill('0.1');
+  await expect(page.getByLabel('Recipient address')).toHaveAccessibleDescription(/Transparent · public/);
+  await expect(preview).toContainText('Public payment: the amount and the recipient will be visible on chain.');
+  await page.getByLabel('Recipient address').fill(UA);
+  await page.getByLabel('Amount (ZEC)').fill('0.25');
+  await expect(preview).toContainText('Unified · shielded');
+  await expect(preview).toContainText('Shielded payment');
+  await expect(preview.locator('.preview-total dd')).toHaveText('~0.2501 ZEC');
+  await expect(page.getByLabel('Enter your password to confirm')).toHaveCount(0);
+
+  // Armed, nothing about the payment can be edited any more: the form is gone.
+  await page.getByRole('button', { name: 'Review' }).click();
+  await expect(page.getByLabel('Enter your password to confirm')).toBeFocused();
+  await expect(page.getByLabel('Recipient address')).toHaveCount(0);
+  await expect(page.getByLabel('Amount (ZEC)')).toHaveCount(0);
+  await expect(page.getByText('Nothing is sent until you confirm with your password.')).toBeVisible();
+  await expect(page.locator('.summary-total dd')).toHaveText('~0.2501 ZEC');
+
+  // The whole address on request, in groups of four to read; its text is the address itself.
+  const full = page.locator('.summary .address-groups');
+  await expect(full).toBeHidden();
+  await page.getByRole('button', { name: 'Show full address' }).click();
+  await expect(page.getByRole('button', { name: 'Hide full address' })).toHaveAttribute('aria-expanded', 'true');
+  await expect(full).toBeVisible();
+  expect(await full.textContent()).toBe(UA);
+});
+
 test('send form errors are tied to their fields', async ({ page }) => {
   await createWallet(page);
   await nav(page, 'Send');
