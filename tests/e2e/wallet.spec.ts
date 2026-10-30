@@ -155,6 +155,21 @@ test('Settings links the licence notices of the engine, and the app serves them'
   }
   await page.getByRole('button', { name: 'Türkçe' }).click();
   await expect(page.getByRole('link', { name: 'Üçüncü taraf lisansları (cüzdan motoru)' })).toBeVisible();
+
+  // The self-hosted typefaces are under the SIL OFL, whose notice must go with the font files.
+  const fonts = page.getByRole('link', { name: 'Yazı tipi lisansları' });
+  await expect(fonts).toHaveAttribute('href', '/FONT_LICENSES.txt');
+  const fontRes = await page.request.get('/FONT_LICENSES.txt');
+  expect(fontRes.status()).toBe(200);
+  const fontText = await fontRes.text();
+  for (const s of [
+    'SIL OPEN FONT LICENSE Version 1.1',
+    'Copyright 2024 The Geist Project Authors',
+    'Copyright 2020 The Fraunces Project Authors',
+    '@fontsource-variable/geist-mono 5.3.0',
+  ]) {
+    expect(fontText).toContain(s);
+  }
 });
 
 test('restore view-only wallet from a viewing key', async ({ page }) => {

@@ -18,6 +18,9 @@
     "test:e2e:real": "playwright test -c playwright.real.config.ts"
   },
   "dependencies": {
+    "@fontsource-variable/fraunces": "5.3.0",
+    "@fontsource-variable/geist": "5.3.0",
+    "@fontsource-variable/geist-mono": "5.3.0",
     "@noble/hashes": "1.8.0",
     "@scure/base": "1.2.5",
     "@scure/bip39": "1.6.0",
