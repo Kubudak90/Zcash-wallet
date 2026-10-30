@@ -236,7 +236,7 @@ svg {
    is the only size the lockup takes, set per placement; its drawing is fixed in
    Brand.tsx, so tests/unit/brand.test.ts keeps every --brand-h in that drawing's range. */
 .brand-lockup {
-  --brand-h: 28px;
+  --brand-h: 30px;
   display: inline-flex;
   align-items: flex-start;
   flex: none;
@@ -1279,7 +1279,7 @@ ul.plain li + li {
 }
 
 .topbar-brand .brand-lockup {
-  --brand-h: 26px;
+  --brand-h: 30px;
 }
 
 /* The sync status: one line that gives way first (the full label stays in its text and tooltip). */
@@ -1569,7 +1569,7 @@ ul.plain li + li {
   }
 
   .topbar-brand .brand-lockup {
-    --brand-h: 28px;
+    --brand-h: 34px;
   }
 
   .lock-button {
