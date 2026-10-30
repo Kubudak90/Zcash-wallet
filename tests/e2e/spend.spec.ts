@@ -2,7 +2,7 @@ import { sha256 } from '@noble/hashes/sha256';
 import { base58check, base64urlnopad, bech32m } from '@scure/base';
 import { expect, test, type Page } from '@playwright/test';
 
-import { PASSWORD, UA, createWallet } from './helpers';
+import { PASSWORD, UA, createWallet, nav, navTab } from './helpers';
 
 // Send and shield flows on the fake engine. The fake wallet holds 1.25 ZEC
 // shielded and 0.50 ZEC transparent after its first sync; sends of 0.0333 and
@@ -47,7 +47,7 @@ test('a running send cannot be left or repeated', async ({ page }) => {
     (globalThis as { __fakeEngine?: Knobs }).__fakeEngine = { holdStage: 'proving' };
   });
   await createWallet(page);
-  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await nav(page, 'Send');
   await review(page, UA, '0.4');
 
   // Two submits while the password is still being checked (the field has focus after fill).
@@ -57,8 +57,8 @@ test('a running send cannot be left or repeated', async ({ page }) => {
   await expect(page.locator('.stages li[aria-current="step"]')).toHaveCount(1);
   await expect(page.getByRole('button', { name: /Back/ })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Lock' })).toBeDisabled();
-  await expect(page.getByRole('button', { name: 'Balance' })).toBeDisabled();
-  await expect(page.getByRole('button', { name: 'History', exact: true })).toBeDisabled();
+  await expect(navTab(page, 'Balance')).toBeDisabled();
+  await expect(navTab(page, 'History')).toBeDisabled();
 
   // While proving, two rows are done, one current and one pending: the labels still line up,
   // and the status region carries the current stage for screen readers.
@@ -85,7 +85,7 @@ test('a running send cannot be left or repeated', async ({ page }) => {
 
 test('a failed spend says whether it is safe to try again', async ({ page }) => {
   await createWallet(page);
-  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await nav(page, 'Send');
 
   // Proving fails: nothing left the wallet, so the retry form stays, and Back keeps the payment.
   await review(page, UA, '0.0333');
@@ -106,7 +106,7 @@ test('a failed spend says whether it is safe to try again', async ({ page }) => 
   await expect(page.getByText('Lower the amount')).toHaveCount(0);
   await expect(page.getByLabel('Enter your password to confirm')).toHaveCount(0);
   await expect(sendButton(page)).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Balance' })).toBeEnabled();
+  await expect(navTab(page, 'Balance')).toBeEnabled();
   await expect(page.getByRole('button', { name: 'View in history' })).toBeVisible();
 
   // Back does not hand the same payment back for a second try.
@@ -119,7 +119,7 @@ test('a failed spend says whether it is safe to try again', async ({ page }) => 
 
   // Like WebZjs, the fake engine stored the transaction before broadcasting it:
   // History shows it at once, and it is saved, so it survives a lock.
-  await page.getByRole('button', { name: 'History', exact: true }).click();
+  await nav(page, 'History');
   await expect(page.getByRole('heading', { name: 'Transaction history' })).toBeVisible();
   const sent = page.getByTestId('history').locator('.tx-sent');
   await expect(sent).toHaveCount(1);
@@ -127,7 +127,7 @@ test('a failed spend says whether it is safe to try again', async ({ page }) => 
   await page.getByRole('button', { name: 'Lock' }).click();
   await page.getByLabel('Password').fill(PASSWORD);
   await page.getByRole('button', { name: 'Unlock' }).click();
-  await page.getByRole('button', { name: 'History', exact: true }).click();
+  await nav(page, 'History');
   await expect(sent).toHaveCount(1);
 });
 
@@ -138,7 +138,7 @@ test('a balance that does not cover the real fee is explained in ZEC, without th
     (globalThis as { __fakeEngine?: Knobs }).__fakeEngine = { engineFee: 20_000 };
   });
   await createWallet(page);
-  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await nav(page, 'Send');
   await page.getByLabel('Recipient address').fill(UA);
   await page.getByRole('button', { name: 'Max' }).click();
   await expect(page.getByLabel('Amount (ZEC)')).toHaveValue('1.2499');
@@ -156,9 +156,9 @@ test('a balance that does not cover the real fee is explained in ZEC, without th
   await expect(sendButton(page)).toBeVisible();
 
   await page.getByRole('button', { name: /Back/ }).click();
-  await page.getByRole('button', { name: 'Settings' }).click();
+  await nav(page, 'Settings');
   await page.getByRole('button', { name: 'Türkçe' }).click();
-  await page.getByRole('button', { name: 'Gönder', exact: true }).click();
+  await nav(page, 'Gönder');
   await page.getByLabel('Alıcı adresi').fill(UA);
   await page.getByRole('button', { name: 'Tümü' }).click();
   await page.getByRole('button', { name: 'Gözden geçir' }).click();
@@ -173,7 +173,7 @@ test('a balance that does not cover the real fee is explained in ZEC, without th
 
 test('a send the engine refuses around a network upgrade says that nothing was sent', async ({ page }) => {
   await createWallet(page);
-  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await nav(page, 'Send');
   const history = page.getByTestId('history').locator('.tx-sent');
 
   // While building: the pause before NU7 (the fake's tip is 9,605 blocks below it).
@@ -212,7 +212,7 @@ test('a send the engine refuses around a network upgrade says that nothing was s
 
 test('a failed pass keeps spending closed while the wallet is known to be behind', async ({ page }) => {
   await createWallet(page);
-  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await nav(page, 'Send');
   await review(page, UA, '0.1');
   // The send kicks off a pass that measures 50 new blocks and then fails before scanning them.
   await setKnobs(page, { chainGrowth: 50, failPass: true });
@@ -233,7 +233,7 @@ test('a failed pass keeps spending closed while the wallet is known to be behind
 
 test('spending waits while the wallet is catching up', async ({ page }) => {
   await createWallet(page);
-  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await nav(page, 'Send');
   await review(page, UA, '0.1');
   // The send kicks off a pass; 50 new blocks make it a catch-up, held open here.
   await setKnobs(page, { chainGrowth: 50, holdPass: true });
@@ -256,7 +256,7 @@ test('spending waits while the wallet is catching up', async ({ page }) => {
 
 test('payment links that cannot be paid as asked are refused', async ({ page }) => {
   await createWallet(page);
-  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await nav(page, 'Send');
   const to = page.getByLabel('Recipient address');
   const confirm = page.getByRole('heading', { name: 'Confirm sending' });
 
@@ -301,7 +301,7 @@ test('payment links that cannot be paid as asked are refused', async ({ page }) 
 
 test('a memo goes with a shielded payment and shows in History', async ({ page }) => {
   await createWallet(page);
-  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await nav(page, 'Send');
   const to = page.getByLabel('Recipient address');
   const memo = page.getByLabel('Memo (optional)');
   const count = page.getByTestId('memo-count');
@@ -354,7 +354,7 @@ test('a memo goes with a shielded payment and shows in History', async ({ page }
 
 test('a memo typed for a shielded address is not sent to a transparent one', async ({ page }) => {
   await createWallet(page);
-  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await nav(page, 'Send');
   await page.getByLabel('Recipient address').fill(UA);
   await page.getByLabel('Memo (optional)').fill('for the shielded address');
   // The fake engine, like WebZjs, refuses a memo to a transparent address.
@@ -369,7 +369,7 @@ test('a memo typed for a shielded address is not sent to a transparent one', asy
 
 test('a payment link fills in its memo, and only for its own recipient', async ({ page }) => {
   await createWallet(page);
-  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await nav(page, 'Send');
   const to = page.getByLabel('Recipient address');
   const amount = page.getByLabel('Amount (ZEC)');
   const memo = page.getByLabel('Memo (optional)');
@@ -413,7 +413,7 @@ test('a payment link fills in its memo, and only for its own recipient', async (
 
 test('send form errors are tied to their fields', async ({ page }) => {
   await createWallet(page);
-  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await nav(page, 'Send');
   const to = page.getByLabel('Recipient address');
   const amount = page.getByLabel('Amount (ZEC)');
 
@@ -435,7 +435,7 @@ test('send form errors are tied to their fields', async ({ page }) => {
 
 test('Send explains that transparent funds must be shielded first', async ({ page }) => {
   await createWallet(page);
-  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await nav(page, 'Send');
   await expect(page.getByText('You also have 0.50 ZEC of transparent funds.')).toBeVisible();
 
   // 1.6 ZEC fits only once the 0.50 transparent is shielded.
@@ -445,7 +445,7 @@ test('Send explains that transparent funds must be shielded first', async ({ pag
   await expect(page.getByText('Shield your transparent funds first, then send.')).toBeVisible();
 
   // Opened from Send, Shield keeps Send marked and returns there.
-  const sendTab = page.getByRole('button', { name: 'Send', exact: true });
+  const sendTab = navTab(page, 'Send');
   await page.getByRole('button', { name: 'Shield funds' }).click();
   await expect(page.getByRole('heading', { name: 'Shield funds' })).toBeVisible();
   await expect(sendTab).toHaveAttribute('aria-current', 'page');
@@ -465,9 +465,9 @@ test('Send explains that transparent funds must be shielded first', async ({ pag
 
 test('Turkish amount entry uses a decimal comma', async ({ page }) => {
   await createWallet(page);
-  await page.getByRole('button', { name: 'Settings' }).click();
+  await nav(page, 'Settings');
   await page.getByRole('button', { name: 'Türkçe' }).click();
-  await page.getByRole('button', { name: 'Gönder', exact: true }).click();
+  await nav(page, 'Gönder');
 
   const amount = page.getByLabel('Tutar (ZEC)');
   await expect(amount).toHaveAttribute('placeholder', '0,00');
@@ -492,7 +492,7 @@ test.describe('copying', () => {
 
   test('Copy announces the result', async ({ page }) => {
     await createWallet(page);
-    await page.getByRole('button', { name: 'Receive' }).click();
+    await nav(page, 'Receive');
     await page.getByRole('button', { name: 'Copy' }).click();
     await expect(page.getByRole('status').filter({ hasText: 'Copied' })).toHaveCount(1);
   });

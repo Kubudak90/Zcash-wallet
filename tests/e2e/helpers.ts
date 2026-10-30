@@ -13,6 +13,21 @@ export const en = (n: number) => n.toLocaleString('en-US');
 export const UA =
   'u18rakpts0de589sx9dkamcjms3apruqqax9k2s6e7zjxx9vv5kc67pks2trg9d3nrgd5acu8w8arzjjuepakjx38dyxl6ahd948w0mhdt9jxqsntan6px3ysz80s04a87pheg2mqvlzpehrgup7568nfd6ez23xd69ley7802dfvplnfn7c07vlyumcnfjul4pvv630ac336rjhjyak5';
 
+/**
+ * The wallet's navigation: the sidebar on a wide screen, the tab bar on a phone.
+ * Balance has quick actions with the same names as some tabs (Send, Receive), so
+ * a tab is always found inside it.
+ */
+export const navBar = (page: Page) => page.getByRole('navigation', { name: 'Celari' });
+
+/** A navigation tab, by its exact name. */
+export const navTab = (page: Page, name: string) => navBar(page).getByRole('button', { name, exact: true });
+
+/** Opens a screen from the navigation. */
+export async function nav(page: Page, name: string): Promise<void> {
+  await navTab(page, name).click();
+}
+
 /** Goes through onboarding with a fresh phrase and waits for the first sync. */
 export async function createWallet(page: Page): Promise<string[]> {
   await page.goto('/');

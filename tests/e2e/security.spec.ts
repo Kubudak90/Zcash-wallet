@@ -1,6 +1,8 @@
 import { bech32m } from '@scure/base';
 import { expect, test, type Page } from '@playwright/test';
 
+import { nav } from './helpers';
+
 // Auto-lock, restore input and view-only wording. Kept apart from
 // wallet.spec.ts so these flows can be read (and run) on their own.
 
@@ -95,7 +97,7 @@ test('view-only wallet: recovery and wipe texts talk about the viewing key', asy
   await expect(page.getByText(/recovery phrase/)).toBeHidden();
   await setPassword(page);
 
-  await page.getByRole('button', { name: 'Settings' }).click();
+  await nav(page, 'Settings');
   await expect(page.getByText('Without your viewing key you cannot add this wallet again.', { exact: false })).toBeVisible();
   await expect(page.getByText(/funds will be lost/)).toBeHidden();
 
@@ -107,7 +109,7 @@ test('view-only wallet: recovery and wipe texts talk about the viewing key', asy
 test('Turkish: the wipe confirmation accepts SİL typed as SIL', async ({ page }) => {
   await restore(page, 'view');
   await setPassword(page);
-  await page.getByRole('button', { name: 'Settings' }).click();
+  await nav(page, 'Settings');
   await page.getByRole('button', { name: 'Türkçe' }).click();
 
   await expect(page.getByLabel('Sunucu (lightwalletd gRPC-web proxy)')).toHaveValue(/^https:/);

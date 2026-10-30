@@ -1,7 +1,7 @@
 import { bech32m } from '@scure/base';
 import { expect, test } from '@playwright/test';
 
-import { PASSWORD, UA, createWallet } from './helpers';
+import { PASSWORD, UA, createWallet, nav } from './helpers';
 
 test('create, receive, send, shield, lock and unlock', async ({ page }) => {
   await createWallet(page);
@@ -11,13 +11,13 @@ test('create, receive, send, shield, lock and unlock', async ({ page }) => {
   await expect(page.getByTestId('balance-transparent')).toContainText('0.50');
 
   // Receive: shielded unified address by default, transparent on request.
-  await page.getByRole('button', { name: 'Receive' }).click();
+  await nav(page, 'Receive');
   await expect(page.getByTestId('receive-address')).toHaveText(/^u1/);
   await page.getByRole('button', { name: 'Show transparent address' }).click();
   await expect(page.getByTestId('receive-address')).toHaveText(/^t1/);
 
   // Send: client-side validation first.
-  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await nav(page, 'Send');
   await page.getByLabel('Recipient address').fill('u1notarealaddress');
   await page.getByLabel('Amount (ZEC)').fill('5');
   await page.getByRole('button', { name: 'Review' }).click();
@@ -31,7 +31,7 @@ test('create, receive, send, shield, lock and unlock', async ({ page }) => {
   await expect(page.getByTestId('confirm-amount')).toHaveText('0.50 ZEC');
 
   await page.getByLabel('Enter your password to confirm').fill('wrong-password');
-  await page.getByRole('button', { name: 'Send', exact: true }).first().click();
+  await page.locator('form').getByRole('button', { name: 'Send', exact: true }).click();
   await expect(page.getByText('Wrong password.')).toBeVisible();
 
   await page.getByLabel('Enter your password to confirm').fill(PASSWORD);
@@ -39,14 +39,14 @@ test('create, receive, send, shield, lock and unlock', async ({ page }) => {
   await expect(page.locator('.stages').getByText('Generating zero-knowledge proofs')).toBeVisible();
   await expect(page.getByRole('heading', { name: '0.50 ZEC sent' })).toBeVisible({ timeout: 10_000 });
 
-  await page.getByRole('button', { name: 'History', exact: true }).click();
+  await nav(page, 'History');
   const history = page.getByTestId('history');
   await expect(history.locator('.tx').first()).toContainText('Sent');
   await expect(history.locator('.tx').first()).toContainText('-0.5001');
   await expect(history).toContainText('Received');
 
   // Shield the transparent balance.
-  await page.getByRole('button', { name: 'Balance' }).click();
+  await nav(page, 'Balance');
   await expect(page.getByText('You have a transparent balance')).toBeVisible();
   await page.getByRole('button', { name: 'Shield funds' }).click();
   await page.getByLabel('Enter your password to confirm').fill(PASSWORD);
@@ -95,7 +95,7 @@ test('nothing secret is stored in plaintext', async ({ page }) => {
 test('settings: reveal recovery phrase and viewing key, then wipe', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   const words = await createWallet(page);
-  await page.getByRole('button', { name: 'Settings' }).click();
+  await nav(page, 'Settings');
 
   // The server field and the auto-lock select are named by their headings.
   const server = page.getByLabel('Server (lightwalletd gRPC-web proxy)');
@@ -144,7 +144,7 @@ test('Settings links the licence notices of the engine, and the app serves them'
   // Final review F6: the wasm carries ~270 crates under MIT / Apache-2.0 and others, whose
   // copyright and permission notices must go with the copies Celari distributes.
   await createWallet(page);
-  await page.getByRole('button', { name: 'Settings' }).click();
+  await nav(page, 'Settings');
   const link = page.getByRole('link', { name: 'Third-party licences (wallet engine)' });
   await expect(link).toHaveAttribute('href', '/THIRD_PARTY_LICENSES.txt');
   const res = await page.request.get('/THIRD_PARTY_LICENSES.txt');
@@ -200,7 +200,7 @@ test('restore view-only wallet from a viewing key', async ({ page }) => {
     '1.25 ZEC of this balance is in the Orchard pool. New shielded funds now go to the Ironwood pool; when Orchard funds move into it, the amount that crosses is visible on chain (the ZIP 318 turnstile).',
   );
   await expect(page.getByText('restore your recovery phrase')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await nav(page, 'Send');
   await expect(page.getByText('You are in view-only mode')).toBeVisible();
 });
 

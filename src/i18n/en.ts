@@ -12,6 +12,8 @@ export const en = {
   'common.genericError': 'Something went wrong.',
   'common.viewHistory': 'View in history',
   'common.amountHidden': 'amount hidden',
+  'common.on': 'On',
+  'common.off': 'Off',
 
   'boot.loading': 'Preparing the Zcash engine…',
   'boot.errorTitle': 'Celari could not start',
@@ -152,6 +154,18 @@ export const en = {
     'This wallet watches a balance in the Orchard pool, which Zcash is retiring. Only a wallet that holds the recovery phrase can move it to the new Ironwood pool.',
   'home.orchardMigrateNotice':
     'Your shielded balance is in the Orchard pool, which Zcash is retiring. Moving it to the new Ironwood pool needs an updated Celari. If you need to move it sooner, restore your recovery phrase in a wallet that supports Ironwood, such as Zodl 3.8 or later.',
+  'home.recent': 'Recent activity',
+  'home.allTransactions': 'All transactions',
+  'home.privacyTitle': 'Privacy & connection',
+  'home.openSettings': 'Open Settings',
+  'home.server': 'Server',
+  'home.autoLockValue': '{n} min',
+  'home.freshAddress': 'Shielded address',
+  'home.freshAddressValue': 'New on every visit',
+  'home.serverSees':
+    'The server sees your IP address and the transactions you broadcast. It cannot see your shielded balance or who paid you.',
+  'home.serverSeesHistory':
+    'The server sees your IP address and the transactions you broadcast and, because full transactions are fetched for History, which transactions are yours. It cannot see your shielded balance or who paid you.',
 
   'receive.title': 'Receive ZEC',
   'receive.unified': 'Shielded address (recommended)',

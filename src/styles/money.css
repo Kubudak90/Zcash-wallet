@@ -1,0 +1,62 @@
+/*
+ * Money screens: Send, Shield, the spend steps, Receive and the History page.
+ * Tokens, controls, cards, transaction rows, stages, the summary and the QR
+ * frame are shared and live in src/styles.css.
+ */
+
+/* --- Send ---------------------------------------------------------------- */
+
+/* A memo is prose, not an address: the body font, wrapped at words. */
+textarea.memo {
+  font-family: inherit;
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+
+.memo-info {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: -4px 0 0;
+}
+
+.memo-count {
+  flex: none;
+}
+
+.memo-count.over {
+  color: var(--error);
+}
+
+/* The amount and its Max button. */
+.input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.input-row input {
+  flex: 1;
+  min-width: 0;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.input-row button {
+  flex: none;
+  min-height: 48px;
+}
+
+/* --- Receive ------------------------------------------------------------- */
+
+.address-kind {
+  font-size: 1.0625rem;
+}
+
+/* --- History ------------------------------------------------------------- */
+
+/* The page's list: one card, rows divided by hairlines. */
+.history {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-2);
+}

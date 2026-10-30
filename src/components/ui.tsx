@@ -6,6 +6,7 @@ import { clipboard, type ClearStatus } from '../lib/clipboard';
 import { passwordStrength, type PasswordStrength } from '../lib/vault';
 import { formatZec } from '../lib/zec';
 import { useController, useWallet } from '../state/wallet';
+import { Icon, type IconName } from './icons';
 
 /** Shown in place of an amount while balances are hidden. */
 export const HIDDEN_AMOUNT = '••••';
@@ -47,7 +48,48 @@ export function Amount({ zats, signed = false }: { zats: bigint; signed?: boolea
   );
 }
 
-export function Screen({ title, children, onBack }: { title?: string; children: ReactNode; onBack?: () => void }) {
+/**
+ * <Amount> split for typesetting, with the same text and the same masking:
+ * a sign slot, the whole part and the fraction (separator included) in their
+ * own spans, so a list can line the decimal points up and a figure can dim the
+ * fraction. Masked, it is exactly what <Amount> shows.
+ */
+export function AmountParts({ zats, signed = false }: { zats: bigint; signed?: boolean }) {
+  const { t, lang } = useI18n();
+  const { hidden } = useHideBalances();
+  if (hidden) {
+    const sign = signed && zats > 0n ? '+' : signed && zats < 0n ? '-' : '';
+    return (
+      <>
+        <span aria-hidden="true">{sign + HIDDEN_AMOUNT}</span>
+        <span className="visually-hidden">{t('common.amountHidden')}</span>
+      </>
+    );
+  }
+  const sign = zats < 0n ? '-' : signed && zats > 0n ? '+' : '';
+  const digits = formatZec(zats < 0n ? -zats : zats, { locale: lang });
+  const point = digits.indexOf(lang === 'tr' ? ',' : '.');
+  return (
+    <>
+      <span className="amt-sign">{sign}</span>
+      <span className="amt-int">{point < 0 ? digits : digits.slice(0, point)}</span>
+      <span className="amt-frac">{point < 0 ? '' : digits.slice(point)}</span>
+    </>
+  );
+}
+
+export function Screen({
+  title,
+  subtitle,
+  children,
+  onBack,
+}: {
+  title?: string;
+  /** A line under the title, part of the header. */
+  subtitle?: ReactNode;
+  children: ReactNode;
+  onBack?: () => void;
+}) {
   const { t, lang } = useI18n();
   const section = useRef<HTMLElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
@@ -73,8 +115,9 @@ export function Screen({ title, children, onBack }: { title?: string; children: 
       {(title || onBack) && (
         <header className="screen-head">
           {onBack && (
-            <button type="button" className="link back" onClick={onBack}>
-              ← {t('common.back')}
+            <button type="button" className="back" onClick={onBack}>
+              <Icon name="arrowLeft" />
+              {t('common.back')}
             </button>
           )}
           {title && (
@@ -82,6 +125,7 @@ export function Screen({ title, children, onBack }: { title?: string; children: 
               {title}
             </h1>
           )}
+          {subtitle && <p className="screen-sub">{subtitle}</p>}
         </header>
       )}
       {children}
@@ -89,7 +133,17 @@ export function Screen({ title, children, onBack }: { title?: string; children: 
   );
 }
 
-/** `live={false}` inside a live region of its own, so the two are not announced twice. */
+const NOTICE_ICON: Record<'info' | 'warn' | 'error' | 'ok', IconName> = {
+  info: 'info',
+  warn: 'alert',
+  error: 'error',
+  ok: 'okCircle',
+};
+
+/**
+ * A calm card with a mark in its tone. `live={false}` inside a live region of
+ * its own, so the two are not announced twice.
+ */
 export function Notice({
   tone = 'info',
   live = true,
@@ -101,7 +155,8 @@ export function Notice({
 }) {
   return (
     <div className={`notice notice-${tone}`} role={live ? (tone === 'error' ? 'alert' : 'status') : undefined}>
-      {children}
+      <Icon name={NOTICE_ICON[tone]} className="notice-icon" />
+      <div className="notice-body">{children}</div>
     </div>
   );
 }
@@ -124,7 +179,7 @@ export function CopyButton({ value, label, clearAfter = false }: { value: string
     <>
       <button
         type="button"
-        className="secondary"
+        className="secondary copy-button"
         onClick={() => {
           void clipboard.copy(value, { clearAfter }).then(
             () => setCopied(true),
@@ -132,6 +187,7 @@ export function CopyButton({ value, label, clearAfter = false }: { value: string
           );
         }}
       >
+        <Icon name={copied ? 'check' : 'copy'} />
         {copied ? t('common.copied') : (label ?? t('common.copy'))}
       </button>
       {/* Screen readers rarely re-read a focused button whose name changed. */}

@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 
-import { PASSWORD, TIP, UA, createWallet, en, restoreFrom } from './helpers';
+import { PASSWORD, TIP, UA, createWallet, en, nav, restoreFrom } from './helpers';
 
 // Orchard funds with the ported engine (ironwood = true): spendable as usual, the change of a
 // spend goes to Ironwood and the amount crossing pools is public (ZIP 318). The fake gives a
@@ -27,24 +27,24 @@ test('Orchard funds: an accurate note while there are any, the shield goes to Ir
   ).toBeVisible();
   await page.getByRole('button', { name: /Back/ }).click();
 
-  await page.getByRole('button', { name: 'Settings' }).click();
+  await nav(page, 'Settings');
   await page.getByRole('button', { name: 'Türkçe' }).click();
-  await page.getByRole('button', { name: 'Bakiye', exact: true }).click();
+  await nav(page, 'Bakiye');
   await expect(note).toHaveText(
     'Gizli bakiyenin 1,25 ZEC’lik kısmı Orchard havuzunda ve her zamanki gibi harcanabilir. Ondan harcadığında para üstü yeni gizli havuz Ironwood’a geçer; Orchard’dan Ironwood’a geçen tutar zincirde görünür (ZIP 318 turnike kuralı). Celari henüz Ironwood’a gizli ve kademeli bir taşıma sunmuyor.',
   );
-  await page.getByRole('button', { name: 'Ayarlar' }).click();
+  await nav(page, 'Ayarlar');
   await page.getByRole('button', { name: 'English' }).click();
 
   // A payment spends the Orchard note; its change lands in Ironwood, and the note goes.
-  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await nav(page, 'Send');
   await page.getByLabel('Recipient address').fill(UA);
   await page.getByLabel('Amount (ZEC)').fill('0.1');
   await page.getByRole('button', { name: 'Review' }).click();
   await page.getByLabel('Enter your password to confirm').fill(PASSWORD);
   await page.locator('form').getByRole('button', { name: 'Send', exact: true }).click();
   await expect(page.getByRole('heading', { name: '0.10 ZEC sent' })).toBeVisible({ timeout: 10_000 });
-  await page.getByRole('button', { name: 'Balance', exact: true }).click();
+  await nav(page, 'Balance');
   await expect(page.getByTestId('balance-shielded')).toContainText('1.1499');
   await expect(note).toHaveCount(0);
 });

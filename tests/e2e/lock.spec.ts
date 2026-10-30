@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 
-import { PASSWORD, TIP, UA, createWallet, en, fakeEngine, restoreFromThisMonth, setHidden, setKnobs } from './helpers';
+import { PASSWORD, TIP, UA, createWallet, en, fakeEngine, nav, restoreFromThisMonth, setHidden, setKnobs } from './helpers';
 
 // The wallet locks itself when its tab stays in the background, and a lock
 // that comes during a catch-up pass (a restore) keeps that pass's progress.
@@ -56,7 +56,7 @@ test.describe('tab in the background', () => {
   test('a running send finishes before the lock', async ({ page }) => {
     await page.clock.install();
     await createWallet(page);
-    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await nav(page, 'Send');
     await page.getByLabel('Recipient address').fill(UA);
     await page.getByLabel('Amount (ZEC)').fill('0.1');
     await page.getByRole('button', { name: 'Review' }).click();
@@ -79,7 +79,7 @@ test.describe('tab in the background', () => {
     await expect(page.getByText(HIDDEN_NOTICE)).toBeVisible();
     // The payment went out before the lock.
     await unlock(page);
-    await page.getByRole('button', { name: 'History' }).click();
+    await nav(page, 'History');
     await expect(page.getByTestId('history').locator('.tx-sent')).toHaveCount(1);
   });
 });
@@ -99,7 +99,9 @@ test.describe('a lock during a restore', () => {
     await expect(page.getByText(SOFT_NOTE)).toBeVisible();
     expect(await samePage(page), 'no reload yet').toBe(true);
     // Nothing of the wallet is on screen meanwhile.
-    await expect(page.locator('.topbar, .tabbar, [data-testid^="balance-"]')).toHaveCount(0);
+    await expect(
+      page.locator('.side, .topbar, .tabbar, nav, [data-testid="sync-status"], [data-testid^="balance-"]'),
+    ).toHaveCount(0);
 
     const reloaded = page.waitForEvent('load');
     await setKnobs(page, { holdPass: false });
@@ -129,7 +131,7 @@ test.describe('a lock during a restore', () => {
 
     await setKnobs(page, { holdPass: false });
     await expect(status).toHaveText(`Up to date · block ${en(TIP)}`, { timeout: 20_000 });
-    await page.getByRole('button', { name: 'History' }).click();
+    await nav(page, 'History');
     await expect(page.getByRole('heading', { name: 'Transaction history' })).toBeVisible();
     expect(await samePage(page), 'never reloaded').toBe(true);
   });

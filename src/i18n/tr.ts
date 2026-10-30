@@ -14,6 +14,8 @@ export const tr: Record<MessageKey, string> = {
   'common.genericError': 'Bir şeyler ters gitti.',
   'common.viewHistory': 'Geçmişte gör',
   'common.amountHidden': 'tutar gizlendi',
+  'common.on': 'Açık',
+  'common.off': 'Kapalı',
 
   'boot.loading': 'Zcash motoru hazırlanıyor…',
   'boot.errorTitle': 'Celari başlatılamadı',
@@ -155,6 +157,18 @@ export const tr: Record<MessageKey, string> = {
     'Bu cüzdan, Zcash’in kullanımdan kaldırdığı Orchard havuzundaki bir bakiyeyi izliyor. Onu yeni Ironwood havuzuna yalnızca kurtarma kelimelerini tutan bir cüzdan taşıyabilir.',
   'home.orchardMigrateNotice':
     'Gizli bakiyen, Zcash’in kullanımdan kaldırdığı Orchard havuzunda. Yeni Ironwood havuzuna taşımak için güncel bir Celari gerekiyor. Daha erken taşıman gerekiyorsa kurtarma kelimelerini Ironwood destekleyen bir cüzdana (örneğin Zodl 3.8 ve üzeri) yükle.',
+  'home.recent': 'Son işlemler',
+  'home.allTransactions': 'Tüm işlemler',
+  'home.privacyTitle': 'Gizlilik ve bağlantı',
+  'home.openSettings': 'Ayarları aç',
+  'home.server': 'Sunucu',
+  'home.autoLockValue': '{n} dk',
+  'home.freshAddress': 'Gizli adres',
+  'home.freshAddressValue': 'Her açılışta yeni',
+  'home.serverSees':
+    'Sunucu IP adresini ve gönderdiğin işlemleri görür. Gizli bakiyeni ve kimden para aldığını göremez.',
+  'home.serverSeesHistory':
+    'Sunucu IP adresini, gönderdiğin işlemleri ve Geçmiş için işlemlerin tamamı getirildiğinden hangi işlemlerin senin olduğunu görür. Gizli bakiyeni ve kimden para aldığını göremez.',
 
   'receive.title': 'ZEC al',
   'receive.unified': 'Gizli adres (önerilen)',

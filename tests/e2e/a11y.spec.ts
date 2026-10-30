@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 
-import { PASSWORD, UA, createWallet, fillVerification, installContrast, type ContrastWindow } from './helpers';
+import { PASSWORD, UA, createWallet, fillVerification, installContrast, nav, navTab, type ContrastWindow } from './helpers';
 
 type StageWindow = ContrastWindow & { stage: Promise<number> };
 
@@ -44,7 +44,7 @@ test('recovery phrase words never break across lines', async ({ page }) => {
   await page.getByLabel('Password (again)').fill(PASSWORD);
   await page.getByRole('button', { name: 'Create wallet' }).click();
 
-  await page.getByRole('button', { name: 'Settings' }).click();
+  await nav(page, 'Settings');
   await page.getByRole('button', { name: 'Show recovery phrase' }).click();
   await page.getByLabel('Password').fill(PASSWORD);
   await page.getByRole('button', { name: 'Reveal' }).click();
@@ -68,18 +68,18 @@ for (const colorScheme of ['light', 'dark'] as const) {
           .first()
           .evaluate((el, [p, ps]) => (window as unknown as ContrastWindow).contrastOf(el, p, ps), [prop, pseudo] as const);
 
-      expect(await ratio('.topbar button.link'), 'Lock').toBeGreaterThanOrEqual(4.5);
+      expect(await ratio('.topbar .lock-button'), 'Lock').toBeGreaterThanOrEqual(4.5);
       expect(await ratio('.tabbar button.active'), 'active tab label').toBeGreaterThanOrEqual(4.5);
       // The active tab is not marked by colour alone.
       const marker = page.locator('.tabbar button.active');
       expect(await marker.evaluate((el) => getComputedStyle(el, '::before').height)).toBe('3px');
       expect(await ratio('.tabbar button.active', 'background-color', '::before'), 'tab marker').toBeGreaterThanOrEqual(3);
 
-      await page.getByRole('button', { name: 'Settings' }).click();
+      await nav(page, 'Settings');
       expect(await ratio('input[name="server"]', 'border-top-color'), 'field border').toBeGreaterThanOrEqual(3);
       expect(await ratio('.settings-group a'), 'link').toBeGreaterThanOrEqual(4.5);
 
-      await page.getByRole('button', { name: 'Send', exact: true }).click();
+      await nav(page, 'Send');
       await page.getByLabel('Recipient address').fill(UA);
       await page.getByLabel('Amount (ZEC)').fill('0.1');
       await page.getByRole('button', { name: 'Review' }).click();
@@ -105,17 +105,17 @@ for (const colorScheme of ['light', 'dark'] as const) {
       await expect(page.locator('.stages')).toHaveCount(0, { timeout: 10_000 });
 
       // Shield opens from Balance, so Balance stays the current tab.
-      await page.getByRole('button', { name: 'Balance' }).click();
+      await nav(page, 'Balance');
       await page.getByRole('button', { name: 'Shield funds' }).click();
       await expect(page.getByRole('heading', { name: 'Shield funds' })).toBeVisible();
-      await expect(page.getByRole('button', { name: 'Balance' })).toHaveAttribute('aria-current', 'page');
+      await expect(navTab(page, 'Balance')).toHaveAttribute('aria-current', 'page');
     });
   });
 }
 
 test('keyboard focus is never hidden under the top bar or the tab bar', async ({ page }) => {
   await createWallet(page);
-  await page.getByRole('button', { name: 'Settings' }).click();
+  await nav(page, 'Settings');
   const bars = async () => {
     const [top, bottom] = await Promise.all([page.locator('.topbar').boundingBox(), page.locator('.tabbar').boundingBox()]);
     return { top: top!.y + top!.height, bottom: bottom!.y };
@@ -152,6 +152,40 @@ test('keyboard focus is never hidden under the top bar or the tab bar', async ({
   expect(box.y, 'server field vs top bar').toBeGreaterThanOrEqual((await bars()).top);
 });
 
+test('on a wide screen the sidebar adds no scroll padding, and focus stays beside it', async ({ page }) => {
+  await createWallet(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await nav(page, 'Settings');
+  // The tab bar's measured height is the sidebar's here: it must not become padding.
+  const padding = await page.evaluate(() => {
+    const s = getComputedStyle(document.documentElement);
+    return [s.scrollPaddingTop, s.scrollPaddingBottom];
+  });
+  expect(padding).toEqual(['12px', '12px']);
+
+  // Tab onto a control well inside the viewport: nothing scrolls, it is not under the sidebar.
+  const target = page.getByRole('button', { name: 'Show viewing key' });
+  await target.evaluate((el) => window.scrollBy(0, el.getBoundingClientRect().bottom - (innerHeight - 80)));
+  const before = await page.evaluate(() => window.scrollY);
+  await page.locator('select[name="auto-lock"]').evaluate((el: HTMLElement) => el.focus({ preventScroll: true }));
+  await page.keyboard.press('Tab');
+  const focused = page.locator(':focus');
+  await expect(focused).toHaveAccessibleName('Show viewing key');
+  expect(await page.evaluate(() => window.scrollY), 'no scroll for a control in view').toBe(before);
+  const box = (await focused.boundingBox())!;
+  const side = (await page.locator('.side').boundingBox())!;
+  expect(box.x, 'right of the sidebar').toBeGreaterThanOrEqual(side.x + side.width);
+  expect(box.y + box.height).toBeLessThanOrEqual(800);
+
+  // Tab onto one just below the viewport: it is scrolled fully into view.
+  await target.evaluate((el) => window.scrollBy(0, el.getBoundingClientRect().top - (innerHeight + 4)));
+  await page.locator('select[name="auto-lock"]').evaluate((el: HTMLElement) => el.focus({ preventScroll: true }));
+  await page.keyboard.press('Tab');
+  const shown = (await focused.boundingBox())!;
+  expect(shown.y, 'below the top').toBeGreaterThanOrEqual(0);
+  expect(shown.y + shown.height, 'above the bottom').toBeLessThanOrEqual(800);
+});
+
 test('the top bar keeps Lock on screen at 320px, in both languages', async ({ page }) => {
   await createWallet(page);
   // Where everything fits on one line, the sync pill sits next to Lock, not halfway to the brand.
@@ -163,9 +197,14 @@ test('the top bar keeps Lock on screen at 320px, in both languages', async ({ pa
     const lock = (await page.getByRole('button', { name: 'Lock' }).boundingBox())!;
     expect(lock.y, `one line at ${width}px`).toBeLessThan(pill.y + pill.height);
     expect(lock.x - (pill.x + pill.width), `pill to Lock at ${width}px`).toBeLessThanOrEqual(12);
+    expect(lock.x - (pill.x + pill.width), `pill clear of Lock at ${width}px`).toBeGreaterThanOrEqual(0);
+    expect(lock.x + lock.width, `Lock on screen at ${width}px`).toBeLessThanOrEqual(width);
   }
   // Narrow, only the logo shows, but the name is still there for screen readers.
   await expect(page.locator('.topbar-brand')).toHaveText('Celari');
+  // A pill cut short keeps its whole label, in its text and in its tooltip.
+  await expect(page.getByTestId('sync-status')).toHaveText(/^Up to date · block [\d,]+$/);
+  await expect(page.getByTestId('sync-status')).toHaveAttribute('title', /^Up to date · block [\d,]+$/);
   await page.setViewportSize({ width: 320, height: 640 });
   for (const [language, lock, settings, home] of [
     ['English', 'Lock', 'Settings', 'Balance'],
@@ -186,60 +225,80 @@ for (const colorScheme of ['light', 'dark'] as const) {
   test.describe(`${colorScheme} theme`, () => {
     test.use({ colorScheme });
 
-    test('on a wide screen the app is a framed card with both bars inside it', async ({ page }) => {
+    test('on a wide screen the navigation is a full-height sidebar that stays in view', async ({ page }) => {
       await page.addInitScript(installContrast);
       await createWallet(page);
-      const app = page.locator('.app');
-      const frame = () =>
-        app.evaluate((el) => {
-          const s = getComputedStyle(el);
-          return {
-            radius: parseFloat(s.borderTopLeftRadius),
-            border: parseFloat(s.borderTopWidth),
-            shadow: s.boxShadow,
-            card: s.backgroundColor,
-            page: getComputedStyle(document.body).backgroundColor,
-          };
-        });
-      // Phones keep the edge-to-edge column, the tab bar fixed across the screen.
-      expect(await frame()).toMatchObject({ radius: 0, border: 0, shadow: 'none' });
-      expect((await page.locator('.tabbar').boundingBox())!.width).toBe(412);
+      const box = async (selector: string) => (await page.locator(selector).boundingBox())!;
+
+      // Phones: no frame, the tab bar fixed across the bottom of the screen.
+      const app = await page.locator('.app').evaluate((el) => {
+        const s = getComputedStyle(el);
+        return { radius: parseFloat(s.borderTopLeftRadius), border: parseFloat(s.borderTopWidth), shadow: s.boxShadow };
+      });
+      expect(app).toMatchObject({ radius: 0, border: 0, shadow: 'none' });
+      const bar = await box('.tabbar');
+      expect(bar.width).toBe(412);
+      expect(bar.y + bar.height).toBeCloseTo(839, 0);
 
       await page.setViewportSize({ width: 1280, height: 800 });
-      const style = await frame();
-      expect(style.radius).toBeGreaterThan(0);
-      expect(style.border).toBeGreaterThan(0);
-      expect(style.shadow).not.toBe('none');
-      expect(style.card, 'the card stands out from the page').not.toBe(style.page);
-      const inside = async (where: string) => {
-        // The frame can reach past the viewport; the bars stay inside both.
-        const card = (await app.boundingBox())!;
-        for (const bar of ['.topbar', '.tabbar']) {
-          const box = (await page.locator(bar).boundingBox())!;
-          expect(box.x, `${bar} left, ${where}`).toBeGreaterThanOrEqual(card.x);
-          expect(box.x + box.width, `${bar} right, ${where}`).toBeLessThanOrEqual(card.x + card.width);
-          expect(box.y, `${bar} top, ${where}`).toBeGreaterThanOrEqual(Math.max(0, card.y));
-          expect(box.y + box.height, `${bar} bottom, ${where}`).toBeLessThanOrEqual(Math.min(800, card.y + card.height));
+      const inView = async (where: string) => {
+        const s = await box('.side');
+        // Within a pixel: at the very end of the page scrolling stops on a fraction.
+        expect(s.x, `sidebar left, ${where}`).toBe(0);
+        expect(s.y, `sidebar top, ${where}`).toBeCloseTo(0, 0);
+        expect(s.height, `sidebar fills the height, ${where}`).toBeCloseTo(800, 0);
+        // Brand, Lock, the navigation and the sync status are all inside it, in that order.
+        const navBox = await box('.tabbar');
+        const lock = await box('.lock-button');
+        const status = await box('[data-testid="sync-status"]');
+        for (const [name, b] of [
+          ['navigation', navBox],
+          ['Lock', lock],
+          ['sync status', status],
+        ] as const) {
+          expect(b.x, `${name} left, ${where}`).toBeGreaterThanOrEqual(s.x);
+          expect(b.x + b.width, `${name} right, ${where}`).toBeLessThanOrEqual(s.x + s.width);
+          expect(b.y, `${name} top, ${where}`).toBeGreaterThanOrEqual(0);
+          expect(b.y + b.height, `${name} bottom, ${where}`).toBeLessThanOrEqual(800);
         }
+        expect(lock.y + lock.height, `Lock above the navigation, ${where}`).toBeLessThanOrEqual(navBox.y);
+        expect(status.y, `sync status below the navigation, ${where}`).toBeGreaterThanOrEqual(navBox.y + navBox.height);
+        // The content column starts where the sidebar ends.
+        expect((await box('main.content')).x, `content beside the sidebar, ${where}`).toBeGreaterThanOrEqual(s.x + s.width);
       };
-      await inside('Balance');
-      // A short screen leaves no scrolling beyond the frame's margins. Balance
-      // runs longer with the Orchard notice; History with one payment is short.
-      await page.getByRole('button', { name: 'History', exact: true }).click();
+      await inView('Balance');
+
+      // A short screen does not scroll; History with one payment is short.
+      await nav(page, 'History');
       await expect(page.getByTestId('history')).toBeVisible();
       expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThanOrEqual(800);
 
-      // A long screen scrolls the page; both bars stay in view and in the frame.
-      await page.getByRole('button', { name: 'Settings' }).click();
+      // A long screen scrolls the page; the sidebar stays put.
+      await nav(page, 'Settings');
       for (const y of [400, 100_000]) {
         await page.evaluate((top) => window.scrollTo(0, top), y);
-        await inside(`Settings scrolled to ${y}`);
+        await inView(`Settings scrolled to ${y}`);
       }
+      expect(await page.evaluate(() => window.scrollY), 'the page itself scrolled').toBeGreaterThan(0);
       expect(await page.evaluate(() => document.documentElement.scrollWidth), 'no sideways scroll').toBeLessThanOrEqual(1280);
-      const lock = await page
-        .locator('.topbar button.link')
-        .evaluate((el) => (window as unknown as ContrastWindow).contrastOf(el));
-      expect(lock, 'Lock on the framed top bar').toBeGreaterThanOrEqual(4.5);
+
+      // Lock and the current item read well on the sidebar; the current item has a 3px gold marker.
+      const contrast = (selector: string, prop?: string, pseudo?: string) =>
+        page
+          .locator(selector)
+          .evaluate((el, [p, ps]) => (window as unknown as ContrastWindow).contrastOf(el, p, ps), [prop, pseudo] as const);
+      expect(await contrast('.lock-button'), 'Lock on the sidebar').toBeGreaterThanOrEqual(4.5);
+      expect(await contrast('.tabbar button.active'), 'current item').toBeGreaterThanOrEqual(4.5);
+      expect(await page.locator('.tabbar button.active').evaluate((el) => getComputedStyle(el, '::before').width)).toBe('3px');
+      expect(await contrast('.tabbar button.active', 'background-color', '::before'), 'marker').toBeGreaterThanOrEqual(3);
+
+      // However long the sync message gets, it grows its own card and never covers the navigation.
+      await page.locator('[data-testid="sync-status"] .pill-head').evaluate((el) => {
+        el.textContent = 'Scanned to block 3,533,800 and still waiting for the server to answer '.repeat(4);
+      });
+      const navBox = await box('.tabbar');
+      const statusBox = await box('[data-testid="sync-status"]');
+      expect(statusBox.y, 'long status below the navigation').toBeGreaterThanOrEqual(navBox.y + navBox.height);
     });
   });
 }
@@ -302,12 +361,12 @@ test('focus follows steps and errors instead of falling to the page', async ({ p
 
   // Tab switches keep focus on the tab and retitle the page.
   await expect(page).toHaveTitle('Balance · Celari');
-  await page.getByRole('button', { name: 'History' }).click();
-  await expect(page.getByRole('button', { name: 'History' })).toBeFocused();
+  await nav(page, 'History');
+  await expect(navTab(page, 'History')).toBeFocused();
   await expect(page).toHaveTitle('History · Celari');
 
   // Switching language re-renders the heading but leaves focus on the switch.
-  await page.getByRole('button', { name: 'Settings' }).click();
+  await nav(page, 'Settings');
   await page.getByRole('button', { name: 'Türkçe' }).click();
   await expect(page.getByRole('heading', { name: 'Ayarlar' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Türkçe' })).toBeFocused();
@@ -330,7 +389,7 @@ test('focus follows steps and errors instead of falling to the page', async ({ p
 
 test('a secret revealed in Settings takes focus, and Close or Cancel gives it back', async ({ page }) => {
   await createWallet(page);
-  await page.getByRole('button', { name: 'Settings' }).click();
+  await nav(page, 'Settings');
   for (const [name, content] of [
     ['Show viewing key', /uview1/],
     ['Show recovery phrase', /Never share them/],
