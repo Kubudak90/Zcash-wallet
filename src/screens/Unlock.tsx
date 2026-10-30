@@ -5,9 +5,9 @@ import { Icon } from '../components/icons';
 import { ErrorDetails, Notice, PasswordField, Spinner } from '../components/ui';
 import { NewerDatabaseFormatError } from '../engine';
 import { useI18n, type MessageKey } from '../i18n';
-import { WrongPasswordError } from '../lib/vault';
+import { UnsupportedVaultError, WrongPasswordError } from '../lib/vault';
 import { clearAutoLocked, useAutoLockReason } from '../state/autoLockNotice';
-import { WalletDataError } from '../state/controller';
+import { OtherTabError, WalletDataError } from '../state/controller';
 import { useController, useWallet } from '../state/wallet';
 import { EngravedC } from './AccountLayout';
 import { LanguageSwitch } from './LanguageSwitch';
@@ -52,7 +52,9 @@ export function Unlock() {
   const wrongPassword = error instanceof WrongPasswordError;
   // Unlocking changed nothing stored in these cases; say so rather than only that it failed.
   const openFailure: MessageKey | null =
-    error instanceof NewerDatabaseFormatError
+    error instanceof OtherTabError
+      ? 'common.otherTab'
+      : error instanceof NewerDatabaseFormatError || error instanceof UnsupportedVaultError
       ? 'unlock.dbNewer'
       : error instanceof WalletDataError
         ? meta?.kind === 'view'

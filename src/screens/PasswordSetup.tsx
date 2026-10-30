@@ -2,7 +2,9 @@ import { useId, useState, type FocusEvent, type FormEvent, type ReactNode } from
 
 import { ErrorDetails, Notice, PasswordField, Screen, Spinner, StrengthMeter } from '../components/ui';
 import { useI18n } from '../i18n';
+import { WalletExistsError } from '../lib/storage';
 import { MIN_PASSWORD_LENGTH } from '../lib/vault';
+import { OtherTabError } from '../state/controller';
 import { Flow } from './AccountLayout';
 
 export function PasswordSetup({
@@ -86,7 +88,13 @@ export function PasswordSetup({
           </p>
           {error != null && (
             <Notice tone="error">
-              {t('common.genericError')}
+              {error instanceof OtherTabError ? (
+                <p>{t('common.otherTab')}</p>
+              ) : error instanceof WalletExistsError ? (
+                <p>{t('password.walletExists')}</p>
+              ) : (
+                t('common.genericError')
+              )}
               <ErrorDetails error={error} />
             </Notice>
           )}

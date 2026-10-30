@@ -14,6 +14,8 @@ export const en = {
   'common.amountHidden': 'amount hidden',
   'common.on': 'On',
   'common.off': 'Off',
+  'common.otherTab':
+    'Celari has a wallet open in another tab or window of this browser. Lock or close it there, then try again. Nothing was changed.',
 
   'boot.loading': 'Preparing the Zcash engine…',
   'boot.errorTitle': 'Celari could not start',
@@ -62,6 +64,8 @@ export const en = {
   'password.strength.strong': 'Strong',
   'password.finish': 'Create wallet',
   'password.creating': 'Creating wallet…',
+  'password.walletExists':
+    'Another tab added a wallet to this browser meanwhile, so this one was not saved and nothing was changed. Reload the page to open that wallet. To replace it, remove it first, from its lock screen or in Settings.',
 
   'restore.title': 'Restore a wallet',
   'restore.modeSeed': 'Recovery phrase',

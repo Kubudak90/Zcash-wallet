@@ -16,6 +16,8 @@ export const tr: Record<MessageKey, string> = {
   'common.amountHidden': 'tutar gizlendi',
   'common.on': 'Açık',
   'common.off': 'Kapalı',
+  'common.otherTab':
+    'Celari bu tarayıcının başka bir sekmesinde ya da penceresinde bir cüzdanı açık tutuyor. Orada kilitle ya da kapat, sonra tekrar dene. Hiçbir şey değiştirilmedi.',
 
   'boot.loading': 'Zcash motoru hazırlanıyor…',
   'boot.errorTitle': 'Celari başlatılamadı',
@@ -63,6 +65,8 @@ export const tr: Record<MessageKey, string> = {
   'password.strength.strong': 'Güçlü',
   'password.finish': 'Cüzdanı oluştur',
   'password.creating': 'Cüzdan oluşturuluyor…',
+  'password.walletExists':
+    'Bu arada başka bir sekme bu tarayıcıya bir cüzdan ekledi; bu yüzden bu cüzdan kaydedilmedi ve hiçbir şey değiştirilmedi. O cüzdanı açmak için sayfayı yenile. Yerine bunu koymak istersen önce onu kilit ekranından ya da Ayarlar’dan kaldır.',
 
   'restore.title': 'Cüzdanı geri yükle',
   'restore.modeSeed': 'Kurtarma kelimeleri',
