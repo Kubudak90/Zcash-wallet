@@ -221,6 +221,45 @@ test('the top bar keeps Lock on screen at 320px, in both languages', async ({ pa
   }
 });
 
+/** The elements whose own text (not an icon beside it) runs onto a second line, by their text. */
+function wrappedTexts(page: Page, selector: string): Promise<string[]> {
+  return page.locator(selector).evaluateAll((els) => {
+    const range = document.createRange();
+    return els.flatMap((el) => {
+      const tops = new Set<number>();
+      for (const node of el.childNodes) {
+        if (node.nodeType !== Node.TEXT_NODE || !node.textContent?.trim()) continue;
+        range.selectNodeContents(node);
+        for (const line of range.getClientRects()) tops.add(Math.round(line.top));
+      }
+      return tops.size > 1 ? [el.textContent ?? ''] : [];
+    });
+  });
+}
+
+test('on a laptop the dashboard keeps short values whole and its actions on one row, in both languages', async ({ page }) => {
+  await createWallet(page);
+  for (const language of ['English', 'Türkçe']) {
+    // Settings is the navigation's last item and Balance its first, in either language.
+    await page.locator('.tabbar button').last().click();
+    await page.getByRole('button', { name: language }).click();
+    await page.locator('.tabbar button').first().click();
+    await expect(page.locator('.hero-actions button')).toHaveCount(3);
+    for (const width of [1024, 1180, 1265, 1440]) {
+      await page.setViewportSize({ width, height: 800 });
+      // "On", "15 min", "Açık": a key may wrap between its words, a value is never split.
+      expect(await wrappedTexts(page, '.privacy-card .kv dd:not(.mono)'), `values at ${width}px, ${language}`).toEqual([]);
+      expect(await wrappedTexts(page, '.hero-actions button'), `button labels at ${width}px, ${language}`).toEqual([]);
+      const rows = await page
+        .locator('.hero-actions button')
+        .evaluateAll((buttons) => new Set(buttons.map((b) => Math.round(b.getBoundingClientRect().top))).size);
+      expect(rows, `Send, Receive and Shield funds in one row at ${width}px, ${language}`).toBe(1);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth), `no sideways scroll at ${width}px`).toBeLessThanOrEqual(width);
+    }
+    await page.setViewportSize({ width: 412, height: 839 });
+  }
+});
+
 for (const colorScheme of ['light', 'dark'] as const) {
   test.describe(`${colorScheme} theme`, () => {
     test.use({ colorScheme });

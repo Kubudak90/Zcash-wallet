@@ -123,6 +123,10 @@ test('a server that does not answer the network check keeps spending off until i
   const unreachable = 'Celari could not check the network version. Sending and shielding stay disabled until it can.';
   await expect(banner(page)).toHaveText(unreachable);
   await expect(page.getByRole('button', { name: 'Shield funds' })).toHaveCount(0);
+  // Balance's Send stays, but is not dressed as the action to take, and nothing claims a network.
+  const heroSend = page.locator('main .hero-actions').getByRole('button', { name: 'Send', exact: true });
+  await expect(heroSend).not.toHaveClass(/primary/);
+  await expect(page.locator('.side-net')).toHaveCount(0);
   await nav(page, 'Send');
   // Not "until Celari is updated": nothing says an update is needed.
   await expect(disabled(page)).toHaveText(unreachable);
@@ -140,6 +144,9 @@ test('a server that does not answer the network check keeps spending off until i
   await expect(page.locator('.main')).toHaveAttribute('data-network', 'supported');
   await expect(banner(page)).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Shield funds' })).toBeVisible();
+  await expect(heroSend).toHaveClass(/primary/);
+  // The check confirmed the server is on mainnet, the one chain the engine is built for.
+  await expect(page.locator('.side-net')).toHaveText('Mainnet');
   await nav(page, 'Send');
   await expect(page.getByLabel('Recipient address')).toBeVisible();
 });

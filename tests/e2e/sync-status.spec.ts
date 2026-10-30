@@ -21,6 +21,29 @@ test('a restore shows how many blocks are left, then up to date', async ({ page 
   await expect(page.getByText('Sync in progress.')).toHaveCount(0);
 });
 
+test('on a phone the blocks left show under the bar, and nothing is drawn as a figure before the first summary', async ({
+  page,
+}) => {
+  await fakeEngine(page, { holdPass: true });
+  const birthday = await restoreFromThisMonth(page);
+  const status = page.getByTestId('sync-status');
+  const left = `${en(TIP - (birthday - 1))} blocks left`;
+  // The pill keeps its whole label in its text, but a phone's has room for the state only.
+  await expect(status).toHaveText(`Syncing · ${left}`);
+  expect(await status.locator('.pill-sub').evaluate((el) => el.getBoundingClientRect().width)).toBeLessThanOrEqual(1);
+  await expect(page.locator('.hero-sync-left')).toBeVisible();
+  await expect(page.locator('.hero-sync-left')).toHaveText(left);
+  // No summary yet: a sentence says when the balance comes, and no split rule stands for one.
+  await expect(page.getByTestId('balance-total')).toHaveText('Your balance appears as the sync goes on');
+  await expect(page.locator('main .split')).toHaveCount(0);
+
+  await setKnobs(page, { holdPass: false });
+  await expect(status).toHaveText(`Up to date · block ${en(TIP)}`, { timeout: 20_000 });
+  await expect(page.locator('.hero-sync-left')).toHaveCount(0);
+  await expect(page.getByTestId('balance-total')).toContainText('1.75');
+  await expect(page.locator('main .split > span')).toHaveCount(2);
+});
+
 test('a restore shows how many blocks are left with an engine that has a summary before its first pass', async ({ page }) => {
   // The fake, like the ported WebZjs (zcash_client_sqlite rules), answers no summary until a
   // pass has set the chain tip (the test above); the engine that stopped at NU6.1 answered one

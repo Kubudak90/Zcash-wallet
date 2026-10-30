@@ -26,12 +26,13 @@ function hostOf(url: string): string {
 
 /**
  * The shielded and transparent shares as one rule. Hidden balances show a
- * plain rule: the split would give the ratio away. So does an empty wallet,
- * which has no ratio (no NaN, no zero-width segment).
+ * plain rule: the split would give the ratio away. An empty wallet has no
+ * ratio (no NaN, no zero-width segment): Home draws no rule for it, nor
+ * before the wallet's first summary, unless balances are hidden.
  */
-function SplitRule({ b, hidden }: { b: Balances | undefined; hidden: boolean }) {
-  const shielded = b ? shieldedTotal(b) : 0n;
-  const transparent = b?.transparent ?? 0n;
+function SplitRule({ b, hidden }: { b: Balances; hidden: boolean }) {
+  const shielded = shieldedTotal(b);
+  const transparent = b.transparent;
   const total = shielded + transparent;
   if (hidden || total <= 0n) {
     return (
@@ -47,6 +48,19 @@ function SplitRule({ b, hidden }: { b: Balances | undefined; hidden: boolean }) 
       {shielded > 0n && <span className="split-shielded" style={{ flexGrow: s }} />}
       {transparent > 0n && <span className="split-transparent" style={{ flexGrow: 10_000 - s }} />}
     </div>
+  );
+}
+
+/** A pool's amount and unit, or a quiet dash before the wallet's first summary. */
+function PoolAmount({ zats }: { zats: bigint | undefined }) {
+  if (zats === undefined) return <span className="amt amt-none">—</span>;
+  return (
+    <>
+      <span className="amt">
+        <AmountParts zats={zats} />
+      </span>{' '}
+      <span className="unit">ZEC</span>
+    </>
   );
 }
 
@@ -69,6 +83,17 @@ export function Home({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
   const transparentPrompt = !!b && b.transparent > 0n && !viewOnly;
   // The one way into Shield from here; where it cannot go, the prompt says why instead.
   const canShield = transparentPrompt && !spendingDisabled(network) && shieldable;
+  // Gold marks the one action the screen leads to. Where no payment can go out now (the
+  // network check says no, or the engine stopped and its notice offers the reload) Send is a
+  // plain button; a view-only wallet has no Send, so Receive leads.
+  const sendLeads = !viewOnly && !spendingDisabled(network) && sync.kind !== 'stopped';
+  const receiveLeads = viewOnly && sync.kind !== 'stopped';
+  // The split rule needs shares to draw. Hidden, it is drawn plain whatever the wallet holds
+  // (an empty wallet must look like any other); shown, an empty wallet has none, and a hairline
+  // parts the pools from the figure instead, as before the first summary.
+  const split = !!b && (balances.hidden || shieldedTotal(b) + b.transparent > 0n);
+  // "49,799 blocks left": the part of the sync label after its first " · ".
+  const blocksLeft = sync.kind === 'syncing' ? syncLabel(sync, t, lang).split(' · ').slice(1).join(' · ') : '';
 
   return (
     <section className="screen home">
@@ -92,8 +117,18 @@ export function Home({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
               <span className="eye-label">{t('home.hideBalances')}</span>
             </button>
           </div>
-          <div className="balance-total" data-testid="balance-total">
-            <span className="amt">{b ? <AmountParts zats={grandTotal(b)} /> : '—'}</span> <span className="unit">ZEC</span>
+          <div className={b ? 'balance-total' : 'balance-total balance-waiting'} data-testid="balance-total">
+            {b ? (
+              <>
+                <span className="amt">
+                  <AmountParts zats={grandTotal(b)} />
+                </span>{' '}
+                <span className="unit">ZEC</span>
+              </>
+            ) : (
+              // No figure yet: a calm sentence, not a dash at display size.
+              <span className="balance-wait">{t('home.balanceWaiting')}</span>
+            )}
           </div>
           {/* Shielded payments since NU6.3 land in Ironwood, which an engine without it does not see. */}
           {!ironwood && (
@@ -113,12 +148,20 @@ export function Home({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
               >
                 <span style={sync.pct === null ? undefined : { width: `${sync.pct}%` }} />
               </div>
-              <p className="muted small">{t('sync.firstSyncNote')}</p>
+              <div className="hero-sync-text">
+                {/* The bar's name says it already; these words are for the eye, on a phone whose pill has no room for them. */}
+                {blocksLeft && (
+                  <p className="hero-sync-left" aria-hidden="true">
+                    {blocksLeft}
+                  </p>
+                )}
+                <p className="muted small">{t('sync.firstSyncNote')}</p>
+              </div>
             </div>
           )}
 
-          <div className="composition">
-            <SplitRule b={b} hidden={balances.hidden} />
+          <div className={split ? 'composition' : 'composition composition-plain'}>
+            {split && b && <SplitRule b={b} hidden={balances.hidden} />}
             <dl className="balance-rows">
               <div className="pool pool-shielded">
                 <dt>
@@ -126,7 +169,7 @@ export function Home({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
                   {t('home.shielded')}
                 </dt>
                 <dd className="pool-amount" data-testid="balance-shielded">
-                  <span className="amt">{b ? <AmountParts zats={shieldedTotal(b)} /> : '—'}</span> <span className="unit">ZEC</span>
+                  <PoolAmount zats={b ? shieldedTotal(b) : undefined} />
                 </dd>
                 <dd className="pool-help">{t('home.shieldedHelp')}</dd>
               </div>
@@ -136,7 +179,7 @@ export function Home({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
                   {t('home.transparent')}
                 </dt>
                 <dd className="pool-amount" data-testid="balance-transparent">
-                  <span className="amt">{b ? <AmountParts zats={b.transparent} /> : '—'}</span> <span className="unit">ZEC</span>
+                  <PoolAmount zats={b?.transparent} />
                 </dd>
                 <dd className="pool-help">{t('home.transparentHelp')}</dd>
               </div>
@@ -147,43 +190,31 @@ export function Home({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
                     {t('home.pending')}
                   </dt>
                   <dd className="pool-amount">
-                    <span className="amt">
-                      <AmountParts zats={b.pending} />
-                    </span>{' '}
-                    <span className="unit">ZEC</span>
+                    <PoolAmount zats={b.pending} />
                   </dd>
                 </div>
               )}
             </dl>
           </div>
 
-          {transparentPrompt && (
-            <div className="hero-prompt">
-              <Notice tone="warn">
-                <strong>{t('home.shieldTitle')}</strong>
-                <p>{t('home.shieldText', { amount: balances.fmt(b.transparent) })}</p>
-                {spendingDisabled(network) ? (
-                  <p className="small">{disabledMessage(network, t('shield.disabledOutdated'), t)}</p>
-                ) : (
-                  !shieldable && (
-                    // A fixed network minimum, not one of the wallet's amounts.
-                    <p className="small">
-                      {t('home.shieldBelowThreshold', { amount: fmt(SHIELDING_THRESHOLD_ZATS + TYPICAL_FEE_ZATS) })}
-                    </p>
-                  )
-                )}
-              </Notice>
-            </div>
-          )}
-
           <div className="hero-actions">
             {!viewOnly && (
-              <button type="button" className="primary" disabled={spending} onClick={() => onNavigate('send')}>
+              <button
+                type="button"
+                className={sendLeads ? 'primary' : 'secondary'}
+                disabled={spending}
+                onClick={() => onNavigate('send')}
+              >
                 <Icon name="send" />
                 {t('nav.send')}
               </button>
             )}
-            <button type="button" className="secondary" disabled={spending} onClick={() => onNavigate('receive')}>
+            <button
+              type="button"
+              className={receiveLeads ? 'primary' : 'secondary'}
+              disabled={spending}
+              onClick={() => onNavigate('receive')}
+            >
               <Icon name="receive" />
               {t('nav.receive')}
             </button>
@@ -195,6 +226,26 @@ export function Home({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
             )}
           </div>
         </section>
+
+        {/* Its own row under the hero, so the hero keeps to the figure and the actions. */}
+        {transparentPrompt && (
+          <div className="dashboard-note shield-note">
+            <Notice tone="warn">
+              <strong>{t('home.shieldTitle')}</strong>
+              <p>{t('home.shieldText', { amount: balances.fmt(b.transparent) })}</p>
+              {spendingDisabled(network) ? (
+                <p className="small">{disabledMessage(network, t('shield.disabledOutdated'), t)}</p>
+              ) : (
+                !shieldable && (
+                  // A fixed network minimum, not one of the wallet's amounts.
+                  <p className="small">
+                    {t('home.shieldBelowThreshold', { amount: fmt(SHIELDING_THRESHOLD_ZATS + TYPICAL_FEE_ZATS) })}
+                  </p>
+                )
+              )}
+            </Notice>
+          </div>
+        )}
 
         {/*
           NU6.3 (Ironwood) lets nothing new into Orchard. An engine with Ironwood spends Orchard
