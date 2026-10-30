@@ -233,8 +233,8 @@ svg {
 }
 
 /* Mark and name in the logo files' proportions, from the mark's height. --brand-h
-   is the only size the lockup takes, set per placement; its drawing is fixed in
-   Brand.tsx, so tests/unit/brand.test.ts keeps every --brand-h in that drawing's range. */
+   is the only size the lockup takes, set per placement; its drawings are fixed in
+   Brand.tsx, so tests/unit/brand.test.ts keeps every --brand-h in their range. */
 .brand-lockup {
   --brand-h: 30px;
   display: inline-flex;
@@ -247,6 +247,22 @@ svg {
   flex: none;
   width: calc(var(--brand-h) * 0.8324);
   height: var(--brand-h);
+}
+
+/* One of the lockup's two drawings: on 1x screens the 'ui' mark, whose wider fold gaps
+   stay whole pixels; on 2x and up the full mark itself, as in the logo files. */
+.brand-lockup-mark-2x {
+  display: none;
+}
+
+@media (min-resolution: 2dppx), (-webkit-min-device-pixel-ratio: 2) {
+  .brand-lockup-mark-1x {
+    display: none;
+  }
+
+  .brand-lockup-mark-2x {
+    display: block;
+  }
 }
 
 /* Capitals 0.52 of the mark, centred on it; the top on a whole pixel keeps the baseline crisp. */
@@ -1484,9 +1500,10 @@ ul.plain li + li {
   }
 }
 
-/* On the narrowest phones the mark stands for the name, so the pill and Lock
-   keep their line; screen readers still get the name (the lockup's hidden text). */
-@media (max-width: 379px) {
+/* Under 375 px the mark stands for the name, so the pill and Lock keep their
+   line (from 375 every state's label fits whole beside the name, in both
+   languages); screen readers still get the name (the lockup's hidden text). */
+@media (max-width: 374px) {
   .topbar-brand .brand-lockup-name {
     display: none;
   }

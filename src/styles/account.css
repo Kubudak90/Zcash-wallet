@@ -101,8 +101,9 @@ button.chip.active {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  /* The top inset puts the brand's centre on the language switch's (.w-lang: 13 + 40 / 2). */
-  padding: max(16px, env(safe-area-inset-top)) max(20px, calc((100% - 680px) / 2)) 28px;
+  /* The top inset puts the brand's centre on the language switch's (.w-lang: 13 + 40 / 2),
+     also under a notch (the switch's top is the inset, so the brand's is the inset + 3). */
+  padding: max(16px, calc(env(safe-area-inset-top) + 3px)) max(20px, calc((100% - 680px) / 2)) 28px;
   border-bottom: 1px solid var(--border);
 }
 
