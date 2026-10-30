@@ -138,6 +138,12 @@ export function Main() {
             <span>Celari</span>
           </div>
           <SyncPill />
+          {/*
+            The engine is built for mainnet only, and a network check refuses a server on any other
+            chain (engine/lightd.ts), so a check that passed has confirmed it. Shown on the sidebar's
+            sync card only; before such a check, or after a failed one, nothing is claimed.
+          */}
+          {network.kind === 'supported' && <span className="side-net">{t('nav.network')}</span>}
           <button type="button" className="lock-button" disabled={spending} onClick={() => controller.lock()}>
             <Icon name="lock" />
             {t('nav.lock')}

@@ -108,6 +108,8 @@ export const en = {
   'nav.history': 'History',
   'nav.settings': 'Settings',
   'nav.lock': 'Lock',
+  // The chain the engine is built for, shown once a server check has confirmed it is on it.
+  'nav.network': 'Mainnet',
 
   'sync.starting': 'Connecting…',
   'sync.syncing': 'Syncing · {blocks} blocks left',
@@ -133,6 +135,7 @@ export const en = {
     'At block {height} the network switches to {upgrade}, which this version of Celari does not support. From then on, sending and shielding stop until Celari is updated.',
 
   'home.total': 'Total balance',
+  'home.balanceWaiting': 'Your balance appears as the sync goes on',
   'home.hideBalances': 'Hide balances',
   'home.shielded': 'Shielded',
   'home.shieldedHelp': 'Ironwood + Orchard + Sapling. Amounts and parties are hidden on chain.',

@@ -38,11 +38,13 @@
   --focus: #f4b728;
 
   /* Meaning. Shielded is sage, transparent copper, both always with words and
-     marks. --warn (amber) is for pending and warnings, never gold. */
+     marks. --warn is a desaturated sand, for pending and warnings: well away
+     from the gold (tests/unit/contrast.test.ts measures it), and a warning's
+     card keeps a neutral edge, so only its icon carries the tone. */
   --ok: #8fc3a1;
   --shielded: #8fc3a1;
   --transparent: #e59b6e;
-  --warn: #e2a65c;
+  --warn: #d2ac80;
   --error: #ee8576;
   --info: #a9b8c9;
 
@@ -61,6 +63,8 @@
 
   --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
   --sidebar-w: 248px;
+  /* The sidebar's side padding; the active item's marker sits in it, at the sidebar's edge. */
+  --side-pad: 16px;
   --content-max: 1120px;
 }
 
@@ -91,7 +95,7 @@
     --ok: #2a6e4c;
     --shielded: #2a6e4c;
     --transparent: #9c4d28;
-    --warn: #86560f;
+    --warn: #7a5a33;
     --error: #a83a2e;
     --info: #445466;
     --shadow-1: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 1px 2px rgba(60, 45, 20, 0.06);
@@ -163,8 +167,10 @@ a {
   text-underline-offset: 3px;
 }
 
+/* Gold is kept for the primary action, the nav marker, focus rings, the brand
+   mark and the hero's hairline: links firm up in their own colour. */
 a:hover {
-  text-decoration-color: var(--accent-fg);
+  text-decoration-color: currentColor;
 }
 
 code {
@@ -178,7 +184,7 @@ svg {
 }
 
 ::selection {
-  background: rgba(244, 183, 40, 0.3);
+  background: color-mix(in srgb, var(--text) 24%, transparent);
 }
 
 .muted {
@@ -389,7 +395,7 @@ button.link {
 
 button.link:hover {
   background: none;
-  text-decoration-color: var(--accent-fg);
+  text-decoration-color: currentColor;
 }
 
 /* Back: a quiet link with an arrow above the heading. */
@@ -504,7 +510,8 @@ input[type='checkbox'] {
   min-height: 0;
   margin: 0;
   padding: 0;
-  accent-color: var(--accent);
+  /* Ivory on dark, ink on light: a checked box is a state, not a call to action. */
+  accent-color: var(--text);
   cursor: pointer;
 }
 
@@ -553,14 +560,15 @@ input[type='checkbox'] {
 
 /* --- feedback ------------------------------------------------------------ */
 
-/* A calm card; the left edge and the icon carry the tone. */
+/* A calm card; the left edge and the icon carry the tone (a warning's edge
+   stays neutral, so nothing but the primary action reads as gold-ish). */
 .notice {
   display: flex;
   gap: 12px;
   align-items: flex-start;
   padding: 14px 16px;
   border: 1px solid var(--border-2);
-  border-left: 2px solid var(--tone, var(--info));
+  border-left: 2px solid var(--rail, var(--tone, var(--info)));
   border-radius: var(--r-md);
   background: var(--surface);
   color: var(--muted);
@@ -598,6 +606,7 @@ input[type='checkbox'] {
 
 .notice-warn {
   --tone: var(--warn);
+  --rail: var(--input-border);
 }
 
 .notice-error {
@@ -798,16 +807,20 @@ ul.plain li + li {
   font-size: 0.875rem;
 }
 
+/* The key gives way (it wraps between words); a short value ("On", "15 min",
+   "Açık") is never broken inside a word. */
 .kv dt {
+  flex: 1 1 auto;
+  min-width: 0;
   color: var(--muted);
 }
 
 .kv dd {
+  flex: none;
   margin: 0;
-  min-width: 0;
   color: var(--text);
   text-align: right;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
 }
 
 .kv > div.kv-stack {
@@ -816,8 +829,13 @@ ul.plain li + li {
   gap: 4px;
 }
 
-.kv > div.kv-stack dd {
+/* A stacked value (the server's host) has the row to itself and may break anywhere. */
+.kv > div.kv-stack dd,
+.kv dd.mono {
+  min-width: 0;
   text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .kv dd.mono {
@@ -1354,6 +1372,11 @@ ul.plain li + li {
   background: var(--raised);
 }
 
+/* The network's name belongs to the sidebar's sync card; the phone's bar has no room for it. */
+.side-net {
+  display: none;
+}
+
 .tabbar {
   position: fixed;
   left: 0;
@@ -1435,11 +1458,17 @@ ul.plain li + li {
     max(16px, env(safe-area-inset-left));
 }
 
-/* Phones: "Up to date" says it; the block height stays in the text and the
-   tooltip. Other states keep their whole line (cut short if it must be). */
+/* Phones: the pill names the state ("Up to date", "Syncing", "Stopped"); the
+   rest stays in its text and tooltip, the blocks left show under Balance's
+   progress bar and a stopped engine's notice is on every screen. "Behind the
+   network" keeps its whole line (cut short if it must be). */
 @media (max-width: 479px) {
   .pill-ok .pill-sep,
-  .pill-ok .pill-sub {
+  .pill-ok .pill-sub,
+  .pill-busy .pill-sep,
+  .pill-busy .pill-sub,
+  .pill-error .pill-sep,
+  .pill-error .pill-sub {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -1521,7 +1550,7 @@ ul.plain li + li {
     height: 100vh;
     height: 100dvh;
     overflow-y: auto;
-    padding: 22px 16px 16px;
+    padding: 22px var(--side-pad) var(--side-pad);
     background: var(--side);
     border-right: 1px solid var(--border);
   }
@@ -1622,7 +1651,8 @@ ul.plain li + li {
   .tabbar button.active::before {
     top: 10px;
     bottom: 10px;
-    left: -16px;
+    /* At the sidebar's edge, through its padding. */
+    left: calc(-1 * var(--side-pad));
     width: 3px;
     height: auto;
     margin: 0;
@@ -1673,6 +1703,28 @@ ul.plain li + li {
     font-size: 0.8125rem;
     font-weight: 450;
     font-variant-numeric: tabular-nums;
+  }
+
+  /* The network's name in the card's top corner, on the status's first line
+     (the card's margin plus its padding); the status keeps clear of it. */
+  .side-net {
+    display: block;
+    grid-area: sync;
+    align-self: start;
+    justify-self: end;
+    z-index: 1;
+    margin: 31px 13px 0 0;
+    color: var(--subtle);
+    font-size: 0.75rem;
+    font-weight: 520;
+    letter-spacing: 0.02em;
+    line-height: 1.4;
+    pointer-events: none;
+  }
+
+  .topbar:has(.side-net) .pill-head {
+    display: inline-block;
+    padding-right: 64px;
   }
 
   .content {
@@ -1784,8 +1836,10 @@ button.eye-toggle[aria-pressed='true'] {
   white-space: nowrap;
 }
 
-/* The figure: Fraunces, light at display sizes and heavier as it shrinks,
-   lining tabular figures; the fraction dimmed but well above 3:1. */
+/* The figure: Fraunces at its optical size, a book weight rather than a
+   hairline one so it reads at a glance, the fraction dimmed but well above
+   3:1. Lining figures; proportional ones, since Fraunces has no tabular set
+   and one figure lines up with nothing. */
 .balance-total {
   display: flex;
   align-items: baseline;
@@ -1795,12 +1849,16 @@ button.eye-toggle[aria-pressed='true'] {
   font-family: var(--font-display);
   font-optical-sizing: auto;
   font-size: clamp(2.75rem, 9vw + 0.5rem, 3.5rem);
-  font-weight: 370;
-  font-feature-settings: 'lnum' 1, 'tnum' 1;
-  letter-spacing: -0.025em;
+  font-weight: 420;
+  font-variant-numeric: lining-nums;
+  letter-spacing: -0.02em;
   line-height: 1;
   color: var(--text);
   overflow-wrap: anywhere;
+}
+
+.balance-total .amt {
+  font-variant-numeric: lining-nums;
 }
 
 .balance-total .amt-frac {
@@ -1815,6 +1873,36 @@ button.eye-toggle[aria-pressed='true'] {
   color: var(--subtle);
 }
 
+/* Masked: Fraunces' bullets sit small on the baseline, so the four are set
+   in Geist, larger and spaced, about as wide as a figure and as tall as its
+   digits. */
+.balance-total .amt > [aria-hidden='true'] {
+  display: inline-block;
+  margin-right: -0.06em;
+  font-family: var(--font-ui);
+  font-size: 0.78em;
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  line-height: 1;
+  color: var(--muted);
+  transform: translateY(-0.1em);
+}
+
+/* No figure before the wallet's first summary: a sentence in the interface face. */
+.balance-total.balance-waiting {
+  margin-top: 18px;
+}
+
+.balance-wait {
+  font-family: var(--font-ui);
+  font-size: 1.125rem;
+  font-weight: 480;
+  letter-spacing: -0.01em;
+  line-height: 1.4;
+  color: var(--muted);
+  text-wrap: balance;
+}
+
 .hero > [data-testid='balance-outdated'] {
   margin-top: 12px;
 }
@@ -1826,8 +1914,39 @@ button.eye-toggle[aria-pressed='true'] {
   margin-top: 20px;
 }
 
+.hero-sync-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* The blocks left, for phones, whose pill shows only the state (see the shell). */
+.hero-sync-left {
+  display: none;
+  color: var(--text);
+  font-size: 0.875rem;
+  font-weight: 560;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 479px) {
+  .hero-sync-left {
+    display: block;
+  }
+}
+
 .composition {
   margin-top: 24px;
+}
+
+/* No split to draw (before the first summary, or an empty wallet shown): a
+   hairline parts the pools from the figure instead. */
+.composition-plain {
+  border-top: 1px solid var(--border);
+}
+
+.amt-none {
+  color: var(--subtle);
 }
 
 /* The shares as one rule; plain when hidden or empty. */
@@ -1934,28 +2053,11 @@ button.eye-toggle[aria-pressed='true'] {
   line-height: 1.5;
 }
 
-.hero-prompt {
-  margin-top: 16px;
-}
-
-.hero-prompt .notice {
-  padding: 12px 14px;
-  background: var(--surface-2);
-  font-size: 0.8125rem;
-}
-
-.hero-prompt .notice-icon {
-  width: 16px;
-  height: 16px;
-}
-
-.hero-prompt .notice-body {
-  gap: 4px;
-}
-
+/* Phones: one row of equal tiles, however many actions there are (two or three). */
 .hero-actions {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
   gap: 8px;
   margin-top: 20px;
 }
@@ -1966,11 +2068,19 @@ button.eye-toggle[aria-pressed='true'] {
   min-height: 72px;
   padding: 8px 6px;
   font-size: 0.875rem;
+  text-align: center;
 }
 
 .hero-actions button .icon {
   width: 20px;
   height: 20px;
+}
+
+/* One action alone (a view-only wallet's Receive) is a button, not a tile across the card. */
+.hero-actions button:only-child {
+  flex-direction: row;
+  gap: 9px;
+  min-height: 52px;
 }
 
 .hero-actions button.secondary .icon {
@@ -1982,9 +2092,14 @@ button.eye-toggle[aria-pressed='true'] {
   order: 1;
 }
 
-.hero > .composition,
-.hero > .hero-prompt {
+.hero > .composition {
   order: 2;
+}
+
+/* A notice in its own dashboard row (the transparent balance, Orchard funds). */
+.dashboard-note .notice {
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
 }
 
 .activity .card-head h2 {
@@ -2029,6 +2144,53 @@ button.privacy-more {
   }
 }
 
+/* Tablets: the phone's order in a roomier card; the actions are buttons, not tiles. */
+@media (min-width: 600px) and (max-width: 1023px) {
+  .hero {
+    padding: 28px 32px 32px;
+  }
+
+  .balance-total {
+    margin-top: 18px;
+    font-size: 4rem;
+    font-weight: 380;
+  }
+
+  .hero-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 24px;
+  }
+
+  .hero-actions button {
+    flex: 1 1 0;
+    flex-direction: row;
+    gap: 9px;
+    min-height: 52px;
+    font-size: 0.9375rem;
+  }
+
+  /* Alone, it keeps a button's width. */
+  .hero-actions button:only-child {
+    flex: 0 0 auto;
+    min-width: 200px;
+    padding: 0 28px;
+  }
+
+  .hero-actions button .icon {
+    width: 18px;
+    height: 18px;
+  }
+
+  .composition {
+    margin-top: 28px;
+  }
+
+  .privacy-card {
+    padding: 24px 32px;
+  }
+}
+
 @media (min-width: 1024px) {
   .dashboard {
     display: grid;
@@ -2063,6 +2225,11 @@ button.privacy-more {
     grid-column: 1 / -1;
   }
 
+  /* Notes one after another read as one group. */
+  .dashboard > .dashboard-note + .dashboard-note {
+    margin-top: -12px;
+  }
+
   .hero-top {
     margin: -6px -10px 0 0;
   }
@@ -2078,14 +2245,21 @@ button.privacy-more {
   .balance-total {
     margin-top: 22px;
     font-size: clamp(4rem, 2rem + 3.2vw, 5.5rem);
-    font-weight: 310;
-    font-variation-settings: 'opsz' 144;
-    letter-spacing: -0.035em;
+    font-weight: 360;
+    letter-spacing: -0.03em;
     line-height: 0.95;
   }
 
   .balance-total .unit {
     font-size: 0.9375rem;
+  }
+
+  .balance-total.balance-waiting {
+    margin-top: 26px;
+  }
+
+  .balance-wait {
+    font-size: 1.375rem;
   }
 
   .composition {
@@ -2152,12 +2326,11 @@ button.privacy-more {
   }
 
   .hero > .hero-actions,
-  .hero > .composition,
-  .hero > .hero-prompt {
+  .hero > .composition {
     order: 0;
   }
 
-  .hero-prompt {
+  .composition-plain .balance-rows {
     margin-top: 24px;
   }
 
@@ -2182,6 +2355,7 @@ button.privacy-more {
     min-height: 52px;
     padding: 0 22px;
     font-size: 0.9375rem;
+    white-space: nowrap;
   }
 
   .hero-actions button .icon {
@@ -2228,15 +2402,75 @@ button.privacy-more {
     padding: 20px;
   }
 
+  /* Words on one line, a little tighter; a button with no room left takes a row of its own. */
   .hero-actions button {
-    flex: 1;
-    min-width: 0;
-    padding: 0 14px;
+    min-width: 120px;
+    padding: 0 18px;
   }
 
   .tx {
     grid-template-columns: 36px minmax(0, 1fr) 136px 176px 120px;
     column-gap: 16px;
+  }
+}
+
+/* A narrow hero (a 1024px laptop): the words alone, so three buttons fit one row. */
+@media (min-width: 1024px) {
+  .hero {
+    container: hero / inline-size;
+  }
+
+  @container hero (max-width: 440px) {
+    /* The pools one under the other, amount beside the name, as on a phone. */
+    .balance-rows {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .pool {
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: baseline;
+      padding: 14px 0;
+      border-top: 1px solid var(--border);
+    }
+
+    .pool:first-child {
+      padding-top: 4px;
+      border-top: 0;
+    }
+
+    .pool-transparent {
+      text-align: left;
+    }
+
+    .pool-transparent dt {
+      justify-content: flex-start;
+    }
+
+    .pool > .pool-amount {
+      margin-top: 0;
+      font-size: 1.25rem;
+      text-align: right;
+    }
+
+    .pool > .pool-help {
+      max-width: none;
+      margin: 6px 0 0;
+    }
+
+    .hero-actions {
+      gap: 10px;
+    }
+
+    /* Sharing the row out evenly between them. */
+    .hero-actions button {
+      flex: 1 1 0;
+      min-width: max-content;
+      padding: 0 12px;
+    }
+
+    .hero-actions button .icon {
+      display: none;
+    }
   }
 }
 
