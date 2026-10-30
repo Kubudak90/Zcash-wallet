@@ -12,41 +12,21 @@
 
 /* --- shared pieces ------------------------------------------------------- */
 
-.brand-mark {
-  display: inline-flex;
-  align-items: center;
-  gap: 11px;
-  min-width: 0;
-}
-
-.brand-mark img {
-  flex: none;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-}
-
-.brand-mark span {
-  font-family: var(--font-display);
-  font-optical-sizing: auto;
-  font-size: 1.5rem;
-  font-weight: 420;
-  letter-spacing: -0.01em;
-  line-height: 1;
-  color: var(--text);
-}
-
-/* The engraved C: decoration behind the content, in the brand's gold. */
+/* The engraved mark: decoration behind the content, lines in the text colour
+   held far below it, the facet in the brand's gold, inlaid: a faint fill in a
+   fine line. */
 .engraved-c {
   position: absolute;
   z-index: 0;
   pointer-events: none;
-  color: var(--accent-mark);
+  color: var(--text);
 }
 
-.engraved-dot {
+.engraved-facet {
   fill: var(--accent-mark);
-  fill-opacity: 0.75;
+  fill-opacity: 0.26;
+  stroke: var(--accent-mark);
+  stroke-opacity: 0.7;
 }
 
 /* The card's gold hairline (the one ornament of these screens). */
@@ -468,13 +448,11 @@ button.option-button::after {
     border-bottom: 0;
   }
 
-  .w-brand .brand-mark img {
-    width: 34px;
-    height: 34px;
-    border-radius: 9px;
+  .w-brand .brand-lockup {
+    --brand-h: 32px;
   }
 
-  /* Beside the statement, the letter's mouth and dot well inside the panel at every width. */
+  /* Beside the statement, the letter's mouth and facet well inside the panel at every width. */
   .w-brand {
     --m: clamp(880px, 83.4vw, 1200px);
   }
@@ -593,13 +571,8 @@ button.option-button::after {
   padding: max(16px, env(safe-area-inset-top)) 6px 16px;
 }
 
-.flow-top .brand-mark img {
-  width: 30px;
-  height: 30px;
-}
-
-.flow-top .brand-mark span {
-  font-size: 1.375rem;
+.flow-top .brand-lockup {
+  --brand-h: 26px;
 }
 
 .flow-step {
@@ -703,6 +676,10 @@ button.option-button::after {
 @media (min-width: 1024px) {
   .flow-top {
     padding: 32px 24px 20px;
+  }
+
+  .flow-top .brand-lockup {
+    --brand-h: 28px;
   }
 
   /* The letter to the left of the card, its mouth towards it. */
@@ -924,13 +901,8 @@ button.option-button::after {
     max(18px, env(safe-area-inset-left));
 }
 
-.lock-top .brand-mark img {
-  width: 30px;
-  height: 30px;
-}
-
-.lock-top .brand-mark span {
-  font-size: 1.375rem;
+.lock-top .brand-lockup {
+  --brand-h: 26px;
 }
 
 .lock-center {
@@ -1111,6 +1083,10 @@ button.lock-forgot:hover {
     padding: 32px 48px;
   }
 
+  .lock-top .brand-lockup {
+    --brand-h: 28px;
+  }
+
   .lock-motif,
   .boot-motif {
     width: 1500px;
@@ -1151,8 +1127,10 @@ button.lock-forgot:hover {
   padding-top: 52px;
 }
 
-.boot-body .logo {
-  border-radius: 14px;
+.boot-mark {
+  width: 72px;
+  height: 72px;
+  color: var(--text);
 }
 
 .boot-status {
@@ -1177,17 +1155,9 @@ button.lock-forgot:hover {
   box-shadow: var(--shadow-2);
 }
 
-.boot-card .brand-mark {
+.boot-card .brand-lockup {
+  align-self: flex-start;
   margin-bottom: 10px;
-}
-
-.boot-card .brand-mark img {
-  width: 30px;
-  height: 30px;
-}
-
-.boot-card .brand-mark span {
-  font-size: 1.375rem;
 }
 
 .boot-card .error-code {

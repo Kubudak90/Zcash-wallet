@@ -1,10 +1,12 @@
 Font licences for the Celari web app
 =====================================
 
-Celari serves these typefaces itself, from its own origin (no font CDN).
-They come from the Fontsource packages listed below; only their Latin and
-Latin Extended subsets are shipped. Each is licensed under the SIL Open
-Font License, Version 1.1, whose full text follows the copyright notices.
+Celari serves the first three typefaces below itself, from its own origin
+(no font CDN). They come from the Fontsource packages listed; only their
+Latin and Latin Extended subsets are shipped. The fourth, Outfit, is not
+served: the name in the Celari logo is drawn from it. Each is licensed under
+the SIL Open Font License, Version 1.1, whose full text follows the
+copyright notices.
 
 Geist (UI text)
   npm package: @fontsource-variable/geist 5.3.0
@@ -17,6 +19,14 @@ Geist Mono (addresses, keys and recovery words)
 Fraunces (headings and the balance figure)
   npm package: @fontsource-variable/fraunces 5.3.0
   Copyright 2020 The Fraunces Project Authors (github.com/undercasetype/Fraunces) Fraunces-Italic[SOFT,WONK,opsz,wght].ttf: Copyright 2020 The Fraunces Project Authors (github.com/undercasetype/Fraunces)
+
+Outfit (the Celari wordmark)
+  npm package: @fontsource/outfit 5.2.5 (Outfit 500, font version 1.100)
+  Copyright 2021 The Outfit Project Authors (https://github.com/Outfitio/Outfit-Fonts)
+  Fontsource credits it to: Google Inc.
+  The Celari wordmark, the name in the logo, is drawn from Outfit: its
+  letters were converted to vector outlines and adjusted (spacing, the dot of
+  the i). No Outfit font file is served; the wordmark ships as SVG paths.
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:

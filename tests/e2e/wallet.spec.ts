@@ -167,6 +167,8 @@ test('Settings links the licence notices of the engine, and the app serves them'
     'Copyright 2024 The Geist Project Authors',
     'Copyright 2020 The Fraunces Project Authors',
     '@fontsource-variable/geist-mono 5.3.0',
+    // The wordmark is drawn from Outfit, credited with the fonts.
+    'Copyright 2021 The Outfit Project Authors',
   ]) {
     expect(fontText).toContain(s);
   }
