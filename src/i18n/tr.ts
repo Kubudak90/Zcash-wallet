@@ -154,7 +154,8 @@ export const tr: Record<MessageKey, string> = {
   'home.balanceStopped': 'Bakiyen Celari yeniden yüklenince görünür',
   'home.hideBalances': 'Bakiyeleri gizle',
   'home.shielded': 'Gizli',
-  'home.shieldedHelp': 'Ironwood + Orchard + Sapling. Tutar ve taraflar zincirde görünmez.',
+  'home.shieldedHelp':
+    'Ironwood + Orchard + Sapling. Bir havuzdan diğerine geçen değer dışında tutar ve taraflar zincirde görünmez.',
   'home.transparent': 'Şeffaf',
   'home.transparentHelp': 'Zincirde herkese açık. Gizliye aktarman önerilir.',
   'home.pending': 'Onay bekleyen',
@@ -167,6 +168,10 @@ export const tr: Record<MessageKey, string> = {
   'home.outdatedBalance': 'Yeni Ironwood havuzu üzerinden sana gönderilen ödemeler henüz bu bakiyede yok.',
   'home.orchardNote':
     'Gizli bakiyenin {amount} ZEC’lik kısmı Orchard havuzunda ve her zamanki gibi harcanabilir. Ondan harcadığında para üstü yeni gizli havuz Ironwood’a geçer; Orchard’dan Ironwood’a geçen tutar zincirde görünür (ZIP 318 turnike kuralı). Celari henüz Ironwood’a gizli ve kademeli bir taşıma sunmuyor.',
+  'home.saplingNote':
+    'Gizli bakiyenin {amount} ZEC’lik kısmı eski Sapling havuzunda. Celari ondan bir ödeme yaptığında harcadığı her Sapling notunun değerinin tamamı Ironwood’a geçer ve zincirde görünür. Ironwood’un tek başına karşıladığı ödemeler ona dokunmaz.',
+  'home.saplingNoteViewOnly':
+    'Bu bakiyenin {amount} ZEC’lik kısmı eski Sapling havuzunda. Ironwood’a geçtiğinde değeri zincirde görünür.',
   'home.orchardNoteViewOnly':
     'Bu bakiyenin {amount} ZEC’lik kısmı Orchard havuzunda. Yeni gizli para artık Ironwood havuzuna gidiyor; Orchard’daki para Ironwood’a geçtiğinde geçen tutar zincirde görünür (ZIP 318 turnike kuralı).',
   'home.orchardMigrateNoticeViewOnly':
@@ -300,6 +305,10 @@ export const tr: Record<MessageKey, string> = {
   'send.outcome.shielded': 'Gizli ödeme: alıcı ve not zincirde gizli kalır.',
   'send.outcome.partial':
     'Kısmen gizli ödeme: alıcı ve not gizli kalır, ama eski Sapling havuzuna geçen tutar zincirde görülebilir.',
+  'send.outcome.fromOrchard':
+    'Kısmen gizli ödeme: alıcı ve not gizli kalır, ama ödeme Orchard’daki paranla yapılır ve Orchard’dan Ironwood’a geçen tutar zincirde görünür (ZIP 318 turnike kuralı).',
+  'send.outcome.fromSapling':
+    'Kısmen gizli ödeme: alıcı ve not gizli kalır, ama ödeme eski Sapling havuzundaki notları harcar ve yalnızca bu tutar değil, o notların Ironwood’a geçen değerinin tamamı zincirde görünür.',
   'send.outcome.public': 'Herkese açık ödeme: tutar ve alıcı zincirde görünecek.',
   'send.outcome.none': 'Alıcı adresi okunabildiğinde ödemenin ne kadar gizli olacağı burada görünür.',
   'send.outcome.unknown': 'Celari bu adresten ödemenin ne kadar gizli olacağını anlayamıyor.',
