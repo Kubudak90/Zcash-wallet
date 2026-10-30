@@ -135,7 +135,7 @@ export function Main() {
       <div className="side">
         <header className="topbar" ref={topbar}>
           <div className="topbar-brand">
-            <BrandLockup size={28} />
+            <BrandLockup />
           </div>
           <SyncPill />
           {/*

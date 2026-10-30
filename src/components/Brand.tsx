@@ -118,27 +118,32 @@ export function Wordmark({ height = 15, className }: { height?: number; classNam
   );
 }
 
+/** The lockup's height before the stylesheet sizes it (the default --brand-h). */
+const LOCKUP_FALLBACK_H = 28;
+
 /**
  * Mark and name side by side, in the proportions of the logo files: the name's
  * capitals 0.52 of the mark's height and centred on it, 0.31 of that height
- * between them (styles.css, .brand-lockup, from --brand-h). `size` is the
- * mark's height in px where it is shown and picks its drawing; CSS may set it
- * otherwise per layout. The name is drawn, so its text is there for screen
- * readers (and for anything that reads the brand's text) in a hidden span.
+ * between them. How tall it is shown is set in one place, the stylesheet's
+ * --brand-h per placement (styles.css, .brand-lockup). The drawing is chosen
+ * here, not from that size: the one-fold mark of lockup-horizontal-ui.svg, for
+ * UI sizes (masterFor's 'small' range), unless a placement passes `master`
+ * ('full' is the large lockup's). tests/unit/brand.test.ts keeps every
+ * --brand-h in the default drawing's range. The name is drawn, so its text is
+ * there for screen readers (and for anything that reads the brand's text) in a
+ * hidden span.
  */
-export function BrandLockup({ size = 28, className }: { size?: number; className?: string }) {
-  // The cropped drawing fills `size`; in its 64 box it would be shown 64/56 larger.
-  const master = masterFor(Math.round((size * 64) / 56));
+export function BrandLockup({ master = 'small', className }: { master?: MarkMaster; className?: string }) {
   return (
     <span className={className ? `brand-lockup ${className}` : 'brand-lockup'}>
       <MarkSvg
         master={master}
         cropped
-        width={+(size * 0.8324).toFixed(2)}
-        height={size}
+        width={+(LOCKUP_FALLBACK_H * 0.8324).toFixed(2)}
+        height={LOCKUP_FALLBACK_H}
         className="brand-lockup-mark"
       />
-      <Wordmark height={+(size * 0.5423).toFixed(2)} className="brand-lockup-name" />
+      <Wordmark height={+(LOCKUP_FALLBACK_H * 0.5423).toFixed(2)} className="brand-lockup-name" />
       <span className="visually-hidden">Celari</span>
     </span>
   );
