@@ -1,8 +1,12 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 import { isShieldedOnlyUnified } from '../../src/lib/address';
 
 const PASSWORD = 'Gizli-Parola-2026';
+
+/** A tab of the sidebar (Balance has quick actions named like some tabs). */
+const nav = (page: Page, name: string) =>
+  page.getByRole('navigation', { name: 'Celari' }).getByRole('button', { name, exact: true }).click();
 
 test('real engine: create a wallet, sync from the tip, lock and unlock', async ({ page }) => {
   // A wasm panic can leave a call hanging instead of rejecting, so the UI
@@ -70,7 +74,7 @@ test('real engine: create a wallet, sync from the tip, lock and unlock', async (
     await expect(page.getByTestId('network-banner')).toContainText('Celari is behind the Zcash network');
     await expect(status).toHaveText(/^Scanned to block [\d,]+ · behind the network$/);
     await expect(page.getByTestId('balance-outdated')).toBeVisible();
-    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await nav(page, 'Send');
     await expect(page.getByTestId('spend-disabled')).toHaveText(
       'Sending is disabled until Celari is updated for the current Zcash network.',
     );
@@ -81,8 +85,8 @@ test('real engine: create a wallet, sync from the tip, lock and unlock', async (
   // (get_next_shielded_address); the transparent address stays the same.
   const shown = page.getByTestId('receive-address');
   async function receive(): Promise<{ shielded: string; transparent: string }> {
-    await page.getByRole('button', { name: 'Balance', exact: true }).click();
-    await page.getByRole('button', { name: 'Receive' }).click();
+    await nav(page, 'Balance');
+    await nav(page, 'Receive');
     await expect(shown).toHaveText(/^u1[0-9a-z]{100,}$/, { timeout: 60_000 });
     const shielded = (await shown.textContent())!;
     await page.getByRole('button', { name: 'Show transparent address' }).click();
@@ -97,7 +101,7 @@ test('real engine: create a wallet, sync from the tip, lock and unlock', async (
   expect(second.shielded).not.toBe(first.shielded);
   expect(second.transparent).toBe(first.transparent);
 
-  await page.getByRole('button', { name: 'Settings' }).click();
+  await nav(page, 'Settings');
   await page.getByRole('button', { name: 'Show viewing key' }).click();
   await page.getByLabel('Password').fill(PASSWORD);
   await page.getByRole('button', { name: 'Reveal' }).click();

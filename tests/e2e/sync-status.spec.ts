@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 import type { FakeKnobs } from '../../src/engine/fake';
-import { PASSWORD, TIP, UA, createWallet, en, fakeEngine, restoreFromThisMonth, setKnobs } from './helpers';
+import { PASSWORD, TIP, UA, createWallet, en, fakeEngine, nav, restoreFromThisMonth, setKnobs } from './helpers';
 
 test('a restore shows how many blocks are left, then up to date', async ({ page }) => {
   const birthday = await restoreFromThisMonth(page);
@@ -272,7 +272,7 @@ test('blocks mined during a long pass are caught up at once, and spends wait for
   await createWallet(page);
   const status = page.getByTestId('sync-status');
   await expect(status).toHaveAttribute('data-sync', 'idle');
-  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await nav(page, 'Send');
   await page.getByLabel('Recipient address').fill(UA);
   await page.getByLabel('Amount (ZEC)').fill('0.1');
   await page.getByRole('button', { name: 'Review' }).click();

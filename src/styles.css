@@ -1,106 +1,184 @@
 :root {
-  --bg: #0b1016;
-  --surface: #121a23;
-  --surface-2: #19232f;
-  --border: #253240;
-  /* Field outlines need 3:1 against the page and card; --border stays for cards and dividers. */
-  --input-border: #617385;
-  --text: #e8edf2;
-  --muted: #8d9bab;
-  /* --accent is the button fill; --accent-fg is accent-coloured text, focus rings and markers. */
-  --accent: #f4b728;
-  --accent-fg: #f4b728;
-  --accent-text: #1a1406;
-  --ok: #3ccf8e;
-  --warn: #f4b728;
-  --error: #ff6b6b;
-  --shielded: #3ccf8e;
-  --transparent: #f08c4a;
-  /* The page around the framed app on wide screens; nothing is written on it. */
-  --page: #05080c;
-  --frame-shadow: 0 16px 48px rgb(0 0 0 / 55%);
-  --radius: 14px;
-  --font: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  /* Obsidian & Gold. Warm graphite surfaces, ivory type, gold used like
+     jewellery: the one primary action of a screen, the active nav marker,
+     focus rings, the brand mark and the hero card's hairline. Everything
+     else is neutral. Colours that text sits on, and that text is set in,
+     are 6-digit hex values here: tests/unit/contrast.test.ts reads this
+     block and the light one below and checks every pair. */
   color-scheme: dark;
+
+  /* Backgrounds that carry text (all in the contrast test). */
+  --bg: #0d0c0a;
+  --side: #11100e;
+  --surface: #161512;
+  --surface-2: #1c1a17;
+  --raised: #24221d;
+  --inset: #100f0d;
+  --scrim: rgba(13, 12, 10, 0.88);
+
+  /* Lines. Hairlines are decoration; --input-border outlines fields at 3:1. */
+  --border: #26241f;
+  --border-2: #33302a;
+  --input-border: #7a7264;
+
+  /* Text, at least 4.5:1 on every background above. */
+  --text: #eee8dc;
+  --muted: #b8af9f;
+  --subtle: #a0978a;
+
+  /* Gold: --accent fills the primary action, --accent-text is the type on it,
+     --accent-fg is gold text and marks, --accent-mark the active nav marker. */
+  --accent: #f4b728;
+  --accent-hover: #f7c54d;
+  --accent-press: #e3a615;
+  --accent-text: #1a1407;
+  --accent-fg: #f0be4e;
+  --accent-mark: #f4b728;
+  --accent-line: rgba(244, 183, 40, 0.36);
+  --focus: #f4b728;
+
+  /* Meaning. Shielded is sage, transparent copper, both always with words and
+     marks. --warn (amber) is for pending and warnings, never gold. */
+  --ok: #8fc3a1;
+  --shielded: #8fc3a1;
+  --transparent: #e59b6e;
+  --warn: #e2a65c;
+  --error: #ee8576;
+  --info: #a9b8c9;
+
+  --shadow-1: inset 0 1px 0 rgba(255, 244, 222, 0.035), 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-2: inset 0 1px 0 rgba(255, 244, 222, 0.04), 0 1px 2px rgba(0, 0, 0, 0.4), 0 18px 44px -26px rgba(0, 0, 0, 0.75);
+  --shadow-gold: inset 0 1px 0 rgba(255, 255, 255, 0.28), inset 0 -1px 0 rgba(120, 80, 0, 0.25), 0 1px 2px rgba(0, 0, 0, 0.45);
+
+  --font-ui: 'Geist Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Fraunces Variable', ui-serif, Georgia, 'Times New Roman', serif;
+  --font-mono: 'Geist Mono Variable', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  --r-sm: 8px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-pill: 999px;
+
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --sidebar-w: 248px;
+  --content-max: 1120px;
 }
 
 @media (prefers-color-scheme: light) {
   :root {
-    --bg: #f5f6f8;
-    --surface: #ffffff;
-    --surface-2: #eef1f4;
-    --border: #d8dee5;
-    --input-border: #7d8995;
-    --text: #121820;
-    --muted: #5b6876;
-    --accent: #e0a100;
-    /* The fill yellow is about 2:1 on white; text and focus need at least 4.5:1 and 3:1. */
-    --accent-fg: #8a5d00;
-    --accent-text: #1a1406;
-    --ok: #0f7a4c;
-    --warn: #946000;
-    --error: #c62828;
-    --shielded: #0f7a4c;
-    --transparent: #c4621d;
-    --page: #dde2e8;
-    --frame-shadow: 0 16px 48px rgb(18 24 32 / 14%);
     color-scheme: light;
+    --bg: #f4f1ea;
+    --side: #eeeae1;
+    --surface: #fffdf9;
+    --surface-2: #f7f4ee;
+    --raised: #efebe2;
+    --inset: #ffffff;
+    --scrim: rgba(244, 241, 234, 0.9);
+    --border: #e4ded2;
+    --border-2: #d6cfc1;
+    --input-border: #857d6e;
+    --text: #1a1712;
+    --muted: #514a40;
+    --subtle: #625b4e;
+    --accent: #f4b728;
+    --accent-hover: #f6c142;
+    --accent-press: #e3a515;
+    --accent-text: #1a1407;
+    --accent-fg: #7f5c0c;
+    --accent-mark: #a87b0d;
+    --accent-line: rgba(168, 123, 13, 0.42);
+    --focus: #94690a;
+    --ok: #2a6e4c;
+    --shielded: #2a6e4c;
+    --transparent: #9c4d28;
+    --warn: #86560f;
+    --error: #a83a2e;
+    --info: #445466;
+    --shadow-1: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 1px 2px rgba(60, 45, 20, 0.06);
+    --shadow-2: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 1px 2px rgba(60, 45, 20, 0.06), 0 14px 34px -22px rgba(60, 45, 20, 0.22);
+    --shadow-gold: inset 0 1px 0 rgba(255, 255, 255, 0.45), inset 0 -1px 0 rgba(140, 95, 0, 0.22), 0 1px 2px rgba(80, 55, 0, 0.18);
   }
 }
 
-* {
+/* --- base ---------------------------------------------------------------- */
+
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
-html,
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--font);
-  font-size: 16px;
-  line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
-}
-
 html {
+  background: var(--bg);
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
   /* Keeps a newly focused control clear of the sticky top bar and the fixed
-     tab bar. Main measures both, since the top bar wraps on narrow screens. */
+     tab bar on a phone. Main measures both, since the top bar can grow. */
   scroll-padding-top: calc(var(--topbar-h, 0px) + 12px);
   scroll-padding-bottom: calc(var(--tabbar-h, 0px) + 12px);
 }
 
-#root,
-.app {
-  min-height: 100vh;
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-.app {
-  max-width: 480px;
-  margin: 0 auto;
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-weight: 560;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
 }
 
 h1 {
-  font-size: 1.5rem;
-  margin: 0 0 12px;
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-size: 1.75rem;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  line-height: 1.12;
 }
 
 h2 {
-  font-size: 1rem;
-  margin: 0 0 8px;
+  font-size: 1.0625rem;
 }
 
 p {
-  margin: 0 0 12px;
+  margin: 0;
 }
 
 a {
-  color: var(--accent-fg);
+  color: var(--text);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--text) 35%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+a:hover {
+  text-decoration-color: var(--accent-fg);
 }
 
 code {
-  font-family: var(--mono);
+  font-family: var(--font-mono);
+  font-variant-ligatures: none;
+}
+
+img,
+svg {
+  display: block;
+}
+
+::selection {
+  background: rgba(244, 183, 40, 0.3);
 }
 
 .muted {
@@ -108,7 +186,34 @@ code {
 }
 
 .small {
-  font-size: 0.85rem;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-variant-ligatures: none;
+}
+
+.eyebrow {
+  font-size: 0.75rem;
+  font-weight: 560;
+  letter-spacing: 0.085em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  color: var(--subtle);
+}
+
+.icon {
+  flex: none;
+  width: 20px;
+  height: 20px;
+}
+
+/* Focus is an outline in the focus colour everywhere (a11y.spec reads it on fields). */
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
 }
 
 /* Headings and lists that receive focus from code, not from Tab. */
@@ -129,30 +234,31 @@ code {
   border: 0;
 }
 
-/* --- layout ------------------------------------------------------------- */
+/* --- layout primitives --------------------------------------------------- */
+
+#root,
+.app {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
 
 .screen {
-  padding: 24px 16px 32px;
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
-.screen.center {
-  min-height: 100vh;
-  justify-content: center;
-  align-items: center;
-  text-align: center;
-}
-
 .screen-head {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 8px;
 }
 
-.screen-head h1 {
-  margin: 0;
+.screen-sub {
+  color: var(--muted);
+  max-width: 62ch;
 }
 
 .stack {
@@ -163,7 +269,7 @@ code {
 
 .row {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
@@ -174,12 +280,36 @@ code {
 /* --- controls ------------------------------------------------------------ */
 
 button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  color: var(--text);
   font: inherit;
+  font-size: 0.9375rem;
+  font-weight: 560;
+  line-height: 1.2;
+  letter-spacing: -0.005em;
   cursor: pointer;
-  border-radius: 12px;
-  padding: 12px 16px;
-  border: 1px solid transparent;
-  transition: filter 0.15s, opacity 0.15s;
+  transition:
+    background-color 0.12s var(--ease),
+    border-color 0.12s var(--ease),
+    color 0.12s var(--ease);
+}
+
+button .icon {
+  width: 18px;
+  height: 18px;
+}
+
+button:hover {
+  background: var(--raised);
+  border-color: var(--input-border);
 }
 
 button:disabled,
@@ -188,59 +318,150 @@ button[aria-disabled='true'] {
   cursor: not-allowed;
 }
 
+button:disabled:hover,
+button[aria-disabled='true']:hover {
+  background: var(--surface-2);
+  border-color: var(--border-2);
+}
+
+/* The one primary action of a screen. */
 button.primary {
   background: var(--accent);
+  border-color: transparent;
   color: var(--accent-text);
+  box-shadow: var(--shadow-gold);
   font-weight: 600;
 }
 
+button.primary:hover,
+button.primary:disabled:hover,
+button.primary[aria-disabled='true']:hover {
+  background: var(--accent);
+  border-color: transparent;
+}
+
+/* Not available yet (a field still empty): a neutral button, not a muddy gold one.
+   Busy (aria-disabled) keeps its gold, dimmed, with the spinner. */
+button.primary:disabled {
+  background: var(--surface-2);
+  border-color: var(--border-2);
+  color: var(--muted);
+  box-shadow: none;
+  opacity: 0.7;
+}
+
+button.primary:disabled:hover {
+  background: var(--surface-2);
+  border-color: var(--border-2);
+}
+
 button.primary:not(:disabled, [aria-disabled='true']):hover {
-  filter: brightness(1.08);
+  background: var(--accent-hover);
+}
+
+button.primary:not(:disabled, [aria-disabled='true']):active {
+  background: var(--accent-press);
 }
 
 button.secondary {
   background: var(--surface-2);
-  color: var(--text);
-  border-color: var(--border);
+  box-shadow: var(--shadow-1);
 }
 
+button.secondary:hover {
+  background: var(--raised);
+}
+
+/* Text actions: neutral, underlined; gold is kept for the primary action. */
 button.link {
-  background: none;
-  border: none;
-  color: var(--accent-fg);
-  padding: 4px 0;
   align-self: flex-start;
+  min-height: 0;
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--text) 35%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+button.link:hover {
+  background: none;
+  text-decoration-color: var(--accent-fg);
+}
+
+/* Back: a quiet link with an arrow above the heading. */
+button.back,
+button.quiet-link {
+  align-self: flex-start;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 2px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 0.875rem;
+  font-weight: 520;
+}
+
+button.back:hover,
+button.quiet-link:hover {
+  background: none;
+  color: var(--text);
+}
+
+button.back .icon,
+button.quiet-link .icon {
+  width: 16px;
+  height: 16px;
 }
 
 button.danger-button {
   background: transparent;
+  border-color: color-mix(in srgb, var(--error) 60%, transparent);
   color: var(--error);
+}
+
+button.danger-button:not(:disabled):hover {
+  background: color-mix(in srgb, var(--error) 8%, transparent);
   border-color: var(--error);
 }
 
-button.chip {
-  padding: 6px 12px;
-  font-size: 0.85rem;
-  background: var(--surface-2);
-  color: var(--muted);
-  border-color: var(--border);
+button.copy-button {
+  align-self: flex-start;
+  min-height: 38px;
+  padding: 0 14px;
+  font-size: 0.875rem;
 }
 
-button.chip.active {
-  color: var(--text);
-  border-color: var(--accent-fg);
+button.copy-button .icon {
+  width: 16px;
+  height: 16px;
+  color: var(--muted);
 }
 
 input,
 textarea,
 select {
-  font: inherit;
   width: 100%;
-  padding: 12px;
-  border-radius: 12px;
+  min-height: 48px;
+  padding: 12px 14px;
   border: 1px solid var(--input-border);
-  background: var(--surface);
+  border-radius: var(--r-md);
+  background: var(--inset);
   color: var(--text);
+  font: inherit;
+  /* 16px on phones, so iOS does not zoom into a focused field. */
+  font-size: 1rem;
+  transition: border-color 0.12s var(--ease);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--subtle);
+  opacity: 1;
 }
 
 input[aria-invalid='true'],
@@ -249,35 +470,60 @@ textarea[aria-invalid='true'] {
 }
 
 textarea {
-  font-family: var(--mono);
-  font-size: 0.9rem;
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  font-variant-ligatures: none;
   resize: vertical;
   word-break: break-all;
 }
 
+select {
+  appearance: none;
+  padding-right: 40px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239d9484' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9.5 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 18px;
+  cursor: pointer;
+}
+
 input:focus,
 textarea:focus,
-select:focus,
-button:focus-visible {
-  outline: 2px solid var(--accent-fg);
+select:focus {
+  outline: 2px solid var(--focus);
   outline-offset: 1px;
+  border-color: var(--focus);
+}
+
+input[type='checkbox'] {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
 }
 
 .field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .field > span {
-  font-size: 0.9rem;
-  color: var(--muted);
+  font-size: 0.875rem;
+  font-weight: 550;
+  color: var(--text);
 }
 
 .field-error {
-  color: var(--error);
-  font-size: 0.85rem;
   margin: -4px 0 0;
+  color: var(--error);
+  font-size: 0.8125rem;
 }
 
 /* A live slot (an error or a note) stays mounted so screen readers announce
@@ -288,114 +534,86 @@ button:focus-visible {
 }
 
 .field-warn {
+  margin: -4px 0 0;
   color: var(--warn);
-  font-size: 0.85rem;
-  margin: -4px 0 0;
-}
-
-/* A memo is prose, not an address: the body font, wrapped at words. */
-textarea.memo {
-  font-family: inherit;
-  font-size: inherit;
-  word-break: normal;
-  overflow-wrap: anywhere;
-}
-
-.memo-info {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  margin: -4px 0 0;
-}
-
-.memo-count {
-  flex: none;
-  font-variant-numeric: tabular-nums;
-}
-
-.memo-count.over {
-  color: var(--error);
-}
-
-.input-row {
-  display: flex;
-  gap: 8px;
-}
-
-.input-row input {
-  flex: 1;
+  font-size: 0.8125rem;
 }
 
 .check {
   display: flex;
-  gap: 10px;
-  align-items: center;
+  gap: 12px;
+  align-items: flex-start;
+  line-height: 1.45;
+  cursor: pointer;
 }
 
 .check input {
-  width: 20px;
-  height: 20px;
-  accent-color: var(--accent-fg);
+  margin-top: 1px;
 }
 
-.segmented {
-  display: flex;
-  background: var(--surface-2);
-  border-radius: 12px;
-  padding: 4px;
-  gap: 4px;
-}
+/* --- feedback ------------------------------------------------------------ */
 
-.segmented button {
-  flex: 1;
-  background: transparent;
-  color: var(--muted);
-  padding: 8px;
-}
-
-.segmented button.active {
-  background: var(--surface);
-  color: var(--text);
-  box-shadow: 0 1px 3px rgb(0 0 0 / 25%);
-}
-
-/* --- feedback ----------------------------------------------------------- */
-
+/* A calm card; the left edge and the icon carry the tone. */
 .notice {
-  border-radius: var(--radius);
-  padding: 12px 14px;
-  border: 1px solid var(--border);
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 14px 16px;
+  border: 1px solid var(--border-2);
+  border-left: 2px solid var(--tone, var(--info));
+  border-radius: var(--r-md);
   background: var(--surface);
+  color: var(--muted);
+  font-size: 0.875rem;
+  line-height: 1.55;
+}
+
+.notice-icon {
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  color: var(--tone, var(--info));
+}
+
+.notice-body {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.notice p {
-  margin: 0;
+.notice-body > button {
+  align-self: flex-start;
+}
+
+.notice strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.notice-info {
+  --tone: var(--info);
 }
 
 .notice-warn {
-  border-color: color-mix(in srgb, var(--warn) 55%, transparent);
+  --tone: var(--warn);
 }
 
 .notice-error {
-  border-color: color-mix(in srgb, var(--error) 60%, transparent);
+  --tone: var(--error);
+  background: color-mix(in srgb, var(--error) 6%, var(--surface));
 }
 
 .notice-ok {
-  border-color: color-mix(in srgb, var(--ok) 60%, transparent);
+  --tone: var(--ok);
 }
 
 /* Network notices (NetworkBanner): above every tab in Main, inline on the lock screen. */
 .network-banner {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-}
-
-.content > .network-live {
-  padding: 16px 16px 0;
+  gap: 10px;
 }
 
 /* Empty, the live region takes no room, not even a flex gap; it stays in the page to be announced into. */
@@ -409,24 +627,29 @@ ul.plain {
   padding-left: 18px;
 }
 
+ul.plain li + li {
+  margin-top: 4px;
+}
+
 .error-details summary {
   cursor: pointer;
   color: var(--muted);
-  font-size: 0.85rem;
+  font-size: 0.8125rem;
 }
 
 .error-details code,
 .error-code {
   display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 0.8125rem;
   white-space: pre-wrap;
   word-break: break-word;
-  font-size: 0.8rem;
-  color: var(--muted);
-  margin-top: 6px;
 }
 
 .spinner {
   display: inline-block;
+  flex: none;
   width: 1em;
   height: 1em;
   border: 2px solid currentColor;
@@ -453,24 +676,26 @@ ul.plain {
 }
 
 .strength {
-  font-size: 0.85rem;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   margin-top: -4px;
+  color: var(--muted);
+  font-size: 0.8125rem;
 }
 
 .strength-bar {
   flex: 1;
-  height: 4px;
-  border-radius: 2px;
-  background: var(--surface-2);
+  height: 3px;
+  border-radius: 3px;
+  background: var(--border-2);
   overflow: hidden;
 }
 
 .strength-bar span {
   display: block;
   height: 100%;
+  border-radius: inherit;
 }
 
 .strength-weak .strength-bar span {
@@ -488,327 +713,20 @@ ul.plain {
   background: var(--ok);
 }
 
-/* --- welcome ------------------------------------------------------------ */
-
-.welcome {
-  min-height: 100vh;
-  justify-content: center;
-}
-
-.welcome-top {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.lang-switch {
-  display: flex;
-  gap: 6px;
-}
-
-.logo {
-  align-self: center;
-}
-
-.brand {
-  text-align: center;
-  font-size: 2.2rem;
-  letter-spacing: 0.02em;
-  margin: 0;
-}
-
-.tagline {
-  text-align: center;
-  color: var(--muted);
-}
-
-.pillars {
-  list-style: none;
-  padding: 0;
-  margin: 0 0 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.pillars li {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 10px 14px;
-  font-size: 0.92rem;
-}
-
-.pillars li::before {
-  content: '✓';
-  color: var(--accent-fg);
-  margin-right: 8px;
-}
-
-/* --- seed --------------------------------------------------------------- */
-
-.seed-wrap {
-  position: relative;
-}
-
-.seed-grid {
-  list-style: none;
-  margin: 0;
-  padding: 12px;
-  display: grid;
-  /* Wide enough for the longest BIP39 word (8 letters) plus its number, so
-     narrow screens get fewer columns instead of words split across lines. */
-  grid-template-columns: repeat(auto-fill, minmax(7.25rem, 1fr));
-  gap: 8px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-}
-
-.seed-grid li {
-  display: flex;
-  gap: 6px;
-  align-items: baseline;
-  font-family: var(--mono);
-  font-size: 0.9rem;
-  padding: 4px 6px;
-  background: var(--surface-2);
-  border-radius: 8px;
-  min-width: 0;
-}
-
-.seed-index {
-  color: var(--muted);
-  font-size: 0.75rem;
-  min-width: 1.4em;
-}
-
-/* A word broken over two lines gets copied onto paper as two words. */
-.seed-word {
-  white-space: nowrap;
-}
-
-.seed-grid.blurred {
-  filter: blur(7px);
-  user-select: none;
-}
-
-.seed-wrap .reveal {
-  position: absolute;
-  inset: 0;
-  margin: auto;
-  width: fit-content;
-  height: fit-content;
-}
-
-/* --- main shell --------------------------------------------------------- */
-
-.main {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-}
-
-.topbar {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  display: flex;
-  /* At 320px (400% zoom) the items wrap instead of pushing Lock off screen;
-     a wrapped line stays on the right, next to where Lock was. */
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 6px 10px;
-  padding: 12px 16px;
-  background: color-mix(in srgb, var(--bg) 88%, transparent);
-  backdrop-filter: blur(8px);
-  border-bottom: 1px solid var(--border);
-}
-
-.topbar > button.link {
-  flex-shrink: 0;
-}
-
-.topbar-brand {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 700;
-  margin-right: auto;
-}
-
-/* On a phone the logo stands for the name, so the pill and Lock keep one line
-   with wide fonts too (DejaVu Sans on Linux); screen readers still get the name. */
-@media (max-width: 380px) {
-  .topbar-brand > span {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    white-space: nowrap;
-  }
-}
-
-.content {
-  flex: 1;
-  padding-bottom: 76px;
-}
-
-.tabbar {
-  position: fixed;
-  bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 100%;
-  max-width: 480px;
-  display: flex;
-  background: var(--surface);
-  border-top: 1px solid var(--border);
-  padding-bottom: env(safe-area-inset-bottom);
-}
-
-.tabbar button {
-  position: relative;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  padding: 8px 2px 10px;
-  background: none;
-  border: none;
-  border-radius: 0;
-  color: var(--muted);
-  font-size: 0.75rem;
-}
-
-/* Inside the button: the tab bar spans the column, so an outer ring would be cut off at its edges. */
-.tabbar button:focus-visible {
-  outline-offset: -3px;
-}
-
-/* The active tab differs from the others by more than colour: a bar on top and a bolder label. */
-.tabbar button.active {
-  color: var(--accent-fg);
-  font-weight: 600;
-}
-
-.tabbar button.active::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 30%;
-  right: 30%;
-  height: 3px;
-  border-radius: 0 0 3px 3px;
-  background: var(--accent-fg);
-}
-
-.tab-icon {
-  font-size: 1.15rem;
-  line-height: 1;
-}
-
-.pill {
-  font-size: 0.75rem;
-  padding: 4px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  white-space: nowrap;
-}
-
-.pill-ok {
-  color: var(--ok);
-}
-
-.pill-busy {
-  color: var(--accent-fg);
-}
-
-.pill-error {
-  color: var(--error);
-}
-
-.pill-warn {
-  color: var(--warn);
-}
-
-/* --- balances ----------------------------------------------------------- */
-
-.balance-card {
-  background: linear-gradient(135deg, var(--surface-2), var(--surface));
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  padding: 20px;
-}
-
-.balance-label {
-  color: var(--muted);
-  font-size: 0.9rem;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-/* A 44px target that does not make the row it sits in any taller. */
-button.icon-button {
-  display: inline-grid;
-  place-items: center;
-  width: 2.75rem;
-  height: 2.75rem;
-  margin: -0.75rem -0.75rem -0.75rem auto;
-  padding: 0;
-  background: none;
-  border: none;
-  border-radius: 50%;
-  color: var(--muted);
-}
-
-button.icon-button:hover {
-  color: var(--text);
-}
-
-button.icon-button[aria-pressed='true'] {
-  color: var(--accent-fg);
-}
-
-.badge {
-  font-size: 0.7rem;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  color: var(--text);
-}
-
-.balance-total {
-  font-size: 2.3rem;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  font-variant-numeric: tabular-nums;
-  overflow-wrap: anywhere;
-}
-
-.balance-total small {
-  font-size: 1rem;
-  color: var(--muted);
-  font-weight: 500;
-}
-
+/* Sync progress: a thin neutral rule. */
 .progress {
-  margin-top: 12px;
-  height: 6px;
+  height: 3px;
   border-radius: 3px;
-  background: var(--border);
+  background: var(--border-2);
   overflow: hidden;
 }
 
 .progress span {
   display: block;
   height: 100%;
-  background: var(--accent);
-  transition: width 0.4s;
+  border-radius: inherit;
+  background: var(--muted);
+  transition: width 0.4s var(--ease);
 }
 
 /* No mid-pass progress from the engine: show activity, not a guessed percentage. */
@@ -826,108 +744,100 @@ button.icon-button[aria-pressed='true'] {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .progress.indeterminate span {
-    width: 100%;
-    opacity: 0.5;
-    animation: none;
-  }
+.badge {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 9px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-pill);
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 560;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
 }
 
-.balance-rows {
+/* --- shared components --------------------------------------------------- */
+
+.card {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-2);
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+.card-empty {
+  padding: 20px 24px 24px;
+}
+
+/* Key and value pairs (the dashboard's privacy card). */
+.kv {
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
 }
 
-.balance-rows > div {
-  display: grid;
-  grid-template-columns: 1fr auto;
+.kv > div {
+  display: flex;
   align-items: baseline;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 12px 14px;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+  font-size: 0.875rem;
 }
 
-.balance-rows dt {
-  font-weight: 600;
+.kv dt {
+  color: var(--muted);
 }
 
-.balance-rows dd {
+.kv dd {
   margin: 0;
-  font-variant-numeric: tabular-nums;
+  min-width: 0;
+  color: var(--text);
+  text-align: right;
+  overflow-wrap: anywhere;
 }
 
-.balance-rows p {
-  grid-column: 1 / -1;
-  margin: 4px 0 0;
+.kv > div.kv-stack {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
 }
 
-.dot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  margin-right: 4px;
+.kv > div.kv-stack dd {
+  text-align: left;
 }
 
-.dot-shielded {
-  background: var(--shielded);
+.kv dd.mono {
+  font-size: 0.8125rem;
 }
 
-.dot-transparent {
-  background: var(--transparent);
-}
-
-.dot-pending {
-  background: var(--muted);
-}
-
-/* --- receive / send ----------------------------------------------------- */
-
-.address-kind {
-  margin: 0;
-}
-
-.qr {
-  background: #fff;
-  border-radius: var(--radius);
-  padding: 12px;
-  width: min(100%, 280px);
-  align-self: center;
-}
-
-.qr svg {
-  display: block;
-  width: 100%;
-  height: auto;
-}
-
-.address {
-  display: block;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 12px;
-  font-size: 0.85rem;
-  word-break: break-all;
-}
-
+/* A spend's details, on the confirm and the result screen. */
 .summary {
   margin: 0;
+  padding: 4px 18px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 4px 14px;
+  border-radius: var(--r-lg);
 }
 
 .summary > div {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
-  padding: 10px 0;
+  gap: 16px;
+  padding: 12px 0;
   border-bottom: 1px solid var(--border);
 }
 
@@ -946,6 +856,10 @@ button.icon-button[aria-pressed='true'] {
   word-break: break-all;
 }
 
+.summary dd code {
+  font-size: 0.875rem;
+}
+
 /* A memo can run to several lines; it reads better under its label. */
 .summary > div.summary-memo {
   flex-direction: column;
@@ -959,58 +873,68 @@ button.icon-button[aria-pressed='true'] {
   overflow-wrap: anywhere;
 }
 
+/* A spend's stages. A fixed icon column keeps every label at the same x. */
 .stages {
-  list-style: none;
-  padding: 0;
   margin: 0;
+  padding: 0;
+  list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 
-/* A fixed icon column keeps every label at the same x as the steps advance. */
 .stages li {
   display: grid;
-  grid-template-columns: 1.25rem 1fr;
-  gap: 8px;
+  grid-template-columns: 1.5rem 1fr;
+  gap: 10px;
   align-items: start;
-  color: var(--muted);
+  color: var(--subtle);
 }
 
 .stage-icon {
   display: grid;
   place-items: center;
-  height: 1.5em;
+  height: 1.55em;
 }
 
 .stage-icon:empty::before {
   content: '';
-  width: 0.6rem;
-  height: 0.6rem;
-  border: 2px solid var(--border);
+  width: 0.65rem;
+  height: 0.65rem;
+  border: 1.5px solid var(--input-border);
   border-radius: 50%;
 }
 
 .stages li.current {
-  color: var(--accent-fg);
+  color: var(--text);
+  font-weight: 560;
 }
 
 .stages li.done {
+  color: var(--muted);
+}
+
+.stages li.done .stage-icon {
   color: var(--ok);
 }
 
+/* A spend's outcome. */
 .result {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   text-align: center;
 }
 
 .result h2 {
-  font-size: 1.25rem;
-  margin: 8px 0 0;
-  font-variant-numeric: tabular-nums;
+  margin: 10px 0 0;
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-size: 1.5rem;
+  font-weight: 400;
+  letter-spacing: -0.015em;
+  font-variant-numeric: lining-nums tabular-nums;
 }
 
 /* Focused only so screen readers start at the outcome; it is not a control. */
@@ -1018,168 +942,1319 @@ button.icon-button[aria-pressed='true'] {
   outline: none;
 }
 
-.result p {
-  margin: 0;
-}
-
 .result-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
   display: grid;
   place-items: center;
-  font-size: 1.75rem;
+  width: 56px;
+  height: 56px;
+  border: 1px solid color-mix(in srgb, var(--ok) 40%, transparent);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--ok) 10%, transparent);
   color: var(--ok);
-  background: color-mix(in srgb, var(--ok) 14%, transparent);
+  font-size: 1.5rem;
 }
 
-/* --- history ------------------------------------------------------------ */
+/* The QR code on light paper with its quiet zone in both themes; nothing is layered on it. */
+.qr {
+  align-self: center;
+  width: min(100%, 264px);
+  padding: 14px;
+  border-radius: var(--r-md);
+  background: #fff;
+  box-shadow: 0 0 0 1px var(--border-2);
+}
 
-.history {
-  list-style: none;
-  padding: 0;
+.qr svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* An address or key, in full and verifiable. */
+.address {
+  display: block;
+  padding: 14px 16px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-md);
+  background: var(--inset);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  line-height: 1.7;
+  letter-spacing: 0.01em;
+  word-break: break-all;
+}
+
+/* Recovery words (Create and Settings). */
+.seed-grid {
   margin: 0;
+  padding: 12px;
+  list-style: none;
+  display: grid;
+  /* Wide enough for the longest BIP39 word (8 letters) plus its number, so
+     narrow screens get fewer columns instead of words split across lines. */
+  grid-template-columns: repeat(auto-fill, minmax(7.25rem, 1fr));
+  gap: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+}
+
+.seed-grid li {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
+  gap: 8px;
+  align-items: baseline;
+  min-width: 0;
+  padding: 6px 8px;
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  font-variant-ligatures: none;
+}
+
+.seed-index {
+  min-width: 1.4em;
+  color: var(--subtle);
+  font-size: 0.75rem;
+}
+
+/* A word broken over two lines gets copied onto paper as two words. */
+.seed-word {
+  white-space: nowrap;
+}
+
+/* Hidden until "Reveal words": blurred, and not selectable. */
+.seed-grid.blurred {
+  filter: blur(7px);
+  user-select: none;
+}
+
+/* Amounts set for reading: lining, tabular figures. */
+.amt,
+.balance-total,
+.pool-amount,
+.summary dd,
+.memo-count {
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+/* --- transaction rows (Balance's Recent activity and History) ------------ */
+
+.tx-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 .tx {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 12px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  grid-template-areas:
+    'icon main value'
+    'icon date value'
+    'icon privacy privacy'
+    'icon actions actions';
+  column-gap: 14px;
+  align-items: start;
+  padding: 14px 16px;
+  border-top: 1px solid var(--border);
 }
 
-.tx .secondary {
-  align-self: flex-start;
-  padding: 6px 10px;
-  font-size: 0.8rem;
+.tx:first-child {
+  border-top: 0;
+}
+
+.tx-icon {
+  grid-area: icon;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--border-2);
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--muted);
+}
+
+.tx-icon .icon {
+  width: 17px;
+  height: 17px;
 }
 
 .tx-main {
+  grid-area: main;
+  min-width: 0;
   display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  font-weight: 600;
+  flex-direction: column;
+  gap: 2px;
 }
 
-.tx-amount {
+.tx-type {
+  font-weight: 560;
+  line-height: 1.35;
+}
+
+.tx-fee,
+.tx-date {
+  color: var(--subtle);
+  font-size: 0.8125rem;
   font-variant-numeric: tabular-nums;
+}
+
+.tx-date {
+  grid-area: date;
+  margin-top: 2px;
+}
+
+.tx-memo {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-size: 0.9375rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  /* Line breaks are the sender's, and WebZjs puts each of a transaction's memos on its own line. */
+  white-space: pre-line;
+}
+
+/* The words carry the meaning; colour is on the mark only. */
+.privacy {
+  grid-area: privacy;
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  line-height: 1.3;
+}
+
+.privacy-mark {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+  /* The glyph stays in the text; the circle is drawn. */
+  font-size: 0;
+  line-height: 0;
+  overflow: hidden;
+}
+
+.privacy-shielded .privacy-mark {
+  color: var(--shielded);
+  background: currentColor;
+}
+
+.privacy-shielding .privacy-mark {
+  color: var(--shielded);
+  background: linear-gradient(90deg, currentColor 50%, transparent 50%);
+}
+
+.privacy-partial .privacy-mark {
+  color: var(--warn);
+  background: linear-gradient(90deg, currentColor 50%, transparent 50%);
+}
+
+.privacy-transparent .privacy-mark {
+  color: var(--transparent);
+}
+
+.tx-value {
+  grid-area: value;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  text-align: right;
+}
+
+/* Decimal points line up down the list: a sign slot, the whole part, and a
+   fraction as wide as the list's widest (TxRow's useFractionWidth), then the unit. */
+.tx-amount {
+  white-space: nowrap;
+  font-weight: 560;
+}
+
+.amt-sign:empty {
+  display: none;
+}
+
+/* In a list the sign keeps its slot, so whole parts line up too. */
+.tx-amount .amt-sign {
+  display: inline-block;
+  min-width: 1ch;
+  text-align: right;
+}
+
+.tx-amount .amt-frac {
+  display: inline-block;
+  min-width: var(--tx-frac, 5ch);
+  text-align: left;
+}
+
+.amt-unit {
+  color: var(--subtle);
+  font-size: 0.75rem;
+  font-weight: 520;
+  letter-spacing: 0.04em;
 }
 
 .tx-amount.in {
   color: var(--ok);
 }
 
-.tx-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 12px;
+.status {
+  color: var(--subtle);
+  font-size: 0.8125rem;
 }
 
 .status-pending {
-  color: var(--accent-fg);
+  color: var(--warn);
 }
 
 .status-expired {
   color: var(--error);
 }
 
-/* A row's privacy label: the mark and the words say it, colour only adds to them. */
-.privacy-shielded {
-  color: var(--ok);
+.tx-actions {
+  grid-area: actions;
+  margin-top: 12px;
 }
 
-.privacy-transparent {
-  color: var(--warn);
-}
+/* --- shell --------------------------------------------------------------- */
 
-.tx-memo {
-  margin: 0;
-  font-style: italic;
-  overflow-wrap: anywhere;
-  /* Line breaks are the sender's, and WebZjs puts each of a transaction's memos on its own line. */
-  white-space: pre-line;
-}
-
-/* --- settings ----------------------------------------------------------- */
-
-.settings-group {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 14px;
+/* Phone and tablet: .side lets the top bar stick to the top of the page and
+   the tab bar sit at the bottom of the screen. The document scrolls. */
+.main {
+  min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
+}
+
+.side {
+  display: contents;
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 58px;
+  /* viewport-fit=cover (index.html): the bars reach the screen's edges, their content stays clear of notches. */
+  padding: max(8px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right)) 8px
+    max(16px, env(safe-area-inset-left));
+  background: var(--scrim);
+  -webkit-backdrop-filter: saturate(1.4) blur(14px);
+  backdrop-filter: saturate(1.4) blur(14px);
+  border-bottom: 1px solid var(--border);
+}
+
+.topbar-brand {
+  display: flex;
+  align-items: center;
   gap: 10px;
+  flex: none;
+  margin-right: auto;
 }
 
-.settings-group h2 {
-  margin: 0;
+.topbar-brand img {
+  width: 28px;
+  height: 28px;
 }
 
-/* The group's padding ends it; a help line at the bottom adds no gap of its own. */
-.settings-group > p:last-child {
-  margin-bottom: 0;
+.topbar-brand span {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-size: 1.3rem;
+  font-weight: 430;
+  letter-spacing: -0.01em;
+  line-height: 1;
 }
 
-.danger p {
-  color: var(--error);
+/* The sync status: one line that gives way first (the full label stays in its text and tooltip). */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 1 auto;
+  min-width: 0;
+  height: 32px;
+  padding: 0 12px 0 11px;
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-pill);
+  color: var(--muted);
+  font-size: 0.8125rem;
+  font-weight: 520;
+  white-space: nowrap;
 }
 
-/* --- framed layout ------------------------------------------------------- */
+.pill-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--tone);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone) 16%, transparent);
+}
 
-/* On a wide screen the app column is a card on the page, with the top bar
-   and the tab bar inside it. The page still scrolls as a whole (the bars are
-   sticky instead of fixed), so focus scrolling and scroll-padding work as on
-   a phone. Short screens such as landscape phones keep the phone layout. */
-@media (min-width: 720px) and (min-height: 600px) {
-  :root {
-    --frame-gap: 32px;
+.pill-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pill-ok {
+  --tone: var(--ok);
+}
+
+.pill-busy {
+  --tone: var(--muted);
+}
+
+.pill-busy .pill-dot {
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+.pill-error {
+  --tone: var(--error);
+}
+
+.pill-warn {
+  --tone: var(--warn);
+}
+
+/* Lock: always one tap away, never squeezed off screen. */
+.lock-button {
+  flex: none;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 10px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font-size: 0.875rem;
+  font-weight: 540;
+}
+
+.lock-button .icon {
+  width: 18px;
+  height: 18px;
+  color: var(--muted);
+}
+
+.lock-button:hover {
+  background: var(--raised);
+}
+
+.tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  padding: 6px max(6px, env(safe-area-inset-right)) calc(6px + env(safe-area-inset-bottom))
+    max(6px, env(safe-area-inset-left));
+  background: var(--scrim);
+  -webkit-backdrop-filter: saturate(1.4) blur(14px);
+  backdrop-filter: saturate(1.4) blur(14px);
+  border-top: 1px solid var(--border);
+}
+
+.tabbar button {
+  position: relative;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  min-height: 54px;
+  padding: 4px 2px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: none;
+  color: var(--subtle);
+  font-size: 0.75rem;
+  font-weight: 520;
+}
+
+.tabbar button:hover {
+  background: none;
+  color: var(--text);
+}
+
+.tab-label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tabbar .tab-icon {
+  width: 22px;
+  height: 22px;
+}
+
+/* Inside the button: an outer ring would be cut off at the bar's edges. */
+.tabbar button:focus-visible {
+  outline-offset: -3px;
+}
+
+/* The active tab differs by more than colour: a 3px gold marker and a bolder label. */
+.tabbar button.active {
+  color: var(--text);
+  font-weight: 620;
+}
+
+.tabbar button.active::before {
+  content: '';
+  position: absolute;
+  top: -7px;
+  left: 50%;
+  width: 24px;
+  height: 3px;
+  margin-left: -12px;
+  border-radius: 0 0 3px 3px;
+  background: var(--accent-mark);
+}
+
+.content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px max(16px, env(safe-area-inset-right)) calc(var(--tabbar-h, 72px) + 28px)
+    max(16px, env(safe-area-inset-left));
+}
+
+/* Phones: "Up to date" says it; the block height stays in the text and the
+   tooltip. Other states keep their whole line (cut short if it must be). */
+@media (max-width: 479px) {
+  .pill-ok .pill-sep,
+  .pill-ok .pill-sub {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+}
+
+/* On the narrowest phones the logo stands for the name, so the pill and Lock
+   keep their line; screen readers still get the name. */
+@media (max-width: 379px) {
+  .topbar-brand > span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+}
+
+@media (min-width: 600px) and (max-width: 1023px) {
+  .content {
+    padding-left: max(32px, env(safe-area-inset-left));
+    padding-right: max(32px, env(safe-area-inset-right));
   }
 
-  html,
+  .content > * {
+    width: 100%;
+    max-width: 720px;
+    margin-inline: auto;
+  }
+}
+
+/* Desktop: one sticky, full-height sidebar (brand and Lock, then the
+   navigation, then the sync status at its foot) beside the content column.
+   Width only: Playwright's phone has touch, so hover and pointer queries
+   would not tell a desktop apart. */
+@media (min-width: 1024px) {
+  html {
+    /* The sidebar is not over the content: no bar to keep focus clear of. */
+    scroll-padding-top: 12px;
+    scroll-padding-bottom: 12px;
+  }
+
   body {
-    background: var(--page);
+    font-size: 15px;
   }
 
-  /* Padding, not a margin on .app: that would collapse through #root and
-     leave every page scrolling by the gap. */
-  #root {
-    padding: var(--frame-gap) 0;
+  input,
+  textarea,
+  select {
+    font-size: 0.9375rem;
   }
 
-  .app {
-    min-height: calc(100vh - 2 * var(--frame-gap));
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: 28px;
-    box-shadow: var(--frame-shadow);
-    /* Rounds the bars' corners too; unlike hidden, clip keeps them sticky. */
-    overflow: clip;
+  h1 {
+    font-size: 2rem;
   }
 
-  /* Screens that fill the viewport on a phone fill the frame instead. */
-  .app .main,
-  .app .welcome,
-  .app .screen.center {
-    min-height: calc(100vh - 2 * var(--frame-gap) - 2px);
+  .main {
+    display: grid;
+    grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .side {
+    position: sticky;
+    top: 0;
+    align-self: start;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      'brand lock'
+      'nav nav'
+      '. .'
+      'sync sync';
+    height: 100vh;
+    height: 100dvh;
+    overflow-y: auto;
+    padding: 22px 16px 16px;
+    background: var(--side);
+    border-right: 1px solid var(--border);
+  }
+
+  .topbar {
+    display: contents;
+    background: none;
+  }
+
+  .topbar-brand {
+    grid-area: brand;
+    gap: 11px;
+    min-width: 0;
+    margin: 0;
+    padding: 0 0 0 8px;
+  }
+
+  .topbar-brand img {
+    width: 30px;
+    height: 30px;
+  }
+
+  .topbar-brand span {
+    font-size: 1.375rem;
+  }
+
+  .lock-button {
+    grid-area: lock;
+    align-self: center;
+    min-height: 34px;
+    padding: 0 8px;
+    border-radius: var(--r-sm);
+    color: var(--muted);
+    font-size: 0.8125rem;
+  }
+
+  .lock-button .icon {
+    width: 16px;
+    height: 16px;
+  }
+
+  .lock-button:hover {
+    color: var(--text);
   }
 
   .tabbar {
-    position: sticky;
-    left: auto;
-    transform: none;
-    width: auto;
-    max-width: none;
+    grid-area: nav;
+    position: static;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: 32px;
+    padding: 0;
+    background: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    border: 0;
   }
 
-  /* The tab bar takes its own space here. */
+  .tabbar button {
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 12px;
+    min-height: 40px;
+    padding: 0 12px;
+    border-radius: var(--r-sm);
+    color: var(--muted);
+    font-size: 0.9375rem;
+    font-weight: 500;
+  }
+
+  .tabbar .tab-icon {
+    width: 20px;
+    height: 20px;
+    color: var(--subtle);
+  }
+
+  .tabbar button:hover {
+    background: var(--raised);
+    color: var(--text);
+  }
+
+  .tabbar button:focus-visible {
+    outline-offset: 0;
+  }
+
+  .tabbar button.active {
+    background: var(--surface);
+    color: var(--text);
+    font-weight: 560;
+    box-shadow: var(--shadow-1);
+  }
+
+  .tabbar button.active .tab-icon {
+    color: var(--text);
+  }
+
+  .tabbar button.active::before {
+    top: 10px;
+    bottom: 10px;
+    left: -16px;
+    width: 3px;
+    height: auto;
+    margin: 0;
+    border-radius: 0 3px 3px 0;
+  }
+
+  /* The sync status as a calm card at the foot of the sidebar: its own row,
+     so a long message grows the card, never over the navigation. */
+  .topbar .pill {
+    grid-area: sync;
+    align-self: end;
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    height: auto;
+    margin-top: 16px;
+    padding: 12px 12px 12px 13px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 0.875rem;
+    font-weight: 540;
+    white-space: normal;
+  }
+
+  .topbar .pill-dot {
+    margin-top: 0.45em;
+  }
+
+  .topbar .pill-text {
+    overflow: visible;
+    overflow-wrap: anywhere;
+  }
+
+  .topbar .pill-sep {
+    display: none;
+  }
+
+  .topbar .pill-sub::first-letter {
+    text-transform: uppercase;
+  }
+
+  .topbar .pill-sub {
+    display: block;
+    margin-top: 2px;
+    color: var(--subtle);
+    font-size: 0.8125rem;
+    font-weight: 450;
+    font-variant-numeric: tabular-nums;
+  }
+
   .content {
-    padding-bottom: 0;
+    padding: 44px clamp(32px, 4.4vw, 64px) 72px;
+  }
+
+  .content > * {
+    width: 100%;
+    max-width: var(--content-max);
+    margin-inline: auto;
+  }
+}
+
+@media (min-width: 1024px) and (max-width: 1279px) {
+  :root {
+    --sidebar-w: 228px;
+  }
+}
+
+/* Screens other than the dashboard keep a reading measure on a wide screen
+   (History's list takes the full column). Later passes give each its own layout. */
+@media (min-width: 1024px) {
+  .content > .screen:not(.home) > :not(.history) {
+    max-width: 760px;
+  }
+
+  .content > .screen > .qr {
+    align-self: flex-start;
+  }
+
+  .content .row {
+    justify-content: flex-start;
+  }
+
+  .content .row > * {
+    flex: 0 1 auto;
+    min-width: 140px;
+  }
+}
+
+/* --- Balance: the overview dashboard ------------------------------------ */
+
+.dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.hero {
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+}
+
+/* The hero's gold hairline: the one ornament on the screen. */
+.hero::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: 24px;
+  right: 24px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent-line) 18%, var(--accent-line) 50%, transparent 92%);
+}
+
+.hero-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  margin-right: -8px;
+}
+
+.hero-top .eyebrow {
+  margin-right: auto;
+}
+
+button.eye-toggle {
+  flex: none;
+  gap: 8px;
+  min-height: 40px;
+  min-width: 40px;
+  padding: 0 10px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 0.875rem;
+  font-weight: 540;
+}
+
+button.eye-toggle:hover {
+  background: var(--raised);
+  color: var(--text);
+}
+
+/* Pressed (balances hidden) reads as a state, not only as the struck eye. */
+button.eye-toggle[aria-pressed='true'] {
+  background: var(--raised);
+  color: var(--text);
+}
+
+/* Phones: the eye alone; its name stays for screen readers. */
+.eye-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* The figure: Fraunces, light at display sizes and heavier as it shrinks,
+   lining tabular figures; the fraction dimmed but well above 3:1. */
+.balance-total {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  column-gap: 12px;
+  margin-top: 14px;
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-size: clamp(2.75rem, 9vw + 0.5rem, 3.5rem);
+  font-weight: 370;
+  font-feature-settings: 'lnum' 1, 'tnum' 1;
+  letter-spacing: -0.025em;
+  line-height: 1;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.balance-total .amt-frac {
+  color: var(--muted);
+}
+
+.balance-total .unit {
+  font-family: var(--font-ui);
+  font-size: 0.875rem;
+  font-weight: 560;
+  letter-spacing: 0.08em;
+  color: var(--subtle);
+}
+
+.hero > [data-testid='balance-outdated'] {
+  margin-top: 12px;
+}
+
+.hero-sync {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.composition {
+  margin-top: 24px;
+}
+
+/* The shares as one rule; plain when hidden or empty. */
+.split {
+  display: flex;
+  gap: 3px;
+  height: 4px;
+}
+
+.split span {
+  min-width: 3px;
+  border-radius: 2px;
+}
+
+.split-shielded {
+  background: var(--shielded);
+}
+
+.split-transparent {
+  background: var(--transparent);
+}
+
+.split-none {
+  flex: 1;
+  background: var(--border-2);
+}
+
+.balance-rows {
+  margin: 12px 0 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.pool {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 16px;
+  align-items: baseline;
+  padding: 14px 0;
+  border-top: 1px solid var(--border);
+}
+
+.pool:first-child {
+  border-top: 0;
+}
+
+.pool dt {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--muted);
+  font-size: 0.875rem;
+  font-weight: 560;
+}
+
+.pool-mark {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+}
+
+.pool-shielded .pool-mark {
+  color: var(--shielded);
+  background: currentColor;
+}
+
+.pool-transparent .pool-mark {
+  color: var(--transparent);
+}
+
+.pool-pending .pool-mark {
+  color: var(--warn);
+  border-style: dashed;
+}
+
+.pool > dd {
+  margin: 0;
+}
+
+.pool-amount {
+  font-size: 1.0625rem;
+  font-weight: 540;
+  letter-spacing: -0.01em;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.pool-amount .unit,
+.tx-amount .unit {
+  margin-left: 2px;
+  color: var(--subtle);
+  font-size: 0.75rem;
+  font-weight: 520;
+  letter-spacing: 0.04em;
+}
+
+.pool > .pool-help {
+  grid-column: 1 / -1;
+  margin-top: 6px;
+  color: var(--subtle);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.hero-prompt {
+  margin-top: 16px;
+}
+
+.hero-prompt .notice {
+  padding: 12px 14px;
+  background: var(--surface-2);
+  font-size: 0.8125rem;
+}
+
+.hero-prompt .notice-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.hero-prompt .notice-body {
+  gap: 4px;
+}
+
+.hero-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.hero-actions button {
+  flex-direction: column;
+  gap: 7px;
+  min-height: 72px;
+  padding: 8px 6px;
+  font-size: 0.875rem;
+}
+
+.hero-actions button .icon {
+  width: 20px;
+  height: 20px;
+}
+
+.hero-actions button.secondary .icon {
+  color: var(--muted);
+}
+
+/* Phones: the actions sit right under the figure, the split rows after them. */
+.hero > .hero-actions {
+  order: 1;
+}
+
+.hero > .composition,
+.hero > .hero-prompt {
+  order: 2;
+}
+
+.activity .card-head h2 {
+  font-size: 1.0625rem;
+}
+
+.privacy-card {
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+}
+
+.privacy-card h2 {
+  margin-bottom: 12px;
+}
+
+.privacy-note {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  color: var(--subtle);
+  font-size: 0.8125rem;
+  line-height: 1.55;
+}
+
+.privacy-note .icon {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+}
+
+button.privacy-more {
+  margin-top: 16px;
+  margin-left: -2px;
+}
+
+@media (min-width: 600px) {
+  .tx {
+    padding: 14px 20px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .dashboard {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 340px;
+    gap: 24px;
+    align-items: stretch;
+  }
+
+  .hero {
+    grid-column: 1;
+    grid-row: 1;
+    padding: 28px 32px 32px;
+  }
+
+  .privacy-card {
+    grid-column: 2;
+    grid-row: 1;
+    padding: 24px;
+  }
+
+  /* The way to Settings closes the card, however tall the row is. */
+  .privacy-card .privacy-note {
+    margin-bottom: 16px;
+  }
+
+  .privacy-card button.privacy-more {
+    margin-top: auto;
+  }
+
+  .dashboard > .dashboard-note,
+  .dashboard > .activity {
+    grid-column: 1 / -1;
+  }
+
+  .hero-top {
+    margin: -6px -10px 0 0;
+  }
+
+  .eye-label {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    clip: auto;
+  }
+
+  .balance-total {
+    margin-top: 22px;
+    font-size: clamp(4rem, 2rem + 3.2vw, 5.5rem);
+    font-weight: 310;
+    font-variation-settings: 'opsz' 144;
+    letter-spacing: -0.035em;
+    line-height: 0.95;
+  }
+
+  .balance-total .unit {
+    font-size: 0.9375rem;
+  }
+
+  .composition {
+    margin-top: 32px;
+  }
+
+  .balance-rows {
+    margin-top: 18px;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: 32px;
+  }
+
+  .pool {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    align-content: start;
+    padding: 0;
+    border-top: 0;
+  }
+
+  .pool-transparent {
+    text-align: right;
+  }
+
+  .pool-transparent dt {
+    justify-content: flex-end;
+  }
+
+  .pool > .pool-amount {
+    margin-top: 8px;
+    font-size: 1.625rem;
+    font-weight: 400;
+    letter-spacing: -0.025em;
+    line-height: 1.1;
+    text-align: left;
+  }
+
+  .pool-transparent .pool-amount {
+    text-align: right;
+  }
+
+  .pool > .pool-help {
+    max-width: 36ch;
+    margin-top: 8px;
+  }
+
+  .pool-transparent .pool-help {
+    margin-left: auto;
+  }
+
+  .pool-pending {
+    grid-column: 1 / -1;
+    grid-template-columns: minmax(0, 1fr) auto;
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+  }
+
+  .pool-pending > .pool-amount {
+    margin-top: 0;
+    font-size: 1.0625rem;
+    font-weight: 540;
+    text-align: right;
+  }
+
+  .hero > .hero-actions,
+  .hero > .composition,
+  .hero > .hero-prompt {
+    order: 0;
+  }
+
+  .hero-prompt {
+    margin-top: 24px;
+  }
+
+  /* At the foot of the card, below a hairline, however tall the row makes it. */
+  .hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: auto;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+  }
+
+  .hero > :has(+ .hero-actions) {
+    margin-bottom: 32px;
+  }
+
+  .hero-actions button {
+    flex-direction: row;
+    gap: 9px;
+    min-width: 136px;
+    min-height: 52px;
+    padding: 0 22px;
+    font-size: 0.9375rem;
+  }
+
+  .hero-actions button .icon {
+    width: 18px;
+    height: 18px;
+  }
+
+  .card-head {
+    padding: 20px 24px;
+  }
+
+  .tx {
+    grid-template-columns: 36px minmax(0, 1fr) 150px 200px 140px;
+    grid-template-areas:
+      'icon main date privacy value'
+      '. actions actions actions actions';
+    column-gap: 20px;
+    align-items: center;
+    padding: 15px 24px;
+  }
+
+  .tx-date {
+    margin-top: 0;
+    color: var(--muted);
+    font-size: 0.875rem;
+  }
+
+  .privacy {
+    margin-top: 0;
+  }
+}
+
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .dashboard {
+    grid-template-columns: minmax(0, 1fr) 292px;
+    gap: 20px;
+  }
+
+  .hero {
+    padding: 24px 28px 28px;
+  }
+
+  .privacy-card {
+    padding: 20px;
+  }
+
+  .hero-actions button {
+    flex: 1;
+    min-width: 0;
+    padding: 0 14px;
+  }
+
+  .tx {
+    grid-template-columns: 36px minmax(0, 1fr) 136px 176px 120px;
+    column-gap: 16px;
+  }
+}
+
+/* --- motion -------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  /* Without the slide, a steady half-strength bar still says "in progress". */
+  .progress.indeterminate span {
+    width: 100%;
+    opacity: 0.5;
+    animation: none;
   }
 }

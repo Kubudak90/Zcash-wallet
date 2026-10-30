@@ -1,0 +1,222 @@
+/*
+ * Account screens: Welcome, Create and Restore, the password step, the lock
+ * screen, boot, Settings and the language switch. Tokens, controls and shared
+ * components live in src/styles.css.
+ */
+
+/* --- screens outside the wallet shell ------------------------------------ */
+
+/* Onboarding, the lock screen and boot: one centred column on the page. */
+.app > .screen {
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+  padding: max(28px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
+    max(48px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+}
+
+.app > .screen.welcome {
+  max-width: 460px;
+  min-height: 100vh;
+  min-height: 100dvh;
+  justify-content: center;
+  gap: 18px;
+}
+
+.app > .screen.center {
+  min-height: 100vh;
+  min-height: 100dvh;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}
+
+.app > .screen.center .muted {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+@media (min-width: 600px) {
+  .app > .screen {
+    padding: max(48px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right))
+      max(64px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left));
+  }
+}
+
+/* The lock screen's heading sits under the centred logo. */
+.app > .screen.welcome > h1 {
+  text-align: center;
+}
+
+.welcome-top {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.logo {
+  align-self: center;
+}
+
+/* --- Welcome --------------------------------------------------------------- */
+
+h1.brand {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-size: 2.75rem;
+  font-weight: 380;
+  letter-spacing: -0.02em;
+  text-align: center;
+}
+
+.tagline {
+  color: var(--muted);
+  text-align: center;
+}
+
+.pillars {
+  margin: 4px 0 8px;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border);
+}
+
+.pillars li {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  padding: 12px 2px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.pillars li::before {
+  content: '';
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-mark);
+  transform: translateY(-2px);
+}
+
+/* --- Create ---------------------------------------------------------------- */
+
+.seed-wrap {
+  position: relative;
+}
+
+.seed-wrap .reveal {
+  position: absolute;
+  inset: 0;
+  width: fit-content;
+  height: fit-content;
+  margin: auto;
+}
+
+/* --- Restore: recovery phrase or viewing key ----------------------------- */
+
+.segmented {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--input-border);
+  border-radius: var(--r-md);
+  background: var(--inset);
+}
+
+.segmented button {
+  flex: 1;
+  min-height: 38px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.875rem;
+  font-weight: 520;
+}
+
+.segmented button:hover {
+  background: none;
+  color: var(--text);
+}
+
+.segmented button.active {
+  background: var(--raised);
+  color: var(--text);
+  box-shadow:
+    var(--shadow-1),
+    inset 0 0 0 1px var(--border-2);
+}
+
+/* --- language switch (Welcome, the lock screen, Settings) ---------------- */
+
+.lang-switch {
+  display: inline-flex;
+  align-self: flex-start;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--input-border);
+  border-radius: var(--r-md);
+  background: var(--inset);
+}
+
+button.chip {
+  min-height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.875rem;
+  font-weight: 520;
+}
+
+button.chip:hover {
+  background: none;
+  color: var(--text);
+}
+
+button.chip.active {
+  background: var(--raised);
+  color: var(--text);
+  box-shadow:
+    var(--shadow-1),
+    inset 0 0 0 1px var(--border-2);
+}
+
+/* --- Settings -------------------------------------------------------------- */
+
+.settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-2);
+}
+
+.settings-group h2 {
+  font-size: 1.0625rem;
+}
+
+.settings-group > button,
+.settings-group > .stack > button {
+  align-self: flex-start;
+}
+
+.danger p {
+  color: var(--error);
+}
+
+@media (min-width: 600px) {
+  .settings-group {
+    padding: 22px 24px;
+  }
+}

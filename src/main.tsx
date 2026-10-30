@@ -5,9 +5,12 @@ import { App } from './App';
 import { defaultSettings, storage } from './lib/storage';
 import { WalletController } from './state/controller';
 import { WalletProvider } from './state/wallet';
-// Fonts first: their own file, see the note in fonts.css.
+// Fonts first (their own file: see the note in fonts.css), then the tokens and
+// shared styles, then the per-area sheets that build on them.
 import './fonts.css';
 import './styles.css';
+import './styles/money.css';
+import './styles/account.css';
 
 // IndexedDB can be unavailable (e.g. some private-browsing modes); boot still
 // runs and reports the storage error instead of leaving a blank page.

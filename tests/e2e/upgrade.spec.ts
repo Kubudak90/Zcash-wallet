@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 
-import { OLD_ENGINE, PASSWORD, TIP, createWallet, en, fakeEngine, restoreFromThisMonth, setKnobs } from './helpers';
+import { OLD_ENGINE, PASSWORD, TIP, createWallet, en, fakeEngine, nav, restoreFromThisMonth, setKnobs } from './helpers';
 
 // Opening the stored wallet database on unlock (review finding R2). Only a database in the
 // format of the engine before the port is rebuilt from the secret, and the old blob is kept
@@ -105,10 +105,10 @@ test('an old-format database is kept as db-legacy, the wallet is rebuilt and res
   await expect(page.getByTestId('upgrade-rescan')).toHaveText(UPGRADE_APP);
   // The rescan starts at the birthday.
   await expect(status(page)).toHaveText(`Syncing · ${en(TIP - (birthday - 1))} blocks left`);
-  await page.getByRole('button', { name: 'History', exact: true }).click();
+  await nav(page, 'History');
   await expect(page.getByTestId('upgrade-rescan')).toHaveText(UPGRADE_APP);
   // It names the auto-lock time in force: raised to 60 minutes, it says so.
-  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  await nav(page, 'Settings');
   await page.locator('select[name="auto-lock"]').selectOption('60');
   await expect(page.getByTestId('upgrade-rescan')).toHaveText(upgradeApp(60));
 
@@ -131,7 +131,7 @@ test('an old-format database is kept as db-legacy, the wallet is rebuilt and res
   await expect(status(page)).toHaveText(`Up to date · block ${en(TIP + 50)}`, { timeout: 45_000 });
   await expect.poll(() => idb(page, 'db-legacy')).toBeUndefined();
   await expect(page.getByTestId('upgrade-rescan')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Balance', exact: true }).click();
+  await nav(page, 'Balance');
   await expect(page.getByTestId('balance-total')).toContainText('1.75');
 
   // Nothing is rebuilt again, and the lock screen says nothing of a rescan.
@@ -150,7 +150,7 @@ test('the rescan notices in Turkish', async ({ page }) => {
   await lock(page);
   await unlock(page);
   await expect(page.getByTestId('upgrade-rescan')).toBeVisible();
-  await page.getByRole('button', { name: 'Settings' }).click();
+  await nav(page, 'Settings');
   await page.getByRole('button', { name: 'Türkçe' }).click();
   await expect(page.getByTestId('upgrade-rescan')).toHaveText(
     'Celari yeni Zcash ağ kuralları için güncellendi ve bu cüzdanı başlangıç bloğundan itibaren yeniden tarıyor. Bu biraz sürebilir, eski bir cüzdanda bir saati aşabilir; tarama yalnızca Celari’nin kilidi açıkken ilerler: cüzdan kilitlendiğinde (15 dakika işlem yapılmayınca ya da sekme 1 dakika arka planda kalınca) durur, kilidi açınca devam eder. Bitene kadar bu sekmeyi açık ve önde tut ya da Ayarlar’dan otomatik kilit süresini uzat. Paran güvende; bakiye ve geçmiş tarama ilerledikçe tamamlanır.',

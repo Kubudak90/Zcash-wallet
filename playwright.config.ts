@@ -2,7 +2,8 @@ import { defineConfig, devices } from '@playwright/test';
 
 // UI flows run against the dev server with the scripted fake engine
 // (VITE_FAKE_ENGINE=1), so they need neither wasm nor network access.
-const PORT = 5199;
+// PW_PORT lets several checkouts run their suites side by side.
+const PORT = Number(process.env.PW_PORT ?? 5199);
 
 export default defineConfig({
   testDir: 'tests/e2e',

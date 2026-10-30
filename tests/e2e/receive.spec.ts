@@ -2,7 +2,7 @@ import QRCode from 'qrcode';
 import { expect, test, type Page } from '@playwright/test';
 
 import { isShieldedOnlyUnified } from '../../src/lib/address';
-import { PASSWORD, createWallet, fakeEngine, setKnobs } from './helpers';
+import { PASSWORD, createWallet, fakeEngine, nav, setKnobs } from './helpers';
 
 // Receive shows a fresh unified address with shielded receivers only each time it opens
 // (WebZjs get_next_shielded_address, docs/engine-port.md Decision 11); the transparent address stays.
@@ -17,8 +17,8 @@ const note = (page: Page) => page.getByTestId('receive-fresh-note');
 
 /** Opens Receive from another tab and returns the shielded address it shows. */
 async function openReceive(page: Page): Promise<string> {
-  await page.getByRole('button', { name: 'Balance', exact: true }).click();
-  await page.getByRole('button', { name: 'Receive' }).click();
+  await nav(page, 'Balance');
+  await nav(page, 'Receive');
   await expect(address(page)).toHaveText(/^u1/);
   return (await address(page).textContent())!;
 }
@@ -78,9 +78,9 @@ test('each opening of Receive shows a new shielded-only address, which copy and 
   expect([a, b]).not.toContain(c);
   expect(isShieldedOnlyUnified(c)).toBe(true);
 
-  await page.getByRole('button', { name: 'Settings' }).click();
+  await nav(page, 'Settings');
   await page.getByRole('button', { name: 'Türkçe' }).click();
-  await page.getByRole('button', { name: 'Al', exact: true }).click();
+  await nav(page, 'Al');
   await expect(note(page)).toHaveText(
     'Gizliliğin için Celari bu ekranı her açtığında yeni bir adres gösterir. Önceki adreslerin de çalışmaya devam eder.',
   );
@@ -98,7 +98,7 @@ test('earlier addresses keep receiving', async ({ page }) => {
   await fakeEngine(page, { incoming: [a, b, other] });
   await lockAndUnlock(page);
   await expect(page.getByTestId('balance-total')).toContainText('1.95');
-  await page.getByRole('button', { name: 'History', exact: true }).click();
+  await nav(page, 'History');
   await expect(page.getByTestId('history').locator('.tx-received')).toHaveCount(3);
 });
 
@@ -116,8 +116,8 @@ test('while a sync pass holds the database, Receive shows the address it showed 
   await expect(note(page)).toHaveText(FRESH_NOTE);
 
   // The next one waits for the pass to let go of the database.
-  await page.getByRole('button', { name: 'Balance', exact: true }).click();
-  await page.getByRole('button', { name: 'Receive' }).click();
+  await nav(page, 'Balance');
+  await nav(page, 'Receive');
   await expect(page.getByTestId('receive-preparing')).toHaveText('Preparing a new address…');
   await expect(address(page)).toHaveText(b);
   await expect(note(page)).toHaveText(PREVIOUS_NOTE);

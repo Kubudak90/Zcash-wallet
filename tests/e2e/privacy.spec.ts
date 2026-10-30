@@ -4,7 +4,7 @@ import { expect, test, type Page } from '@playwright/test';
 
 import { currentMonth } from '../../src/lib/birthday';
 import { CLEAR_AFTER_MS } from '../../src/lib/clipboard';
-import { PASSWORD, UA, createWallet, fakeEngine, setKnobs } from './helpers';
+import { PASSWORD, UA, createWallet, fakeEngine, nav, setKnobs } from './helpers';
 
 // Hiding balances on screen, and clearing a copied viewing key from the
 // clipboard. The fake wallet holds 1.25 ZEC shielded and 0.50 ZEC
@@ -44,11 +44,11 @@ test('the eye hides every balance, stays on across a lock, and never hides a spe
   await expect(page.getByTestId('balance-total')).not.toContainText(/\d/);
 
   // History and the Send form's balance hints are masked too.
-  await page.getByRole('button', { name: 'History', exact: true }).click();
+  await nav(page, 'History');
   const received = page.getByTestId('history').locator('.tx').first();
   await expect(received.locator('.tx-amount [aria-hidden="true"]')).toHaveText('+••••');
   await expect(page.getByTestId('history')).not.toContainText(/\d[.,]\d{2}/);
-  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await nav(page, 'Send');
   await expect(page.getByText('Spendable shielded balance: •••• ZEC')).toBeVisible();
   await expect(page.getByText('You also have •••• ZEC of transparent funds.')).toBeVisible();
 
@@ -62,7 +62,7 @@ test('the eye hides every balance, stays on across a lock, and never hides a spe
   await expect(page.getByRole('heading', { name: '0.10 ZEC sent' })).toBeVisible({ timeout: 10_000 });
 
   // Off again: 1.75 - 0.1 - 0.0001 fee.
-  await page.getByRole('button', { name: 'Balance' }).click();
+  await nav(page, 'Balance');
   await toggle.click();
   await expect(toggle).toHaveAttribute('aria-pressed', 'false');
   await expect(page.getByTestId('balance-total')).toContainText('1.6499');
@@ -76,7 +76,7 @@ test.describe('a copied viewing key', () => {
 
   /** Shows the viewing key in Settings, copies it and returns it. */
   async function copyViewingKey(page: Page): Promise<string> {
-    await page.getByRole('button', { name: 'Settings' }).click();
+    await nav(page, 'Settings');
     await page.getByRole('button', { name: 'Show viewing key' }).click();
     await page.getByLabel('Password').fill(PASSWORD);
     await page.getByRole('button', { name: 'Reveal' }).click();
@@ -122,7 +122,7 @@ test.describe('a copied viewing key', () => {
     await page.clock.install();
     await createWallet(page);
     await copyViewingKey(page);
-    await page.getByRole('button', { name: 'Receive' }).click();
+    await nav(page, 'Receive');
     await page.getByRole('button', { name: 'Copy' }).click();
     const address = (await page.getByTestId('receive-address').textContent())!;
     await page.clock.fastForward(2 * CLEAR_AFTER_MS);
@@ -132,7 +132,7 @@ test.describe('a copied viewing key', () => {
   test('copied by hand, it is cleared too; other text copied by hand is not', async ({ page }) => {
     await page.clock.install();
     await createWallet(page);
-    await page.getByRole('button', { name: 'Settings' }).click();
+    await nav(page, 'Settings');
     await page.getByRole('button', { name: 'Show viewing key' }).click();
     await page.getByLabel('Password').fill(PASSWORD);
     await page.getByRole('button', { name: 'Reveal' }).click();
@@ -167,9 +167,9 @@ test.describe('a copied viewing key', () => {
 
 test('the eye is named in Turkish too', async ({ page }) => {
   await createWallet(page);
-  await page.getByRole('button', { name: 'Settings' }).click();
+  await nav(page, 'Settings');
   await page.getByRole('button', { name: 'Türkçe' }).click();
-  await page.getByRole('button', { name: 'Bakiye' }).click();
+  await nav(page, 'Bakiye');
   await page.getByRole('button', { name: 'Bakiyeleri gizle' }).click();
   await expect(page.getByTestId('balance-total').locator('.visually-hidden')).toHaveText('tutar gizlendi');
   await expect(page.getByText('•••• ZEC herkesin görebildiği şeffaf adreste duruyor.', { exact: false })).toBeVisible();
@@ -183,7 +183,7 @@ test('fetching full transactions for History can be turned off, and stays off ac
   await createWallet(page);
   // On by default, and the engine is told so before any wallet opens.
   expect(await enhancement(page)).toBe(true);
-  await page.getByRole('button', { name: 'Settings' }).click();
+  await nav(page, 'Settings');
   const box = page.getByRole('checkbox', { name: 'Fetch full transactions for History' });
   await expect(box).toBeChecked();
   await expect(box).toHaveAccessibleDescription(/The server then learns which transactions are yours\./);
@@ -198,7 +198,7 @@ test('fetching full transactions for History can be turned off, and stays off ac
   await expect(page.getByRole('heading', { name: 'Your wallet is locked' })).toBeVisible();
   expect(await enhancement(page)).toBe(false);
   await unlock(page);
-  await page.getByRole('button', { name: 'Settings' }).click();
+  await nav(page, 'Settings');
   await expect(box).not.toBeChecked();
   await box.check();
   await expect.poll(() => enhancement(page)).toBe(true);
@@ -236,7 +236,7 @@ test('a restore can start with full transactions for History off, before its fir
   // Off before the first pass has scanned a block (it waits at its start).
   await expect(page.getByTestId('sync-status')).toHaveText(/Syncing|Connecting/);
   expect(await enhancement(page)).toBe(false);
-  await page.getByRole('button', { name: 'Settings' }).click();
+  await nav(page, 'Settings');
   await expect(page.getByRole('checkbox', { name: 'Fetch full transactions for History' })).not.toBeChecked();
   await setKnobs(page, { holdPass: false });
   // Saved with the browser's settings: still off after a lock.

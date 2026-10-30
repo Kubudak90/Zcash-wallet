@@ -2,7 +2,7 @@ import { sha256 } from '@noble/hashes/sha256';
 import { base58check } from '@scure/base';
 import { expect, test, type Page } from '@playwright/test';
 
-import { PASSWORD, UA, createWallet } from './helpers';
+import { PASSWORD, UA, createWallet, nav } from './helpers';
 
 // History rows carry a privacy label from the pool WebZjs reports. The fake
 // engine reports pools the way WebZjs does: the recipient's pool plus Orchard
@@ -11,7 +11,7 @@ import { PASSWORD, UA, createWallet } from './helpers';
 const T1 = base58check(sha256).encode(new Uint8Array([0x1c, 0xb8, ...new Uint8Array(20).fill(7)]));
 
 async function send(page: Page, to: string, amount: string | 'max') {
-  await page.getByRole('button', { name: 'Send', exact: true }).click();
+  await nav(page, 'Send');
   await page.getByLabel('Recipient address').fill(to);
   if (amount === 'max') await page.getByRole('button', { name: 'Max' }).click();
   else await page.getByLabel('Amount (ZEC)').fill(amount);
@@ -33,7 +33,7 @@ test('each History row says how private it was, in words and not only in colour'
   await send(page, T1, '0.1'); // transparent payment, Orchard change
   await send(page, T1, 'max'); // transparent payment, no change
 
-  await page.getByRole('button', { name: 'History', exact: true }).click();
+  await nav(page, 'History');
   const rows = page.getByTestId('history').locator('.tx');
   const labels = rows.locator('.privacy');
   // Newest first.
@@ -59,9 +59,9 @@ test('each History row says how private it was, in words and not only in colour'
   const marks = await labels.locator('[aria-hidden="true"]').allTextContents();
   expect(new Set(marks).size).toBe(3);
 
-  await page.getByRole('button', { name: 'Settings' }).click();
+  await nav(page, 'Settings');
   await page.getByRole('button', { name: 'Türkçe' }).click();
-  await page.getByRole('button', { name: 'Geçmiş', exact: true }).click();
+  await nav(page, 'Geçmiş');
   await expect(labels).toHaveText([
     /Gizlilik: Şeffaf · herkese açık$/,
     /Gizlilik: Kısmen gizli$/,
