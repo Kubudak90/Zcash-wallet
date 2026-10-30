@@ -62,7 +62,12 @@ export default defineConfig({
     exclude: ['@chainsafe/webzjs-wallet', '@chainsafe/webzjs-keys'],
   },
   worker: { format: 'es', plugins: () => [webzjsNestedWorkers(), webzjsNoEval()] },
-  build: { target: 'es2022' },
+  build: {
+    target: 'es2022',
+    // Fonts always ship as files: Vite would inline a small one as a data: URL,
+    // which the CSP above (default-src 'self', no font-src) refuses.
+    assetsInlineLimit: (file) => (/\.woff2?$/i.test(file) ? false : undefined),
+  },
   server: { headers: isolationHeaders },
   preview: { headers: isolationHeaders },
 });

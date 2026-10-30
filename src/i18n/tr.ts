@@ -317,5 +317,6 @@ export const tr: Record<MessageKey, string> = {
     'Celari açık kaynaktır (MIT / Apache-2.0) ve ChainSafe’in WebZjs kütüphanesi üzerine kuruludur. Token yok, puan yok, airdrop vaadi yok.',
   'settings.source': 'Kaynak kod',
   'settings.licenses': 'Üçüncü taraf lisansları (cüzdan motoru)',
+  'settings.fontLicenses': 'Yazı tipi lisansları',
   'settings.version': 'Sürüm {v}',
 };

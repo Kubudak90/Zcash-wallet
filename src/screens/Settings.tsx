@@ -318,6 +318,12 @@ export function Settings() {
             {t('settings.licenses')}
           </a>
         </p>
+        <p className="small">
+          {/* The typefaces' SIL OFL notices, which must go with the font files (public/FONT_LICENSES.txt). */}
+          <a href={`${import.meta.env.BASE_URL}FONT_LICENSES.txt`} target="_blank" rel="noreferrer noopener">
+            {t('settings.fontLicenses')}
+          </a>
+        </p>
       </section>
     </Screen>
   );
