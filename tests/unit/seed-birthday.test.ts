@@ -176,7 +176,7 @@ describe('i18n', () => {
 
   it('keeps placeholders consistent across languages', () => {
     const vars = (s: string) => [...s.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
-    for (const key of Object.keys(tr) as (keyof typeof tr)[]) {
+    for (const key of Object.keys(en) as (keyof typeof en)[]) {
       expect(vars(en[key]), key).toEqual(vars(tr[key]));
     }
   });

@@ -45,9 +45,13 @@ export interface Settings {
 
 export const DEFAULT_SERVER = import.meta.env.VITE_DEFAULT_LIGHTWALLETD || 'https://zcash-mainnet.chainsafe.dev';
 
+/**
+ * English is the primary language, whatever the browser's: Turkish is one tap
+ * away on Welcome, Unlock and Settings. A language chosen earlier is stored
+ * with the settings and still wins (getSettings spreads it over these).
+ */
 export function defaultSettings(): Settings {
-  const lang = typeof navigator !== 'undefined' && navigator.language.toLowerCase().startsWith('tr') ? 'tr' : 'en';
-  return { lang, serverUrl: DEFAULT_SERVER, autoLockMinutes: 15, hideBalances: false, historyEnhancement: true };
+  return { lang: 'en', serverUrl: DEFAULT_SERVER, autoLockMinutes: 15, hideBalances: false, historyEnhancement: true };
 }
 
 /** Puts and deletes keys in one IndexedDB transaction: all of them happen, or none. */

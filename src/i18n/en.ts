@@ -1,6 +1,6 @@
-import type { MessageKey } from './tr';
+// English source strings: the primary language and the key source. tr.ts must have the same keys (type-checked).
 
-export const en: Record<MessageKey, string> = {
+export const en = {
   'common.continue': 'Continue',
   'common.back': 'Back',
   'common.cancel': 'Cancel',
@@ -315,4 +315,6 @@ export const en: Record<MessageKey, string> = {
   'settings.source': 'Source code',
   'settings.licenses': 'Third-party licences (wallet engine)',
   'settings.version': 'Version {v}',
-};
+} as const;
+
+export type MessageKey = keyof typeof en;
