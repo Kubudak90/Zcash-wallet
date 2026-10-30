@@ -23,12 +23,20 @@ export const tr: Record<MessageKey, string> = {
     'Bu tarayıcı Celari’nin ihtiyaç duyduğu çoklu iş parçacığı desteğini (SharedArrayBuffer) sunmuyor ya da sayfa gerekli güvenlik başlıklarıyla sunulmuyor. Güncel bir Chrome, Firefox, Edge veya Safari deneyin.',
   'boot.retry': 'Tekrar dene',
 
-  'welcome.tagline': 'Zcash için açık kaynak, gizlilik öncelikli tarayıcı cüzdanı.',
+  'welcome.eyebrow': 'Zcash cüzdanı',
+  'welcome.tagline': 'Zcash için açık kaynak, *gizlilik öncelikli* tarayıcı cüzdanı.',
   'welcome.create': 'Yeni cüzdan oluştur',
   'welcome.restore': 'Var olan cüzdanı geri yükle',
   'welcome.pillar1': 'Anahtarların tarayıcından çıkmaz, şifreyle kilitlenir',
   'welcome.pillar2': 'Varsayılan olarak gizli (shielded) adres',
   'welcome.pillar3': 'Açık kaynak · Token yok · Airdrop vaadi yok',
+  'welcome.getStarted': 'Başlayalım',
+  'welcome.getStartedSub': 'Celari’yi bu tarayıcıda kur.',
+  'welcome.createSub': 'Şifrenle kilitlenen 24 yeni kurtarma kelimesi.',
+  'welcome.restoreSub': 'Kurtarma kelimeleri · Sadece izleme',
+  'welcome.footer': 'MIT / Apache-2.0 · ChainSafe WebZjs tabanlı',
+
+  'flow.step': 'Adım {n} / {total}',
 
   'create.seedTitle': 'Kurtarma kelimelerin',
   'create.seedIntro': 'Bu 24 kelime cüzdanının tek yedeği. Sırasıyla kağıda yaz ve güvenli bir yerde sakla.',
@@ -85,6 +93,7 @@ export const tr: Record<MessageKey, string> = {
   'unlock.unlocking': 'Açılıyor…',
   'unlock.wrongPassword': 'Şifre yanlış.',
   'unlock.forgot': 'Şifremi unuttum',
+  'unlock.enterHint': 'Kilidi açmak için {key} tuşuna bas',
   'unlock.forgotHelp':
     'Şifreyi kurtarmanın yolu yok. Cüzdanı bu tarayıcıdan silip kurtarma kelimelerinle yeniden yükleyebilirsin.',
   'unlock.forgotHelpView':
@@ -296,10 +305,13 @@ export const tr: Record<MessageKey, string> = {
     'Etiketler yalnızca bu cüzdanın kendi çıktılarına bakar (aldığı, gönderdiği ya da para üstü olarak geri aldığı tutarlar), işlemin geri kalanına bakmaz. Şeffaf girdiler, bu cüzdanınkiler de dahil, her zaman herkese açıktır.',
 
   'settings.title': 'Ayarlar',
+  'settings.sections': 'Bu sayfada',
+  'settings.general': 'Genel',
   'settings.language': 'Dil',
   'settings.server': 'Sunucu (lightwalletd gRPC-web proxy)',
   'settings.serverHelp':
     'Sunucu IP adresini ve gönderdiğin işlemleri görebilir. Gizlilik altındaki “Geçmiş için işlemlerin tamamını getir” kapalı değilse Celari kendi işlemlerinin tamamını da ondan ister (notlar için, geri yüklemeden sonra ücret ve alıcılar için); bu yüzden sunucu hangi işlemlerin senin olduğunu anlayabilir. Her iki durumda da gönderdiğin her ödemeyi onaylanana kadar ona sorar. Gizli bakiyeni ve kimden para aldığını göremez. Kendi sunucunu da çalıştırabilirsin.',
+  'settings.serverShort': 'Sunucu',
   'settings.serverSave': 'Kaydet ve yeniden başlat',
   'settings.serverReset': 'Varsayılana dön',
   'settings.serverInvalid': 'https:// ile başlayan geçerli bir adres gir.',
@@ -308,15 +320,19 @@ export const tr: Record<MessageKey, string> = {
   'settings.historyEnhancementHelp':
     'Açıkken Celari kendi işlemlerinin her birini sunucudan tam olarak ister: notları için ve geri yüklemeden sonra geçmiş ödemelerin alıcıları ve ücretleri için. Sunucu böylece hangi işlemlerin senin olduğunu öğrenir. Kapalıyken bunu bu yoldan öğrenmez, ama Geçmiş’te notlar görünmez ve geri yüklemeden sonra geçmiş ödemeler yalnızca net tutarlarıyla görünür; yeniden açınca eksikler getirilir. Her iki durumda da Celari gönderdiğin bir ödemeyi onaylanana kadar sunucuya sorar, en fazla 5 dakikada bir.',
   'settings.autoLock': 'Otomatik kilit',
-  'settings.minutes': '{n} dakika işlem yapılmazsa',
-  'settings.autoLockHidden': 'Cüzdan, bu sekme 1 dakika arka planda kalınca da kilitlenir.',
+  'settings.autoLockHelp':
+    'Celari bu süre boyunca hiçbir işlem yapılmazsa kilitlenir. Sekme 1 dakika arka planda kalınca da kilitlenir.',
+  'settings.minutesShort': '{n} dakika',
   'settings.security': 'Güvenlik',
+  'settings.viewingKey': 'Görüntüleme anahtarı',
   'settings.showViewingKey': 'Görüntüleme anahtarını göster',
   'settings.viewingKeyHelp':
     'Bu anahtara sahip olan herkes geçmiş ve gelecekteki tüm işlemlerini ve notlarını görebilir ama harcama yapamaz. Geri alınamaz; yalnızca tamamen güvendiğin biriyle paylaş.',
   'settings.clipboardClear':
     'Celari panoyu kopyalamadan 60 saniye sonra temizlemeye çalışır. Tarayıcılar buna yalnızca bu sekme öndeyken izin verir; bu yüzden temizlik sekmeye döndüğünde olabilir, sekmeyi önce kapatırsan hiç olmaz. Bu arada başka bir uygulamada kopyaladığın bir şey de temizlenebilir.',
   'settings.clipboardCleared': 'Pano temizlendi.',
+  'settings.seed': 'Kurtarma kelimeleri',
+  'settings.seedHelp': 'Bu cüzdanı geri yükleyen 24 kelime. Onlara sahip olan herkes paranı harcayabilir.',
   'settings.showSeed': 'Kurtarma kelimelerini göster',
   'settings.reveal': 'Göster',
   'settings.danger': 'Tehlikeli bölge',

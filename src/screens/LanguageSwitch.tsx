@@ -1,3 +1,4 @@
+import { Icon } from '../components/icons';
 import { useI18n, type Lang } from '../i18n';
 import { useController, useWallet } from '../state/wallet';
 
@@ -7,12 +8,14 @@ const LANGS: { code: Lang; label: string }[] = [
   { code: 'tr', label: 'Türkçe' },
 ];
 
-export function LanguageSwitch() {
+/** `withIcon`: a globe in front, where the switch stands on its own (Welcome, the lock screen). */
+export function LanguageSwitch({ withIcon = false }: { withIcon?: boolean }) {
   const { lang, t } = useI18n();
   const controller = useController();
   const { settings } = useWallet();
   return (
     <div className="lang-switch" role="group" aria-label={t('settings.language')}>
+      {withIcon && <Icon name="globe" className="lang-globe" />}
       {LANGS.map((l) => (
         <button
           key={l.code}

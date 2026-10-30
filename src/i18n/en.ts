@@ -21,12 +21,21 @@ export const en = {
     'This browser does not provide the multi-threading support Celari needs (SharedArrayBuffer), or the page is not served with the required security headers. Try a recent Chrome, Firefox, Edge or Safari.',
   'boot.retry': 'Try again',
 
-  'welcome.tagline': 'An open-source, privacy-first browser wallet for Zcash.',
+  'welcome.eyebrow': 'Zcash wallet',
+  // The words between the stars are set in italic.
+  'welcome.tagline': 'An open-source, *privacy-first* browser wallet for Zcash.',
   'welcome.create': 'Create a new wallet',
   'welcome.restore': 'Restore an existing wallet',
   'welcome.pillar1': 'Your keys never leave your browser and are locked with a password',
   'welcome.pillar2': 'Shielded address by default',
   'welcome.pillar3': 'Open source · No token · No airdrop promises',
+  'welcome.getStarted': 'Get started',
+  'welcome.getStartedSub': 'Set up Celari in this browser.',
+  'welcome.createSub': 'A new 24-word recovery phrase, locked with your password.',
+  'welcome.restoreSub': 'Recovery phrase · View only',
+  'welcome.footer': 'MIT / Apache-2.0 · Built on ChainSafe’s WebZjs',
+
+  'flow.step': 'Step {n} of {total}',
 
   'create.seedTitle': 'Your recovery phrase',
   'create.seedIntro': 'These 24 words are the only backup of your wallet. Write them down in order and keep them safe.',
@@ -83,6 +92,7 @@ export const en = {
   'unlock.unlocking': 'Unlocking…',
   'unlock.wrongPassword': 'Wrong password.',
   'unlock.forgot': 'I forgot my password',
+  'unlock.enterHint': 'Press {key} to unlock',
   'unlock.forgotHelp':
     'There is no way to recover the password. You can remove the wallet from this browser and restore it from your recovery phrase.',
   'unlock.forgotHelpView':
@@ -294,10 +304,13 @@ export const en = {
     'Labels look only at this wallet’s own outputs (what it received, sent or got back as change), not at the rest of each transaction. Transparent inputs, this wallet’s own included, are always public.',
 
   'settings.title': 'Settings',
+  'settings.sections': 'On this page',
+  'settings.general': 'General',
   'settings.language': 'Language',
   'settings.server': 'Server (lightwalletd gRPC-web proxy)',
   'settings.serverHelp':
     'The server can see your IP address and the transactions you broadcast. Unless you turn off “Fetch full transactions for History” under Privacy, Celari also asks it for your own transactions in full (for memos, and for fees and recipients after a restore), so it can tell which transactions are yours. Either way it asks about each payment you sent until it is confirmed. It cannot see your shielded balance or who paid you. You can run your own.',
+  'settings.serverShort': 'Server',
   'settings.serverSave': 'Save and restart',
   'settings.serverReset': 'Reset to default',
   'settings.serverInvalid': 'Enter a valid address starting with https://.',
@@ -306,15 +319,19 @@ export const en = {
   'settings.historyEnhancementHelp':
     'On: Celari asks the server for each of your own transactions in full, for their memos and, after a restore, for the recipients and fees of past payments. The server then learns which transactions are yours. Off: it does not learn that this way, but History shows no memos and, after a restore, past payments by their net amount only; turning it on again fetches what is missing. Either way Celari asks the server about a payment you sent until it is confirmed, at most every 5 minutes.',
   'settings.autoLock': 'Auto-lock',
-  'settings.minutes': 'after {n} minutes of inactivity',
-  'settings.autoLockHidden': 'The wallet also locks once this tab has been in the background for 1 minute.',
+  'settings.autoLockHelp':
+    'How long Celari waits without activity before it locks. It also locks once this tab has been in the background for 1 minute.',
+  'settings.minutesShort': '{n} minutes',
   'settings.security': 'Security',
+  'settings.viewingKey': 'Viewing key',
   'settings.showViewingKey': 'Show viewing key',
   'settings.viewingKeyHelp':
     'Anyone with this key can see all your past and future transactions and memos, but cannot spend. It cannot be revoked; share it only with someone you fully trust.',
   'settings.clipboardClear':
     'Celari tries to clear the clipboard 60 seconds after copying. Browsers allow that only while this tab is in front, so it may happen later, when you come back, or not at all if you close the tab first. Anything you copy in another app meanwhile may be cleared instead.',
   'settings.clipboardCleared': 'Clipboard cleared.',
+  'settings.seed': 'Recovery phrase',
+  'settings.seedHelp': 'The 24 words that restore this wallet. Anyone who has them can spend your funds.',
   'settings.showSeed': 'Show recovery phrase',
   'settings.reveal': 'Reveal',
   'settings.danger': 'Danger zone',
