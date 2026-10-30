@@ -22,6 +22,12 @@ test('the eye hides every balance, stays on across a lock, and never hides a spe
   const toggle = page.getByRole('button', { name: 'Hide balances' });
   await expect(toggle).toHaveAttribute('aria-pressed', 'false');
   await expect(page.getByTestId('balance-total')).toContainText('1.75');
+  // Shown, the rule under the figure splits shielded from transparent by their sizes.
+  const split = page.locator('main .split > span');
+  await expect(split).toHaveCount(2);
+  await expect(page.locator('main [style*="flex-grow"]')).toHaveCount(2);
+  // And Recent activity sizes its fraction column to the widest amount.
+  await expect(page.locator('main [style*="--tx-frac"]')).toHaveCount(1);
 
   await toggle.click();
   await expect(toggle).toHaveAttribute('aria-pressed', 'true');
@@ -33,6 +39,12 @@ test('the eye hides every balance, stays on across a lock, and never hides a spe
     await expect(amount.locator('[aria-hidden="true"]')).toHaveText('••••');
     await expect(amount.locator('.visually-hidden')).toHaveText('amount hidden');
   }
+  // Hidden, the rule is one plain segment: no share of either pool is drawn.
+  await expect(split).toHaveCount(1);
+  await expect(split).toHaveClass('split-none');
+  await expect(page.locator('main [style*="flex-grow"]')).toHaveCount(0);
+  // Nor does the activity list's layout say how many decimals its amounts have.
+  await expect(page.locator('main [style*="--tx-frac"]')).toHaveCount(0);
   await expect(page.getByText('•••• ZEC sits on a public transparent address.')).toBeVisible();
   // The threshold is the network's, not the wallet's, and stays readable.
   await expect(page.locator('main')).not.toContainText(/1[.,]75|1[.,]25|0[.,]50/);

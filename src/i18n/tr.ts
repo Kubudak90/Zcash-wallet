@@ -120,6 +120,7 @@ export const tr: Record<MessageKey, string> = {
   'nav.history': 'Geçmiş',
   'nav.settings': 'Ayarlar',
   'nav.lock': 'Kilitle',
+  'nav.network': 'Ana ağ',
 
   'sync.starting': 'Ağa bağlanılıyor…',
   'sync.syncing': 'Eşitleniyor · {blocks} blok kaldı',
@@ -145,6 +146,7 @@ export const tr: Record<MessageKey, string> = {
     '{height}. blokta ağ {upgrade} kurallarına geçiyor; Celari’nin bu sürümü bunu desteklemiyor. O andan itibaren Celari güncellenene kadar gönderme ve gizliye aktarma kapanır.',
 
   'home.total': 'Toplam bakiye',
+  'home.balanceWaiting': 'Bakiyen eşitleme ilerledikçe görünür',
   'home.hideBalances': 'Bakiyeleri gizle',
   'home.shielded': 'Gizli',
   'home.shieldedHelp': 'Ironwood + Orchard + Sapling. Tutar ve taraflar zincirde görünmez.',
