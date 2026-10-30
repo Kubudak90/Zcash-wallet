@@ -101,8 +101,13 @@ button.chip.active {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  padding: max(20px, env(safe-area-inset-top)) max(20px, calc((100% - 680px) / 2)) 28px;
+  /* The top inset puts the brand's centre on the language switch's (.w-lang: 13 + 40 / 2). */
+  padding: max(16px, env(safe-area-inset-top)) max(20px, calc((100% - 680px) / 2)) 28px;
   border-bottom: 1px solid var(--border);
+}
+
+.w-brand .brand-lockup {
+  --brand-h: 34px;
 }
 
 .w-brand > :not(.w-motif) {
@@ -442,14 +447,15 @@ button.option-button::after {
     grid-template-columns: minmax(0, 1.18fr) minmax(440px, 1fr);
   }
 
+  /* The brand's centre on the language switch's again (32 + 40 / 2). */
   .w-brand {
-    padding: 40px clamp(40px, 5vw, 80px) 44px;
+    padding: 33px clamp(40px, 5vw, 80px) 44px;
     border-right: 1px solid var(--border);
     border-bottom: 0;
   }
 
   .w-brand .brand-lockup {
-    --brand-h: 32px;
+    --brand-h: 38px;
   }
 
   /* Beside the statement, the letter's mouth and facet well inside the panel at every width. */
@@ -572,7 +578,7 @@ button.option-button::after {
 }
 
 .flow-top .brand-lockup {
-  --brand-h: 26px;
+  --brand-h: 30px;
 }
 
 .flow-step {
@@ -679,7 +685,7 @@ button.option-button::after {
   }
 
   .flow-top .brand-lockup {
-    --brand-h: 28px;
+    --brand-h: 32px;
   }
 
   /* The letter to the left of the card, its mouth towards it. */
@@ -902,7 +908,7 @@ button.option-button::after {
 }
 
 .lock-top .brand-lockup {
-  --brand-h: 26px;
+  --brand-h: 30px;
 }
 
 .lock-center {
@@ -1084,7 +1090,7 @@ button.lock-forgot:hover {
   }
 
   .lock-top .brand-lockup {
-    --brand-h: 28px;
+    --brand-h: 32px;
   }
 
   .lock-motif,

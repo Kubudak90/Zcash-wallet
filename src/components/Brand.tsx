@@ -6,11 +6,12 @@
 // Always decorative: the name is text next to it, or visually hidden text.
 
 /**
- * One drawing per size range, each in a 64 x 64 box: the full mark with its
- * two folds from 48 px, one wide fold from 24 to 40 px (finer folds blur into
- * grey hairlines there) and the bare silhouette at 16 to 20 px.
+ * One drawing per size range, each in a 64 x 64 box: the full mark from 48 px;
+ * the same mark with every fold and the gold crescent, drawn larger in its box
+ * and with wider fold gaps so they stay gaps (not grey hairlines), from 21 to
+ * 47 px; and the bare silhouette at 16 to 20 px.
  */
-export type MarkMaster = 'full' | 'small' | '16';
+export type MarkMaster = 'full' | 'ui' | '16';
 
 interface MasterPaths {
   body: string;
@@ -25,9 +26,11 @@ export const MASTERS: Record<MarkMaster, MasterPaths> = {
     facet: 'M28.868 24.331A32.632 32.632 0 0 0 31.561 46.913A34.025 34.025 0 0 1 19.213 32.629A90.381 90.381 0 0 1 28.868 24.331Z',
     crop: '11 6.626 42.242 50.747',
   },
-  small: {
-    body: 'M8 38.084L8 20.639A4.866 4.866 0 0 1 10.288 16.512L26.047 6.665C31.733 3.112 34.576 3.112 40.262 6.665L54.308 15.442A2.433 2.433 0 0 1 54.615 19.342L45.275 27.461A1.217 1.217 0 0 1 43.832 27.575L30.204 19.059L28.768 20.065A134.491 134.491 0 0 0 8.827 37.159A17.848 17.848 0 0 0 8 38.084ZM8 43.361L9.258 41.424A14.848 14.848 0 0 1 10.993 39.235A131.491 131.491 0 0 1 27.454 24.713A36.009 36.009 0 0 0 29.33 45.487L43.832 36.425A1.217 1.217 0 0 1 45.275 36.539L54.615 44.658A2.433 2.433 0 0 1 54.308 48.558L40.262 57.335C34.576 60.888 31.733 60.888 26.047 57.335L10.288 47.488A4.866 4.866 0 0 1 8 43.361Z',
-    facet: 'M27.454 24.713A36.009 36.009 0 0 0 31.501 49.949A37.509 37.509 0 0 1 16.342 33.965A131.491 131.491 0 0 1 27.454 24.713Z',
+  ui: {
+    // The full mark's construction redrawn to fill 56 of the 64 box, its fold
+    // gaps 2.0 wide (1.27 in 'full'): at least one pixel from a 28 px lockup up.
+    body: 'M43.832 27.575L30.169 19.037A20.005 20.005 0 0 0 23.703 16.43A89.747 89.747 0 0 0 12.975 14.833L26.047 6.665C31.733 3.112 34.576 3.112 40.262 6.665L54.308 15.442A2.433 2.433 0 0 1 54.615 19.342L45.275 27.461A1.217 1.217 0 0 1 43.832 27.575ZM8 39.773L8 21.718A4.866 4.866 0 0 1 13.319 16.872A87.747 87.747 0 0 1 23.29 18.386A18.005 18.005 0 0 1 28.884 20.595A111.067 111.067 0 0 0 9.182 38.308A23.451 23.451 0 0 0 8 39.773ZM8 43.361L8.839 42.07A21.451 21.451 0 0 1 10.687 39.625A109.067 109.067 0 0 1 15.726 34.246A38.983 38.983 0 0 0 31.381 50.933A106.641 106.641 0 0 0 42.005 56.246L40.262 57.335C34.576 60.888 31.733 60.888 26.047 57.335L10.288 47.488A4.866 4.866 0 0 1 8 43.361ZM31.054 44.41L43.832 36.425A1.217 1.217 0 0 1 45.275 36.539L54.615 44.658A2.433 2.433 0 0 1 54.308 48.558L44.073 54.953L43.429 54.68A104.641 104.641 0 0 1 33.893 50.049A34.009 34.009 0 0 1 31.054 44.41Z',
+    facet: 'M27.612 23.984A36.009 36.009 0 0 0 30.475 48.034A36.983 36.983 0 0 1 17.236 32.769A109.067 109.067 0 0 1 27.612 23.984Z',
     crop: '8 4 46.615 56',
   },
   '16': {
@@ -42,7 +45,7 @@ export const MASTERS: Record<MarkMaster, MasterPaths> = {
 export function masterFor(size: number): MarkMaster {
   if (size >= 48) return 'full';
   if (size <= 20) return '16';
-  return 'small';
+  return 'ui';
 }
 
 type Variant = 'auto' | MarkMaster;
@@ -119,21 +122,21 @@ export function Wordmark({ height = 15, className }: { height?: number; classNam
 }
 
 /** The lockup's height before the stylesheet sizes it (the default --brand-h). */
-const LOCKUP_FALLBACK_H = 28;
+const LOCKUP_FALLBACK_H = 30;
 
 /**
  * Mark and name side by side, in the proportions of the logo files: the name's
  * capitals 0.52 of the mark's height and centred on it, 0.31 of that height
  * between them. How tall it is shown is set in one place, the stylesheet's
  * --brand-h per placement (styles.css, .brand-lockup). The drawing is chosen
- * here, not from that size: the one-fold mark of lockup-horizontal-ui.svg, for
- * UI sizes (masterFor's 'small' range), unless a placement passes `master`
+ * here, not from that size: the 'ui' mark, for UI sizes (masterFor's 'ui'
+ * range, lockups up to 41 px tall), unless a placement passes `master`
  * ('full' is the large lockup's). tests/unit/brand.test.ts keeps every
  * --brand-h in the default drawing's range. The name is drawn, so its text is
  * there for screen readers (and for anything that reads the brand's text) in a
  * hidden span.
  */
-export function BrandLockup({ master = 'small', className }: { master?: MarkMaster; className?: string }) {
+export function BrandLockup({ master = 'ui', className }: { master?: MarkMaster; className?: string }) {
   return (
     <span className={className ? `brand-lockup ${className}` : 'brand-lockup'}>
       <MarkSvg
