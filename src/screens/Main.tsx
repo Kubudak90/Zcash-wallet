@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
+import { BrandLockup } from '../components/Brand';
 import { Icon, type IconName } from '../components/icons';
 import { Notice } from '../components/ui';
 import { useI18n, type MessageKey } from '../i18n';
@@ -134,8 +135,7 @@ export function Main() {
       <div className="side">
         <header className="topbar" ref={topbar}>
           <div className="topbar-brand">
-            <img src="/celari.svg" alt="" width={30} height={30} />
-            <span>Celari</span>
+            <BrandLockup size={28} />
           </div>
           <SyncPill />
           {/*

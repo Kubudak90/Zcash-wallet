@@ -1,8 +1,9 @@
 import { Fragment, useId } from 'react';
 
+import { BrandLockup } from '../components/Brand';
 import { Icon, type IconName } from '../components/icons';
 import { useI18n } from '../i18n';
-import { BrandMark, EngravedC } from './AccountLayout';
+import { EngravedC } from './AccountLayout';
 import { LanguageSwitch } from './LanguageSwitch';
 
 const SOURCE_URL = 'https://github.com/Kubudak90/zcash-wallet';
@@ -62,7 +63,7 @@ export function Welcome({ onCreate, onRestore }: { onCreate: () => void; onResto
     <div className="welcome">
       <section className="w-brand" aria-labelledby={ids.title}>
         <EngravedC className="w-motif" />
-        <BrandMark />
+        <BrandLockup size={32} />
         <div className="w-statement">
           <p className="eyebrow w-eyebrow">{t('welcome.eyebrow')}</p>
           <h1 className="w-title" id={ids.title}>

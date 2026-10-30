@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 
+import { BrandLockup } from '../components/Brand';
 import { Icon } from '../components/icons';
 import { ErrorDetails, Notice, PasswordField, Spinner } from '../components/ui';
 import { NewerDatabaseFormatError } from '../engine';
@@ -8,7 +9,7 @@ import { WrongPasswordError } from '../lib/vault';
 import { clearAutoLocked, useAutoLockReason } from '../state/autoLockNotice';
 import { WalletDataError } from '../state/controller';
 import { useController, useWallet } from '../state/wallet';
-import { BrandMark, EngravedC } from './AccountLayout';
+import { EngravedC } from './AccountLayout';
 import { LanguageSwitch } from './LanguageSwitch';
 import { NetworkBanner } from './NetworkBanner';
 import { WipeWallet } from './Settings';
@@ -68,7 +69,7 @@ export function Unlock() {
     <div className="lock-page">
       <EngravedC className="lock-motif" />
       <header className="lock-top">
-        <BrandMark />
+        <BrandLockup />
         <LanguageSwitch withIcon />
       </header>
       <div className="lock-center">

@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 
+import { BrandLockup, BrandMark } from './components/Brand';
 import { Spinner } from './components/ui';
 import { LangProvider, useI18n } from './i18n';
 import { HIDDEN_LOCK_MS, dueAutoLock } from './lib/autoLock';
 import { watchClipboard } from './lib/clipboard';
-import { BrandMark, EngravedC } from './screens/AccountLayout';
+import { EngravedC } from './screens/AccountLayout';
 import { CreateWallet } from './screens/CreateWallet';
 import { Main } from './screens/Main';
 import { RestoreWallet } from './screens/RestoreWallet';
@@ -86,7 +87,7 @@ function Booting() {
     <div className="boot">
       <EngravedC className="boot-motif" />
       <div className="boot-body">
-        <img src="/celari.svg" alt="" width={56} height={56} className="logo pulse" />
+        <BrandMark size={72} className="boot-mark pulse" />
         <p className="boot-status">
           <Spinner /> {t('boot.loading')}
         </p>
@@ -101,7 +102,7 @@ function BootError({ error }: { error: string | null }) {
     <div className="boot">
       <EngravedC className="boot-motif" />
       <section className="boot-card" aria-labelledby="boot-error-title">
-        <BrandMark />
+        <BrandLockup />
         <h1 id="boot-error-title">{t('boot.errorTitle')}</h1>
         <p className="muted">{error === 'isolation' ? t('boot.errorIsolation') : t('common.genericError')}</p>
         {error && error !== 'isolation' && <code className="error-code">{error}</code>}

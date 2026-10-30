@@ -36,6 +36,8 @@
   --accent-mark: #f4b728;
   --accent-line: rgba(244, 183, 40, 0.36);
   --focus: #f4b728;
+  /* The logo's facet (src/components/Brand.tsx): gold on obsidian. */
+  --brand-facet: #f4b728;
 
   /* Meaning. Shielded is sage, transparent copper, both always with words and
      marks. --warn is a desaturated sand, for pending and warnings: well away
@@ -92,6 +94,8 @@
     --accent-mark: #a87b0d;
     --accent-line: rgba(168, 123, 13, 0.42);
     --focus: #94690a;
+    /* Gold is too weak on ivory paper: the mark is one ink here. */
+    --brand-facet: currentColor;
     --ok: #2a6e4c;
     --shielded: #2a6e4c;
     --transparent: #9c4d28;
@@ -221,6 +225,35 @@ svg {
   flex: none;
   width: 20px;
   height: 20px;
+}
+
+/* The logo (src/components/Brand.tsx): the body in the text colour, the facet in --brand-facet. */
+.brand-facet {
+  fill: var(--brand-facet);
+}
+
+/* Mark and name in the logo files' proportions, from the mark's height. */
+.brand-lockup {
+  --brand-h: 28px;
+  display: inline-flex;
+  align-items: flex-start;
+  flex: none;
+  color: var(--text);
+}
+
+.brand-lockup-mark {
+  flex: none;
+  width: calc(var(--brand-h) * 0.8324);
+  height: var(--brand-h);
+}
+
+/* Capitals 0.52 of the mark, centred on it; the top on a whole pixel keeps the baseline crisp. */
+.brand-lockup-name {
+  flex: none;
+  width: calc(var(--brand-h) * 1.8674);
+  height: calc(var(--brand-h) * 0.5423);
+  margin: calc(var(--brand-h) * 0.2251) 0 0 calc(var(--brand-h) * 0.3115);
+  margin-top: round(calc(var(--brand-h) * 0.2251), 1px);
 }
 
 /* Focus is an outline in the focus colour everywhere (a11y.spec reads it on fields). */
@@ -1239,23 +1272,12 @@ ul.plain li + li {
 .topbar-brand {
   display: flex;
   align-items: center;
-  gap: 10px;
   flex: none;
   margin-right: auto;
 }
 
-.topbar-brand img {
-  width: 28px;
-  height: 28px;
-}
-
-.topbar-brand span {
-  font-family: var(--font-display);
-  font-optical-sizing: auto;
-  font-size: 1.3rem;
-  font-weight: 430;
-  letter-spacing: -0.01em;
-  line-height: 1;
+.topbar-brand .brand-lockup {
+  --brand-h: 26px;
 }
 
 /* The sync status: one line that gives way first (the full label stays in its text and tooltip). */
@@ -1460,16 +1482,11 @@ ul.plain li + li {
   }
 }
 
-/* On the narrowest phones the logo stands for the name, so the pill and Lock
-   keep their line; screen readers still get the name. */
+/* On the narrowest phones the mark stands for the name, so the pill and Lock
+   keep their line; screen readers still get the name (the lockup's hidden text). */
 @media (max-width: 379px) {
-  .topbar-brand > span {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    white-space: nowrap;
+  .topbar-brand .brand-lockup-name {
+    display: none;
   }
 }
 
@@ -1544,19 +1561,13 @@ ul.plain li + li {
 
   .topbar-brand {
     grid-area: brand;
-    gap: 11px;
     min-width: 0;
     margin: 0;
     padding: 0 0 0 8px;
   }
 
-  .topbar-brand img {
-    width: 30px;
-    height: 30px;
-  }
-
-  .topbar-brand span {
-    font-size: 1.375rem;
+  .topbar-brand .brand-lockup {
+    --brand-h: 28px;
   }
 
   .lock-button {
