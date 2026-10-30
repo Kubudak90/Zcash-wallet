@@ -2,7 +2,7 @@
 
 Interim record of the review started on 2026-10-30 (branch `claude/core-engine-review`), saved so that no progress is lost if the session stops. Findings are as reported by each lens reviewer; "Verified" is the independent refuting verifier's verdict where it has finished. Polish items are not verified. Nothing here is fixed yet; fixes and the final decisions go to docs/engine-port.md (review round 7).
 
-Progress: 6/6 lens reviews; 31 findings (0 critical, 8 major, 19 minor, 4 polish); 20/27 non-polish findings verified, 20 confirmed real, 0 refuted.
+Progress: 6/6 lens reviews; 31 findings (0 critical, 8 major, 19 minor, 4 polish); 21/27 non-polish findings verified, 21 confirmed real, 0 refuted.
 
 ## State and how to continue (if this session stops)
 
@@ -1043,7 +1043,53 @@ If detection is kept, it can only be a hint: patch WebZjs to cap `end` at the ti
 - Scenario: A new wallet's birthday is tip - 10 blocks before NU7 (tip - 30 after), using the tip one pool member reported (CreateWallet.tsx:142, birthday.ts:76). If the first pass's GetLatestBlock comes from a member 12 or more blocks behind, chain_end = new_tip + 1 is below the birthday. The probe shows: 'BlockHeight(3535990)..BlockHeight(3535989) is invalid for ScanRange(Historic)' panic. In wasm that is a trap on the sync worker: CrashWatch reports EngineStoppedError, and after a reload the next pass traps again until the lagging member catches up. A malicious server can cause this at will, and SYNC-1's inflated birthday makes it permanent on an honest server.
 - Impact: Robustness. A freshly created or restored wallet cannot sync, and the app shows 'engine stopped' over and over. No funds are lost, but payments to the new address stay invisible while this lasts.
 - Proposed fix: In update_chain_tip_internal, before building ranges: `if max_scanned.is_none() && wallet_birthday.is_some_and(|b| b > chain_end) { return Ok(()); }`. Also clamp the shard entry: `let min_to_scan = min(wallet_birthday.filter(|b| b > &h).unwrap_or(h), chain_end);`. Worth reporting upstream as well.
-- Verified: (pending)
+- Verified: **real, minor**; fix before NU7: no
+- Verifier's evidence: I reproduced it natively against the tracked engine/zcash_client_memory, with no tracked-file edits. The probe is /tmp/claude-0/-home-user-Zcash-wallet/5e91fe3a-29e4-5243-bea0-135f18bac5ff/scratchpad/core-review/verify-SYNC-2/probe/src/main.rs (cargo run --release --offline).
+
+Setup: create_account with the tree state at birthday-1, which is what WebZjs import_account_ufvk fetches, so AccountBirthday::height() equals the birthday Celari picked. The birthday is 3,535,990 (reported tip 3,536,000 minus 10, as birthday.ts:76 newWalletBirthday computes it). Then update_chain_tip(tip).
+
+Results by how far the tip is below 3,536,000 (same with and without subtree roots inserted):
+- lag 0 and lag 10: OK, normal Historic or ChainTip range.
+- lag 11 (tip = birthday-1): OK, empty queue.
+- lag 12, 13 and 50: PANIC. For lag 12 the message is "BlockHeight(3535990)..BlockHeight(3535989) is invalid for ScanRange(Historic)" without roots, and the same with "ScanRange(ChainTip)" when roots are present. These come from wallet_write.rs:386 and :379.
+
+The assert is zcash_client_backend-0.25.0 data_api/scanning.rs from_parts. zcash_client_sqlite-0.23.0 wallet/scanning.rs:673-693 has the identical code, so upstream has the same panic.
+
+The path is real:
+- CreateWallet.tsx:142 takes the tip from one GetLatestBlock (webzjs.ts:166).
+- controller.createWallet saves the wallet before any pass.
+- The first pass runs sync::run, then update_subtree_roots, then running(), which calls update_chain_tip with a fresh GetLatestBlock and has no guard (zcash_client_backend sync.rs:111, :302-327).
+- update_chain_tip_internal only returns early when max_scanned is Some (wallet_write.rs:357-362). A new wallet has no scanned block, so nothing stops it.
+- The wasm is built with -Z build-std=panic_abort (build-webzjs.sh:301), so the panic is a trap on the sync worker. controller.ts:564-567 then calls engineStopped and does not retry.
+- After a reload, unlock leads to syncLoop, which hits the same trap while the lagging answer persists. On the native build, a later up-to-date tip on the same db succeeds (probe: "after panic, up-to-date tip: Ok(true)"), so it heals once the lagging member catches up.
+
+What limits the scope:
+- Only a wallet whose first batch has not committed yet is affected. Once any block is scanned, max_scanned >= birthday and the early return covers it.
+- Restores are effectively unaffected: estimateBirthday puts the birthday 14+ days of blocks below the tip.
+- The lag needed is at least 12 blocks before NU7 and at least 32 after (birthday = tip-30). That is about 13-15 minutes of lag in a member behind the same URL as the one that answered at creation.
+- I sampled 40 fresh-connection GetLatestBlock calls to zcash-mainnet.chainsafe.dev: spread 0 (all 3,536,062). The trigger is plausible but rare on an honest pool. A member stuck after NU7 activation would make it more likely, but that is speculative.
+- A malicious server can trigger it at will. It could deny sync anyway, though; the trap just turns that into a reload loop.
+- No funds are at risk and nothing is broadcast. It is undocumented in docs/engine-port.md.
+
+The finding's claim that restored wallets are affected is overstated, and the extra shard-entry clamp in its fix is redundant.
+- Verifier's fix: In engine/zcash_client_memory/src/wallet_write.rs update_chain_tip_internal, add right after `let chain_end = new_tip + 1;` (line 364):
+
+```rust
+// A server behind the one the birthday came from: nothing is scanned yet and the tip is
+// below the birthday, so there is nothing to queue (ScanRange::from_parts would panic).
+// The next pass retries with a newer tip.
+if max_scanned.is_none() && wallet_birthday.is_some_and(|b| b > chain_end) {
+    return Ok(());
+}
+```
+
+This covers both panic sites (:379 and :386). With max_scanned Some, the birthday is at or below max_scanned, which is at or below new_tip, so neither site can see start > end and the shard-entry clamp is unnecessary.
+
+Returning Ok matches the existing reorg early return. The pass ends Ok with an empty queue, the app goes idle and retries in 30 s, and it self-heals.
+
+Add a unit test next to scan_queue_observer_follows_the_writes in src/types/memory_wallet/mod.rs: birthday B, update_chain_tip(B-2) returns Ok and leaves the queue unchanged, then update_chain_tip(B+10) queues B..B+11.
+
+Then rebuild vendor/ with scripts/build-webzjs.sh, update scripts/webzjs-vendor.sha256, and run scripts/test-engine-native.sh (backend and glue). Worth reporting upstream (zcash_client_sqlite update_chain_tip has the same code).
 
 ### SYNC-4 · minor · engine — A malicious server can crash the engine in a loop: unbounded streams (OOM) and panicking compact block accessors
 - Where: crates/webzjs-wallet/src/pass_budget.rs:228 (batch_growing never abandons once current <= min_blocks and never compares the message count with the blocks requested); engine/zcash_client_memory/src/block_source.rs:101 and crates/webzjs-wallet/src/progress.rs:311,333 (CompactBlock::height() unwraps a u64 into u32; hash()/prev_hash() panic on non-32-byte fields); crates/webzjs-wallet/src/data_requests.rs:176 (GetTaddressTxids answers collected without limit); upstream GetSubtreeRoots and GetAddressUtxos streams are also uncounted
