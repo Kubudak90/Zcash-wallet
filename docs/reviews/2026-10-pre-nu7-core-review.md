@@ -2,7 +2,7 @@
 
 Interim record of the review started on 2026-10-30 (branch `claude/core-engine-review`), saved so that no progress is lost if the session stops. Findings are as reported by each lens reviewer; "Verified" is the independent refuting verifier's verdict where it has finished. Polish items are not verified. Nothing here is fixed yet; fixes and the final decisions go to docs/engine-port.md (review round 7).
 
-Progress: 6/6 lens reviews; 31 findings (0 critical, 8 major, 19 minor, 4 polish); 13/27 non-polish findings verified, 13 confirmed real, 0 refuted.
+Progress: 6/6 lens reviews; 31 findings (0 critical, 8 major, 19 minor, 4 polish); 20/27 non-polish findings verified, 20 confirmed real, 0 refuted.
 
 ## State and how to continue (if this session stops)
 
@@ -671,14 +671,87 @@ The tag-descriptor approach (`injectTo: 'head-prepend'`) also works. But it move
 - Scenario: The CSP exists only as a <meta> tag. Under CSP3, a dedicated worker loaded from a same-origin URL takes its policy from that script's response headers, not from the page. In vite preview I confirmed that the WebZjs worker scripts (workerHelpers-*.js, and the wasm_thread sync worker that makes the gRPC-web fetches) are served with only COOP/COEP. The deployed _headers adds no CSP either, so every engine worker runs with no CSP at all: no connect-src, no eval restriction. frame-ancestors cannot be set from a <meta>, so framing protection rests only on X-Frame-Options. There is no Strict-Transport-Security line. On the custom domain planned in the README roadmap (celariwallet.com), a first visit typed as http:// on a hostile network can be SSL-stripped, and injected script reads the seed at the next unlock or spend, unless the host adds HSTS itself.
 - Impact: Defence in depth: the code that runs the wallet engine has no CSP, and transport protection depends on host defaults that the repository does not state.
 - Proposed fix: Add to public/_headers under `/*`: `Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; connect-src 'self' https:; img-src 'self' data:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'` and `Strict-Transport-Security: max-age=63072000; includeSubDomains`. Keep the <meta> for hosts that ignore _headers. Ideally generate both from the one CSP constant in vite.config.ts at build time so they cannot drift.
-- Verified: (pending)
+- Verified: **real, minor**; fix before NU7: no
+- Verifier's evidence: I reproduced part of this finding. The rest is wrong or does not apply to the deployment that holds the funds.
+
+1) Workers run with no CSP. Confirmed. The engine starts its workers from same-origin URLs: dist/assets/webzjs-*.js calls `new Worker(new URL("/assets/workerHelpers-*.js"))` and `new Worker(new URL("/assets/web_worker_module.bundler-*.js"), {name:"wasm_thread"})`. Under CSP3 such a worker takes its policy from its own response headers, and public/_headers:2-7 has no CSP line.
+- Setup: a scratch static server that sends exactly the _headers set (verify-PLAT-3/server.mjs) and a same-origin probe worker, run in Chromium with Playwright (probe.mjs).
+- Result: workerHelpers-*.js is served with no CSP. On the page, `new Function` is blocked (EvalError) and a cross-origin `import()` is refused. Inside the probe worker, `new Function`, indirect eval and `import('https://cdn.jsdelivr.net/...')` all run.
+- With the proposed CSP header added (MODE=csp), all three are blocked inside the worker too.
+
+2) The fix does not break the engine. `tests/e2e-real/mainnet.spec.ts` passed with the proposed CSP header on every response (wasm, rayon pool, wasm_thread gRPC-web fetches, sync from tip, lock/unlock). Log: verify-PLAT-3/e2e-csp.log.
+
+3) No path to exploit the worker gap was shown, so this is defence in depth only.
+- Workers have no DOM and run only bundled same-origin code.
+- Data from lightwalletd goes into wasm as bytes and is never evaluated as JS.
+- eval is removed at build time (vite.webzjs.ts webzjsNoEval, plus a check over every output chunk).
+- connect-src is already `https:`, and mixed-content blocking stops http from an https worker anyway.
+
+4) The framing part is not a gap. X-Frame-Options: DENY is in public/_headers:7 and in vercel.json on vercel-preview, and every current browser honours it. A host that ignored the header file would also drop COOP/COEP, and the app then refuses to boot (src/state/controller.ts:183, `crossOriginIsolated` check).
+
+5) The HSTS scenario is wrong as written.
+- An http:// page is a different origin from https://. It cannot read the https origin's IndexedDB vault.
+- It is not a secure context: COOP/COEP are ignored, the boot check fails and crypto.subtle is missing. So "injected script reads the seed at the next unlock or spend" cannot happen. What is left is a phishing page that asks the user to restore from their words.
+- A plain HSTS header (no `preload`) does not protect a first visit anyway. It only protects visits after the first https one.
+- Every host in use today is already preloaded. The funded deployment is on Vercel (vercel-preview branch, vercel.json). hstspreload.org answers `vercel.app: preloaded via "app"`. netlify.app (.app) and pages.dev (.dev) are TLD-preloaded too, and Vercel's own sites send `max-age=31536000; includeSubDomains; preload`.
+- HSTS only matters for the future custom domain celariwallet.com (README:135, not yet migrated).
+
+6) public/_headers is not read by Vercel at all, so the proposed edit would not change the deployment that holds the funds.
+
+No tracked files were changed. All scratch files are under /tmp/claude-0/-home-user-Zcash-wallet/5e91fe3a-29e4-5243-bea0-135f18bac5ff/scratchpad/core-review/verify-PLAT-3. The relayed line "14.16 olmadı mı?" contains no instruction this verification can act on.
+- Verifier's fix: Minimal and safe:
+(a) public/_headers, under `/*`: add the same policy as the vite.config.ts CSP constant plus `frame-ancestors 'none'`. That is `Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; connect-src 'self' https:; img-src 'self' data:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`. Keep the <meta> tag.
+(b) vite.config.ts:72: change to `preview: { headers: { ...isolationHeaders, 'Content-Security-Policy': CSP + "; frame-ancestors 'none'" } }`. This lets `npm run test:e2e:real` run the engine workers under the header CSP. Leave `server` (dev) alone, because React refresh needs inline scripts.
+(c) Add a unit test that the CSP line in public/_headers equals the CSP constant plus frame-ancestors, so the two cannot drift.
+(d) HSTS: add `Strict-Transport-Security: max-age=63072000` only when the celariwallet.com move happens. Add `includeSubDomains` and `preload` (with a preload submission) only when every subdomain is https. Preload is the only thing that covers a first visit. On vercel.app, netlify.app and pages.dev it changes nothing.
+(e) For the Vercel deployment, the same CSP entry must go into vercel.json on the deployment branch. That is the owner's call: this review must not touch Vercel.
+The scratch mainnet e2e run with exactly this header passed.
 
 ### PLAT-4 · minor · docs — Changing the lightwalletd server is one click, and the UI never says that server decides what Celari believes about the chain
 - Where: src/i18n/en.ts:357-358 and src/i18n/tr.ts:357-358 (settings.serverHelp); src/screens/Settings.tsx:440-446 ('Save and restart' with no confirmation); README.md:68
 - Scenario: A scammer in an OTC trade or a support chat says 'use my faster server' and gives https://evil.example. The user saves it. That server serves compact blocks containing an Orchard/Ironwood output encrypted to the user's own address, which the user gave the scammer. Anyone can encrypt to an address, and the server also supplies the tree state. Celari trial-decrypts the output and shows the amount as received, then spendable after the one confirmation the server reports. The scammer collects the goods. The same server can also withhold blocks so a real payment never appears, or drop the user's broadcasts. The help text and README list only what the server can see (IP, t-addresses, broadcasts, own transactions). They say nothing about what it can fake or hide.
 - Impact: A wrong balance can be shown to a user who was persuaded to switch servers. This is inherent to the light-client model, but users are not told about it while the app makes the switch a single click.
 - Proposed fix: Add a sentence to settings.serverHelp (en and tr) and README §'Nasıl çalışır' / English: 'The server also decides which blocks Celari sees: a dishonest server can show payments that never happened, hide real ones or not relay what you send. Only use a server you trust, and check large incoming payments on a second server or an explorer.' When saving a URL other than DEFAULT_SERVER, show that sentence in a confirm step before saving and reloading.
-- Verified: (pending)
+- Verified: **real, minor**; fix before NU7: no
+- Verifier's evidence: I tried to refute the finding and could not. It holds as a disclosure and UX gap. It is not a code defect: the risk comes with the light-client model, and nothing in the repo deals with it or explains it to users.
+
+1. **The server controls what chain the wallet sees.** `.webzjs/crates/webzjs-wallet/src/wallet.rs:281-299` (`sync`) calls upstream `zcash_client_backend::sync::run` against `self.client`, which points at the configured URL. The only checks upstream makes are in `zcash_client_backend-0.25.0/src/scanning.rs:738-751`:
+   - `PrevHashMismatch`
+   - `BlockHeightDiscontinuity`
+   - `TreeSizeMismatch`
+
+   All three compare server-supplied data with other server-supplied data. There is no header, Equihash or proof-of-work check anywhere in the engine (a grep of `.webzjs/crates` found none). Tree state and subtree roots also come from the same server, and the app never cross-checks with a second source. `chainFloor` in `src/engine/webzjs-upgrades.ts` is only a height floor.
+
+2. **Fabricated blocks become spendable funds.** Upstream's backend-independent suite runs against Celari's backend and passes (`docs/engine-port.md:440`, 198 passed). For example, `send_single_step_proposed_transfer` (`zcash_client_backend-0.25.0/src/data_api/testing/pool.rs:295-334`) does this:
+   - `add_a_single_note_checking_balance` makes up a compact block with no proof of work, holding a note to the wallet;
+   - the scan accepts it and the balance goes up;
+   - `propose_transfer(..., ConfirmationsPolicy::MIN)` spends it.
+
+   In Celari a note is spendable after 1 confirmation (`src/engine/webzjs.ts:46-47`), but a fake server could just as easily make up 10 blocks. Anyone can encrypt a note to a known address, so the scenario works as written.
+
+3. **Switching servers takes one click.** In `src/screens/Settings.tsx:438-446`, "Save and restart" calls `controller.saveSettings({...serverUrl}, {restart: true})` straight away. In `src/state/controller.ts:494-498`, that stores the setting and calls `location.reload()`. The wallet database stays, so the new server carries on from the wallet's current tip. Only `isHttpsUrl` is checked, and there is no confirm step.
+
+4. **The copy covers privacy only.** These texts list what the server can see, and nothing about what it can fake, hide or drop:
+   - `settings.serverHelp`: `src/i18n/en.ts:357` and `src/i18n/tr.ts:357`;
+   - `home.serverSees` and `home.serverSeesHistory`: `en.ts:179-182`;
+   - `README.md:68` (Turkish) and `README.md:158` (English).
+
+   `docs/engine-port.md` says nothing about this either. `README.md:128` only lists "kötü niyetli lightwalletd cevapları" as a review still to do, so this is not a documented, deliberate decision.
+
+5. **The app itself tells users to switch, which the finding did not mention.** `network.serverBehind` (`en.ts:142`, `tr.ts:143`) says "The server Celari uses is behind the Zcash network. Choose another server in Settings." It gives no hint about trust. `tests/unit/nu7-guard.test.ts:89-99` shows the banner appears for the 6 blocks before NU7 when a server sends no upgrade fields. That is the window when "use my server" advice is most likely to circulate. With the default server, which announces NU7 as captured, it should not fire.
+
+**Impact:** no keys are exposed and no funds can be stolen through the wallet. A spend of a fake note uses a fake anchor, so the real network would reject it. The harm needs social engineering: a user persuaded to switch can be shown a payment that never happened (and hand over goods in an OTC trade), have real payments hidden, or have their sends silently dropped. "Minor" is the right severity.
+- Verifier's fix: A copy-only change, with no engine or state change:
+
+1. **Settings help text.** Append to `settings.serverHelp` in `src/i18n/en.ts:357`: "The server also decides which blocks Celari sees: a dishonest server can show payments that never happened, hide real ones, or not pass on what you send. Use only a server you trust, and check a large incoming payment on another server or a block explorer before you rely on it." Add the same sentence in Turkish to `src/i18n/tr.ts:357`.
+
+2. **The "server behind" banner.** In `network.serverBehind` (`en.ts:142`, `tr.ts:143`), change "Choose another server in Settings." to "Choose another server you trust in Settings." That way the app's own nudge carries the caveat.
+
+3. **README.** Add the same sentence to the "Nasıl çalışır?" bullet at `README.md:68` and to the English paragraph at `README.md:158`.
+
+4. **Optional confirm step.** When `server.trim() !== DEFAULT_SERVER`, have the Save button in `src/screens/Settings.tsx:438-446` show the sentence from step 1 and a second "Save and restart" before it calls `controller.saveSettings(..., { restart: true })`.
+
+Steps 1-3 change only text. No test asserts these strings; the only matches for these keys under `tests/` are `data-network` attribute checks. Step 4 touches UI code and a fake-engine e2e test, so it can wait.
 
 ### PLAT-5 · polish · ci — vite is pinned at 6.4.4, which has an npm advisory, and CI never checks npm advisories
 - Where: package.json:39 ("vite": "6.4.4"); .github/workflows/ci.yml:36 and 326 (npm ci; no audit step); compare the engine-audit job at ci.yml:53-66
@@ -708,28 +781,191 @@ The relayed user request ('14.16 olmadı mı?') had no actionable content beyond
 - Scenario: Reproduced natively: scratch test review_canonical_crossing_expiry_and_failed_broadcast, appended to the scratch copy of tests/nu7_pipeline.rs, mainnet params, wallet tip 3,540,400. The wallet holds an existing user's Orchard note of 1.05 ZEC and the user sends 1 ZEC to a u1 address. Because 1 ZEC is a canonical denomination and one Orchard note covers it, upstream builds a canonical crossing: the PCZT has branch 0x37a5165b and expiry 3,594,240, 53,839 blocks ahead (an ordinary send gets +40). SendTransaction then fails with UNAVAILABLE (proxy or lightwalletd hiccup; a node refusal or a later mempool drop such as a backend restart has the same effect). pczt_send returns the gRPC error but the transaction is already stored. Measured results: Orchard spendable 105,000,000 -> 0, total balance 4,985,000. 2,000 blocks later, after a full sync with the server healthy again, spendable is still 0. A new 0.5 ZEC send fails with InsufficientFunds { available: 0 }. The app shows 'may have reached the network anyway', and History shows a pending send that will never be mined. Nothing in the engine or the app rebroadcasts. The GetStatus answer only sets confirmed_unmined_at, and the note counts as spent until the expiry: 3,004 blocks at 75 s plus 50,835 blocks at 25 s after NU7, about 17 days. A crossing built after NU7 uses a 103,680-block modulus, giving 35 to 70 days. Meanwhile the server is asked about this txid every 5 minutes.
 - Impact: Funds are stuck and shown as gone for weeks after a transient broadcast failure, a node refusal or a mempool eviction. This hits exactly the existing users with Orchard funds sending common round amounts (0.1, 0.5, 1, 2 ZEC...). For ordinary sends the lock is 40 to 120 blocks, but it still needs a manual wait and is not explained. No loss: the funds come back at expiry.
 - Proposed fix: Rebroadcast what the wallet itself stored. In data_requests::serve_one, GetStatus branch, when get_transaction returns None and the tx_table entry has raw bytes, mined_height is None, expiry_height > chain_tip + EXPIRING_SOON_THRESHOLD and its branch is BranchId::for_height(chain_tip + 1): call source.send_transaction(RawTransaction { data: raw, .. }) before recording TxidNotRecognized. Add send_transaction to TxDataSource. Also retry send_transaction 2-3 times on transport errors inside pczt_send before returning. In the app, extend 'send.maybeSent' to say the funds stay reserved until the transaction expires (expose the expiry height).
-- Verified: (pending)
+- Verified: **real, major**; fix before NU7: yes
+- Verifier's evidence: The finding holds: I reproduced it natively and could not refute it. Two parts of the write-up are wrong, though, and one of them breaks the proposed fix.
+
+Setup: a fresh WebZjs a50df944 with the committed patches 0001-0004 applied, a copy of engine/, nightly-2026-10-28, --locked. Scratch tests verify_es1_* are in /tmp/claude-0/-home-user-Zcash-wallet/5e91fe3a-29e4-5243-bea0-135f18bac5ff/scratchpad/core-review/verify-ES-1/webzjs/crates/webzjs-wallet/src/tests/nu7_pipeline.rs, logs in run2.log and run3.log there. All 5 pass.
+
+Code path:
+- pczt_send (patched wallet.rs:996-1029) stores the transaction through extract_and_store_minable_pczt, then calls send_authorized_transactions once, with no retry.
+- The app maps any error to "maybe sent" (src/engine/webzjs.ts:350). controller.ts:828 then persists the stored transaction (afterSpend), so it survives a reload.
+- Nothing in src/ calls send_authorized_transactions.
+- A note counts as spent while its spending transaction is unmined and its expiry is at or above the target height (engine/zcash_client_memory/src/types/transaction.rs:137-155, is_mined_or_unexpired_for).
+- Canonical crossings get the ZIP 318 rolling expiry: zcash_client_backend 0.25 data_api/wallet.rs:2002-2016 and zcash_protocol 0.11 zip318.rs:195-212.
+
+Measured:
+- (a) One 1.05 ZEC Orchard note, 1 ZEC to a u1, tip 3,540,400. The PCZT has branch 0x37a5165b and expiry 3,594,240 (+53,839). SendTransaction fails with UNAVAILABLE and pczt_send returns Err, but the transaction is stored. Orchard spendable goes from 105,000,000 to 0; total is 4,985,000. I then ran 5 full sync passes up to 3,542,400 with the server healthy. SendTransaction was still called only once, the node received 0 transactions, spendable stayed 0, and a new 0.5 ZEC send fails with InsufficientFunds { available: 0, required: 50,010,000 }.
+- (b) Same send, accepted by SendTransaction and then never mined (mempool drop): it is never sent again and the note stays locked.
+- (c) Control, 0.123 ZEC (not a canonical amount): expiry +40, and the note is spendable again at 3,540,441.
+- (e) Wallet with 4 x 0.3 ZEC plus 3 ZEC in Orchard. 1 ZEC is paid from the 3 ZEC note as a crossing (expiry 3,594,240). After the failed broadcast the whole 3 ZEC note is locked; spendable is 1.2 ZEC.
+- (d) Wallet holding only one 3 ZEC note: every amount, including 1 and 2 ZEC, gets +40, because the change is split into several notes and the send is not a crossing.
+
+Corrections to the finding:
+1. No GetStatus request exists for these sends. Upstream queues a status check only for a transaction that compact-block scanning cannot see (ll/wallet.rs:1150-1157; sqlite wallet.rs:4017-4024), and a shielded spend can be seen. In (a), GetTransaction was called 0 times for that txid over 5 passes, and in (e) transaction_data_requests() has no GetStatus for it. So the server is not asked "every 5 minutes", and a rebroadcast placed in serve_one's GetStatus branch would never run in this case.
+2. A crossing needs more than a round amount (Step::is_canonical_crossing, proposal.rs:1128-1160). It needs exactly one Orchard input, a single Ironwood payment of a canonical amount, at most one Orchard change output, an anchor on the ZIP 318 grid, and the standard fee. With Celari's split policy (4 notes, 0.1 ZEC minimum), one change output means the wallet already holds 4 or more notes, or the change is under about 0.2 ZEC. Many users with Orchard funds still meet this, as (a) and (e) show.
+3. After NU7 the lock is 30 to 60 days, not 35 to 70: 103,680 to 207,360 blocks at 25 s. Example: a crossing built at 3,543,500 expires at 3,732,480, 188,980 blocks (about 55 days) later. Before NU7, the 17-day figure is right.
+
+The existing JS binding send_authorized_transactions resends the exact stored bytes. In (e) it returned Ok and the node received a transaction with the same txid. So the app can fix this without rebuilding the wasm.
+
+Not rescued by any rebroadcast: a transaction built before NU7 and still unmined at activation has the wrong branch. This is the documented Decision 7 residual risk; for a crossing it lasts until the ZIP 318 expiry.
+- Verifier's fix: Rebroadcast what the wallet stored, independently of GetStatus. GetStatus never runs for shielded sends, so do not put the rebroadcast in serve_one.
+
+Minimal fix before NU7, app only (no wasm rebuild, no change to the pinned hashes):
+1. Add WebzjsEngine.rebroadcastPending(account).
+   - From history(account, ...), take the entries with status 'pending' and valueZats < 0 (the wallet's own unmined sends).
+   - For each one, at most once every 5 minutes, call this.open_.send_authorized_transactions(bytes).
+   - bytes is the History txid hex decoded and then byte-reversed: TxId::to_string is display order, and TxId::from_bytes expects internal order.
+   - Catch and ignore every error: TransactionNotFound for entries with no raw bytes, and node refusals such as "already in mempool" or a wrong branch.
+2. Call it from controller.syncLoop after a successful pass and persist(), never while eng.sync() runs (it takes db.read()).
+   - Do not await it inside the loop.
+   - Give it a timeout (the fetch transport has none).
+   - Also run it right after a spend that failed at the 'broadcasting' stage.
+3. Change 'send.maybeSent' in en.ts and tr.ts. It currently suggests checking and retrying, which becomes a double payment once the wallet resends by itself. New text: "The payment is saved and Celari keeps sending it until it confirms. Do not pay again. If it never confirms, the funds come back after block {expiry}." Expose the expiry height for this.
+
+Later, with the next engine rebuild:
+- In sync_pass, after serving the data requests, resend each tx_table entry that has raw bytes, is not mined, has expiry 0 or above tip+3, and whose stored branch equals BranchId::for_height(tip+1). Use the same 5-minute throttle and only count errors.
+- Retry send_transaction 2-3 times with backoff inside pczt_send on Unavailable, Unknown or DeadlineExceeded.
+- Add a native test like verify_es1_canonical_crossing_transport_failure that asserts SendTransaction is called again and the note is spent by the mined transaction.
 
 ### ES-2 · major · ts — A payment to a u1 that the engine funds from Sapling publishes the whole Sapling input, but Send labels it 'Shielded'
 - Where: pczt_create proposes with SpendPolicy::default() (Sapling + Orchard + Ironwood): patches/webzjs/0004-ironwood-nu7.patch:6548 (.webzjs/crates/webzjs-wallet/src/wallet.rs:883). src/screens/Send.tsx:111-118 (recipientOf: an Orchard receiver gives 'shielded', on the assumption 'the pool the funds are in' is Ironwood). src/i18n/en.ts:152 and :295. Home has a notice for an Orchard balance (Home.tsx:272) but none for a Sapling balance.
 - Scenario: Reproduced natively: scratch test review_sapling_funds_to_orchard_receiver. The wallet holds 0.3 ZEC in Ironwood and 1 ZEC in Sapling; Sapling notes arrive when a Sapling-only sender pays the Sapling receiver that both Celari addresses carry, or after a restore of an older seed. The user pays 0.5 ZEC to a u1 with an Orchard receiver, and the Send screen shows 'Shielded payment'. Upstream pool preference is Ironwood, Orchard, Sapling, and the first pool that covers the payment alone is Sapling. The PCZT spends the Sapling note, sends the change to Ironwood, and the Sapling value balance is +100,000,000: the full 1 ZEC note value is public on chain. Sapling is used whenever neither Ironwood nor Orchard alone covers amount + fee. A 0.2 ZEC payment from the same wallet has no Sapling bundle.
 - Impact: Privacy leak beyond what the app tells users. The app's own wording calls such a pool crossing 'Partly shielded ... the amount ... can be seen on chain', and Home says 'Amounts and parties are hidden on chain'. Here the exact note value leaves Sapling publicly while the confirm screen says Shielded.
 - Proposed fix: App side (smallest change): in recipientOf/outcomeKey, return privacy 'partial' with a dedicated message ('funds from the older Sapling pool cross into Ironwood; that amount is visible') when the recipient has an Orchard receiver, summary.balances.sapling > 0, and balances.ironwood < zats + fee and balances.orchard < zats + fee (the condition under which the greedy selector reaches Sapling). Engine alternative: for Orchard-receiver payments call propose_transfer with SpendPolicy::shielded_pools([Orchard, Ironwood]) and return a distinct error, so the app can ask before allowing a Sapling crossing.
-- Verified: (pending)
+- Verified: **real, major**; fix before NU7: yes
+- Verifier's evidence: I tried to refute this and could not. I reproduced it on my own copy: WebZjs a50df944 with patches 0001-0004 applied fresh, plus engine/ and the shipped lockfile. My scratch test is verify_es2_sapling_crossing, appended to /tmp/claude-0/-home-user-Zcash-wallet/5e91fe3a-29e4-5243-bea0-135f18bac5ff/scratchpad/core-review/verify-ES-2/webzjs/crates/webzjs-wallet/src/tests/nu7_pipeline.rs, and its output is in /tmp/claude-0/-home-user-Zcash-wallet/5e91fe3a-29e4-5243-bea0-135f18bac5ff/scratchpad/core-review/verify-ES-2/run.log. The recipient is a Celari-like shielded-only u1 with Orchard and Sapling receivers. Every case goes through the real Wallet::pczt_create on mainnet parameters at NU6.3 heights.
+
+Results, as (Sapling, Orchard, Ironwood) balances, payment, then what the PCZT does:
+- (1.0, 0, 0.3), pay 0.5: spends 1 Sapling note with 2 dummy outputs. Sapling value_balance is +100,000,000 (the whole 1 ZEC is public). Ironwood value_balance is -99,970,000. Fee 30,000.
+- (1.0, 0, 0.3), pay 0.2 (control): no Sapling bundle, Ironwood only.
+- (1.0, 0.3, 0.3), pay 0.5: Sapling alone is chosen, +1 ZEC public, even though Ironwood and Orchard together would cover the payment.
+- (0.1, 0.3, 0.3), pay 0.5: no Sapling. Ironwood and Orchard are combined, and the Orchard turnstile shows +20,020,000 (the documented crossing).
+- (1.0, 0, 0), pay 0.01 (a restored old Sapling-only seed): +1 ZEC public for a 0.01 payment.
+- (0.4 + 0.4, 0, 0.1), pay 0.6: both notes are spent, +0.8 ZEC public.
+
+Cause:
+- patches/webzjs/0004-ironwood-nu7.patch:6548 passes SpendPolicy::default(), which allows all three pools.
+- zcash_client_backend 0.25 sends any UA with an Orchard receiver through the Ironwood bundle (input_selection.rs:1016-1041).
+- The pool order for that payment is Ironwood, Orchard, Sapling (input_selection.rs:1681-1711). The first pool that covers the payment alone is spent by itself (input_selection.rs:1172-1176).
+- select_change_pool (fees/common.rs:186-214) puts the change in Ironwood. Nothing returns to Sapling, so the whole value of the Sapling notes spent becomes public, not just the payment amount.
+
+What the app shows:
+- src/screens/Send.tsx:115 marks any u1 with an Orchard receiver 'shielded'. Its comment assumes the funds are already in Ironwood.
+- The preview (Send.tsx:566-568) and the confirm chip (Send.tsx:605-611) say "Unified · shielded" and "Shielded payment".
+- The app's own wording for a visible pool crossing is 'partial' (en.ts:296-297).
+- Home's help text says "Ironwood + Orchard + Sapling. Amounts and parties are hidden on chain." (en.ts:152).
+- Only an Orchard balance gets a notice (Home.tsx:272). There is no Sapling notice, and docs/engine-port.md does not document this as a decision.
+- History will label the transaction Shielded too: WebZjs only classifies the wallet's own outputs, which are all Ironwood (src/lib/privacy.ts).
+
+How Sapling funds get there: Celari's addresses carry a Sapling receiver (README:18), so a sender that only supports Sapling pays into it. Restoring an older seed also brings Sapling notes.
+
+Scope: the deployed main has no per-recipient "Shielded" label (git show main:src/screens/Send.tsx). The misleading label arrives with this branch's Send redesign, so it ships with the NU7 release if the redesign is part of it. Funds are not at risk; this is purely a privacy disclosure problem.
+
+One correction to the finding: its condition (Sapling > 0, Ironwood < R, Orchard < R, where R is amount plus fee) also fires in the 0.1/0.3/0.3 case, where Sapling is not used. That over-warning is harmless, because that transaction still crosses Orchard into Ironwood visibly. Also, the real fee is 20,000-35,000 zats, not TYPICAL_FEE, because change is split into several notes and Sapling outputs are padded.
+- Verifier's fix: App-only, display-side. No engine change, no vendor rebuild, and scripts/webzjs-vendor.sha256 is untouched.
+
+1. src/screens/Send.tsx:
+- Give recipientOf(address, kind) a third argument `funds?: { balances: Balances; zats: bigint }`.
+- In the unified branch, when receivers include 0x03 and funds are given, compute `R = zats + 50_000n` (a deliberately high fee bound, so it over-warns rather than under-warns).
+- If `b.sapling > 0n && b.ironwood < R && b.orchard < R`, return `{ label: 'send.kind.unifiedPartial', privacy: 'partial', outcome: 'send.outcome.fromSapling' }`. Otherwise keep 'shielded'.
+- outcomeKey uses `recipient.outcome` when it is set.
+- Pass `{ balances: summary.balances, zats: typedZats }` at Send.tsx:180, and the draft's zats with the summary in DraftSummary (Send.tsx:588), so the preview and the confirm chip agree.
+- Optional, to cover the documented Orchard crossing too: return 'partial' whenever `b.ironwood < R`.
+
+2. Add i18n keys to en.ts and tr.ts:
+- 'send.outcome.fromSapling': "Partly shielded payment: the recipient and the memo stay private, but this payment spends notes from the older Sapling pool, and their whole value moving into Ironwood is visible on chain."
+- A Home notice for `b.sapling > 0n` in Home.tsx next to the Orchard note at Home.tsx:272, with the same message.
+- Soften 'home.shieldedHelp' (en.ts:152) so it no longer promises hidden amounts for value that crosses pools.
+
+3. Add a unit test for the condition, using the native results above as cases: 1/0/0.3 pay 0.5 gives partial; pay 0.2 gives shielded; 1/0/0 pay 0.01 gives partial.
+
+After NU7 (riskier, since it touches the engine): propose Orchard-receiver payments with SpendPolicy::shielded_pools([Ironwood, Orchard]) first, and fall back to Sapling only after explicit consent, using a distinct error kind.
 
 ### ES-3 · minor · engine — Every send to a TEX address fails at building with ProposalNotSupported, but the form accepts TEX and the error hint misleads
 - Where: wallet.rs pczt_create calls create_pczt_from_proposal (patches/webzjs/0004-ironwood-nu7.patch:6555-6575). zcash_client_backend 0.25 data_api/wallet.rs:2988 refuses multi-step (ZIP 320) proposals. The app offers TEX as a payable recipient: src/lib/address.ts:55, src/screens/Send.tsx:78, 106-107, 326. Misleading hint: src/screens/SpendSteps.tsx:101 with src/i18n/en.ts:247.
 - Scenario: Reproduced natively: scratch test review_tex_send. With 0.2 ZEC in Ironwood at tip 3,543,350, pczt_create(account, tex1zyg3..., 1_000_000) returns Err(PcztCreate("ProposalNotSupported")) and nothing is stored (tx count 1 -> 1). In the app the form accepts the address and shows 'TEX · public' with an estimated fee of 0.0002 ZEC and a warning about the transparent intermediate step. After the password the send fails at 'building' with 'The balance may not cover the network fee. Lower the amount slightly and try again.' Lowering the amount never helps.
 - Impact: No loss: nothing is built or stored. But users cannot pay exchanges that require TEX deposit addresses, and are told it is a balance problem. docs/engine-port.md still lists 'send to a TEX address' as a planned real-funds test.
 - Proposed fix: Until ZIP 320 pairs are supported (upstream PCZT multi-step, or create_proposed_transactions with the USK), refuse TEX in checkAddress/Send with a clear 'TEX addresses are not supported yet' message. Map Error::PcztCreate("ProposalNotSupported") to a stable code in error.rs so buildError can tell it apart.
-- Verified: (pending)
+- Verified: **real, minor**; fix before NU7: no
+- Verifier's evidence: I could not refute it. It is real, and it is a duplicate of SPEND-2, which is already verified (real, minor, not before NU7) in docs/reviews/2026-10-pre-nu7-core-review.md:383-430. ES-3 adds nothing new apart from the optional engine error code.
+
+Reproduced natively. I ran the reviewer's glue test (scratchpad/core-review/enginespend/webzjs/crates/webzjs-wallet/src/tests/nu7_pipeline.rs:880, review_tex_send) with --nocapture, using nightly-2026-10-28 and --locked:
+  tex address tex1zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3rcmznv
+  pczt_create to TEX: Some(PcztCreate("ProposalNotSupported"))
+  txs 1 -> 1
+  test result: ok
+I checked that the scratch tree is the shipped code:
+- Its engine/zcash_client_memory is identical to the tracked engine.
+- I applied patches/webzjs/0001-0004 to a clean clone at a50df94 (/tmp/claude-0/-home-user-Zcash-wallet/5e91fe3a-29e4-5243-bea0-135f18bac5ff/scratchpad/core-review/verify-ES-3/wz). It differs from the reviewer's tree only under src/tests/ and in Cargo.lock, and the reviewer's Cargo.lock is byte-identical to engine/webzjs.Cargo.lock.
+- An earlier backend-level run (verify-SPEND-2/test2.log) shows the cause: the proposal has 2 steps (fees [30000, 10000]), and create_pczt_from_proposal returns Err(ProposalNotSupported). The t1 control case builds a v6 PCZT.
+
+App path, traced:
+1. src/lib/address.ts:54 returns {ok:true, kind:'tex'}.
+2. review() at src/screens/Send.tsx:228-230 refuses only when !check.ok.
+3. The confirm screen shows 'TEX · public' (Send.tsx:106-107), texWarn (:326) and a 20,000-zat fee floor (:78).
+4. The engine error "Failed to create Pczt: ProposalNotSupported" carries no code (wallet error.rs: code() covers only UpgradePending, PcztWrongBranch and PcztExpired). buildError (src/engine/webzjs-errors.ts:80-91) passes it through unchanged.
+5. SpendSteps.tsx:101 shows failureHint = send.failedHint (Send.tsx:333; en.ts:247), which says "The balance may not cover the network fee. Lower the amount slightly and try again." Every amount fails the same way.
+
+Nothing is signed, stored or broadcast. The TEX row on the real-funds checklist (docs/engine-port.md:351) contradicts the Deferred note "Celari builds no such pairs" (:313-316).
+
+Impact: no loss of funds and no privacy leak. Users cannot pay TEX deposit addresses and are told to lower the amount.
+
+Partly wrong in the finding: the engine-side code mapping is not needed. A form-level refusal stops TEX before pczt_create runs, and adding a code would change the wasm and the vendor hashes for no user benefit.
+- Verifier's fix: A TypeScript and docs change only. No engine, wasm or vendor/sha256 change; skip the error.rs code mapping from the finding.
+1) In src/screens/Send.tsx review() (:229-230), refuse TEX on the form: `linkProblem(parsePaymentInput(to)) ?? (check.ok ? (check.kind === 'tex' ? 'send.err.address.texUnsupported' : null) : `send.err.address.${check.reason}`)`. Add send.err.address.texUnsupported to en.ts and tr.ts, e.g. "Celari cannot pay TEX addresses yet (the payment needs two linked transactions). Nothing was sent; ask for a t1 or unified address." zcash: payment links go through the same review(), so they are covered too.
+2) Drop failureHint={t('send.failedHint')} at Send.tsx:333 and remove the send.failedHint key. SpendSteps.tsx:101 then falls back to the neutral 'send.failedRetry' ("Nothing was sent. You can try again."). Insufficient funds keeps its own SpendRefusedError message.
+3) The TEX branches in feeFloor (:78) and the texWarn notice (:326) can no longer be reached; remove them.
+4) Tests:
+   - Make src/engine/fake.ts reject tex1 recipients with 'Failed to create Pczt: ProposalNotSupported'.
+   - Add a unit test that review() refuses kind 'tex'.
+   - Add an e2e check in tests/e2e/spend.spec.ts.
+5) docs/engine-port.md:351: remove "and a TEX address" from the real-funds checklist, and add to Deferred that TEX is refused because zcash_client_backend 0.25 create_pczt_from_proposal (wallet.rs:2987-2990) accepts only single-step proposals.
+Real TEX support (the ZIP 320 pair as two PCZTs, or create_proposed_transactions) is an engine change for after NU7.
 
 ### ES-4 · minor · ts — The fee confirmed by the user is a fixed estimate; the engine pays the real ZIP 317 fee, which can be several times higher and is never shown before broadcast
 - Where: src/screens/Send.tsx:72-79 (feeFloor), :176 (Max = available - 10,000), :589. src/engine/webzjs.ts:300-353: send builds, signs, proves and broadcasts with no fee check. patches/webzjs/0004 wallet.rs pczt_create returns only the PCZT.
 - Scenario: Reproduced natively: scratch test review_orchard_change_pool. An existing user with one 1 ZEC Orchard note pays 0.12345678 ZEC to a u1. The Orchard value balance is 12,380,678 against an Ironwood output of 12,345,678, so the fee is 35,000 zats: the split policy creates up to 4 Orchard change notes, and after NU6.3 each spend and output costs a full action. The confirm screen showed 'Estimated fee 0.0001 ZEC'. A wallet with many small notes pays 5,000 zats per extra input. Max (balance - 10,000) for the same Orchard-only wallet needs a 20,000 fee and is refused with InsufficientFunds.
 - Impact: The user authorizes a fee they were not shown. It is the correct ZIP 317 fee, not a protocol overpayment, but it can be 3.5x the estimate or more, and Max fails for Orchard-funded wallets.
 - Proposed fix: Return the PCZT's fee from pczt_create, or add a pczt_fee binding: transparent inputs - outputs + Sapling/Orchard/Ironwood value balances, via Pczt::into_effects. In signProveSend, before signing, compare it to the fee the user confirmed. If it is higher, stop and show the real fee for a second confirmation. Compute Max from the engine (MaxSpendMode) rather than balance - 10,000.
-- Verified: (pending)
+- Verified: **real, minor**; fix before NU7: no
+- Verifier's evidence: I could not refute ES-4. It has the same root cause as SPEND-3, which is already verified real/minor, and the two should be merged into one finding. It is not a documented decision: docs/engine-port.md, README.md and patches/webzjs/README.md say nothing about the fee estimate, Max or the split policy. The only related prior work is tests/e2e/spend.spec.ts:134-136 (E2E-2), which only makes the refusal message readable.
+
+Setup. In /tmp/claude-0/-home-user-Zcash-wallet/5e91fe3a-29e4-5243-bea0-135f18bac5ff/scratchpad/core-review/verify-ES-4 I cloned WebZjs a50df944 fresh (fresh/) and applied patches/webzjs/0001-0004. Its crates/ are byte-identical to the scratch tree wz/, apart from the scratch test file. engine/ is identical to the repo's engine/zcash_client_memory, and the lockfile is identical to engine/webzjs.Cargo.lock. I added two scratch tests (verify_es4_*) at the end of wz/crates/webzjs-wallet/src/tests/nu7_pipeline.rs. They call the real Wallet::pczt_create with mainnet parameters, NU6.3 active and NU7 not yet active. Built with nightly-2026-10-28 --locked; 2/2 passed. Output: run.log in the same folder, lines 290-308.
+
+Measured:
+(1) ES-4 scenario: one 1 ZEC Orchard note, tip 3,540,400, pay 12,345,678 to a u1.
+- The PCZT fee is 35,000. The Orchard value balance is 12,380,678 and the Ironwood value balance is -12,345,678, exactly as reported.
+- Orchard has 5 actions (1 spend and 4 change outputs counted separately) and Ironwood has 2. The proposal's fee_required is 35,000, with 4 Orchard change notes of about 21.9M each. This comes from Celari's SplitPolicy (wallet.rs:240-243, 262-263: 4 notes, 0.1 ZEC minimum).
+- Paying 0.5 ZEC also costs 35,000. Paying 0.8 to 0.95 ZEC costs 20,000 (1 change note).
+- The app shows "Estimated fee ~0.0001 ZEC" for every case: Send.tsx:77-79, :589, :645-646.
+(2) Max on that Orchard-only wallet: available - 10,000 = 99,990,000 is refused with InsufficientFunds { available: 100000000, required: 100010000 }, so the fee needed is 20,000. Nothing is stored (1 -> 1 transactions). Available - 15,000 is also refused; available - 20,000 builds (2+2 actions). So an existing user whose funds are one Orchard note can never use Max.
+(3) Many small notes: ten Ironwood notes of 0.01 ZEC each.
+- Paying 0.05 ZEC uses 6 inputs and costs 30,000. Paying 0.09 ZEC uses 10 inputs and costs 50,000, five times the estimate.
+- Max is refused (required 10,040,000) even at available - 25,000.
+
+App path, read end to end:
+- review() checks only zats + TYPICAL_FEE_ZATS (Send.tsx:236), and Max is available - 10,000 (:176).
+- pczt_create runs only after the password: controller.ts:782-785, webzjs.ts:305-315.
+- signProveSend (webzjs.ts:327-352) signs, proves and broadcasts with no fee check. beforeBroadcast is only the network re-check, and pczt_create returns only the PCZT.
+- So the real fee is never seen before broadcast. History's TxRow (TxRow.tsx:71-72) shows the real feeZats afterwards.
+
+Limits that keep this minor:
+- The amount paid to the recipient is exact, and the fee is the correct ZIP 317 fee, not an overpayment. In absolute terms it is tens of thousands of zats; it is a wrong figure on the confirm step, not a loss of funds.
+- The labels say "Estimated" and "~".
+- A refused Max sends nothing, and the refusal message (send.refused.funds) gives the required and spendable amounts, so the user can lower the amount by hand.
+- Nothing here depends on NU7.
+- Verifier's fix: Merge with SPEND-3 and fix it once.
+
+Now, app only, no wasm rebuild, low risk; can land any time:
+(a) In Send.tsx, replace "~{fee}" on the preview, the confirm step and the result with a minimum, for example "from 0.0001 ZEC". Add a line saying ZIP 317 adds 0.00005 ZEC for each extra note spent or created, so the total shown is a lower bound.
+(b) When a send is refused with insufficientFunds {requiredZats, availableZats}, offer "Send {fit} ZEC instead", where fit = availableZats - (requiredZats - draft.zats). This applies to Max drafts, which have no change, so requiredZats - draft.zats is the exact fee. The button returns to the form with that amount filled in, and the user confirms again; the confirmed amount must never change silently. Measured: an Orchard note gives available - 20,000, and ten notes give available - 50,000; each builds.
+(c) Add a unit test for fit in spendRefusal and an e2e test using the fake engine's engineFee knob.
+
+After NU7, engine:
+(d) Add a read-only binding such as propose_fee(account, to, value, memo). It runs propose_transfer with the wallet's change_strategy and builds no PCZT and locks no inputs, and returns steps().first().balance().fee_required(). The Review step calls it before the password and shows the exact fee and total.
+(e) As defence in depth, have pczt_create also return that fee, or read it from Pczt::into_effects as the sum of the value balances. Have signProveSend refuse before signing if it is above the fee the user confirmed.
+(f) Compute Max from propose_send_max_transfer (zcash_client_backend 0.25, MaxSpendMode::MaxSpendable) instead of available - 10,000.
+(g) Then rebuild vendor/, regenerate scripts/webzjs-vendor.sha256, run the native suites (backend and glue) and npm run test:e2e:real.
 
 ### ES-5 · polish · docs — The Home Orchard notice says spending moves the change into Ironwood, but change from an Orchard spend stays in Orchard
 - Where: src/i18n/en.ts:164 ('home.orchardNote') and the matching entry in src/i18n/tr.ts
@@ -772,7 +1008,35 @@ What I could not check or did not run:
 - Scenario: A user restores a seed that received shielded (Sapling, Orchard or Ironwood) payments from 2021 on and got its first transparent payment, say an exchange withdrawal, at block 2,500,000. On the month step they tick 'I don't know'. detect_birthday returns 2,499,900, the info notice says 'Sync will start at block 2,499,900', and the account is created with that birthday. The engine never scans blocks below it, so notes received earlier and still unspent never appear: the balance is too low and the History is incomplete, with no warning. The help text only says 'We will first look for the earliest transaction on your transparent address'. A malicious server can return one fabricated RawTransaction at height = tip and hide the whole history. A height of 0 (a mempool answer) gives birthday 0, and import_account_ufvk then computes `birthday - 1` on a u32, which wraps in release and makes the restore fail.
 - Impact: After a restore the balance is wrong and incoming funds are hidden. The user may think the funds are gone, or discard the seed. Restoring again with an earlier month recovers them, but nothing tells the user to.
 - Proposed fix: Do not use a transparent transaction height as the birthday. In RestoreWallet.tsx:104-108, use SAPLING_ACTIVATION_HEIGHT when 'I don't know' is ticked. Alternatively, pre-fill the month field with the detected month and show a warning the user must accept: 'shielded payments received before <month> will not be found; pick an earlier month if unsure'. Ignore detected values <= SAPLING_ACTIVATION_HEIGHT or above latestHeight(). Update restore.birthdayUnknownHelp in en and tr to match.
-- Verified: (pending)
+- Verified: **real, minor**; fix before NU7: no
+- Verifier's evidence: The flaw is in the code, but the reported failure (a restore that silently starts too late) does not happen on the default server. What does happen is that "I don't know" always fails.
+
+Code path, read end to end:
+- `src/screens/RestoreWallet.tsx:103-108` sets `height = await controller.detectBirthday(...) ?? SAPLING_ACTIVATION_HEIGHT`.
+- `src/engine/webzjs.ts:179-193` derives the default-UA transparent receiver and calls the engine with no try/catch.
+- `.webzjs/crates/webzjs-wallet/src/bindgen/wallet.rs:654-689` sends `GetTaddressTxids` with start 419200 and end `u64::MAX`, then returns `min(height).saturating_sub(100) as u32`.
+- `crates/webzjs-wallet/src/wallet.rs:248-253` asks for the tree state at `birthday - 1`, so nothing below the birthday is ever scanned.
+
+Live reproduction on mainnet (default `DEFAULT_SERVER` `https://zcash-mainnet.chainsafe.dev`; GetLightdInfo reports ECC LightWalletD v0.5.3, Zakura 1.7.0):
+1. I replayed the exact WebZjs request over gRPC-web with `/tmp/claude-0/-home-user-Zcash-wallet/5e91fe3a-29e4-5243-bea0-135f18bac5ff/scratchpad/core-review/verify-SYNC-3/detect.py`. The server answered grpc-status 3: "GetTaddressTransactions: block range too wide (18446744073709132415 blocks, limit 10000000)". It gives this answer for every address. The limit is exact: an end of 419200+10,000,000 works, and one block more fails.
+2. I ran the production build with the real engine in Playwright (`/tmp/claude-0/-home-user-Zcash-wallet/5e91fe3a-29e4-5243-bea0-135f18bac5ff/scratchpad/core-review/verify-SYNC-3/pw/unknown.spec.ts`, dist built into that scratch dir): restore a seed, tick "I don't know", press Continue. The UI shows "Something went wrong. Details: Error returned from GRPC server: code: 'Client specified an invalid argument', message: \"GetTaddressTransactions: block range too wide ...\"". The user stays on the month step.
+
+So with the shipped default, no birthday is ever detected. No restore starts at a late birthday, and the fallback to Sapling activation that the help text promises (`en.ts:83-84`, `tr.ts:84-85`) never happens either. The fake engine always returns null, so the e2e tests never see this.
+
+The flaw is real but dormant. With a bounded range (end = tip) the same server does answer: for t1dncGyY8aPsGShDmvw92FNUvJPaywbwpSW the earliest height is 2,623,578, which would make the birthday 2,623,478. Any shielded notes from before that height would be missed without a warning. That would happen if a server accepted an unbounded range, or if someone fixed the error above by capping `end` in the WebZjs patches. The flaw would then be major, as reported.
+
+Side claims:
+- Height 0 → birthday 0 → `(0u32 - 1)` wraps in release (no overflow-checks in the profile) → `get_tree_state(4294967295)` fails, so the restore errors out. Only a buggy or malicious server would answer 0, because `getaddresstxids` returns mined transactions only. The same goes for a fabricated tip-height answer, and the user recovers by restoring with a month. Both are defence-in-depth only.
+
+Funds are never at risk in the current state: a failed detection blocks the restore and the seed is untouched.
+- Verifier's fix: Make "I don't know" mean a full scan, and stop using a transparent transaction's height as the birthday. This fixes the error users see today and removes the dormant too-late birthday.
+
+1. `src/screens/RestoreWallet.tsx:103-108`: replace the `if (unknown)` branch with `height = SAPLING_ACTIVATION_HEIGHT;` and drop the `controller.detectBirthday(...)` call. Optionally also remove `detectBirthday` from `src/engine/types.ts:230`, `src/engine/webzjs.ts:179-193`, `src/engine/fake.ts:303` and `src/state/controller.ts:209`. Leaving them unused is also fine.
+2. On the busy button (`RestoreWallet.tsx` around line 245), show `t('common.continue')` instead of `restore.birthdayDetecting`. Delete the `restore.birthdayDetecting` key in `en.ts:85` and `tr.ts:86`.
+3. Update `restore.birthdayUnknownHelp` (en and tr) to describe the full scan. en: "Celari will scan from Sapling activation in October 2018, so no payment is missed. The first scan can take a day and needs several GB of memory, and it pauses whenever the wallet locks." tr: "Celari Ekim 2018'deki Sapling başlangıcından itibaren tarar, böylece hiçbir ödeme kaçmaz. İlk tarama bir gün sürebilir, birkaç GB bellek ister ve cüzdan her kilitlendiğinde duraklar."
+4. Add an e2e assertion with the fake engine: after ticking "I don't know", the password step says "Sync will start at block 419,200".
+
+If detection is kept, it can only be a hint: patch WebZjs to cap `end` at the tip, reject heights of 0, above the tip or below 419200, and show the result only as a pre-filled month with a warning the user must accept that earlier shielded payments will not be found. Never apply it silently.
 
 ### SYNC-2 · minor · engine — update_chain_tip panics (engine stops) when a wallet with no scanned block sees a tip below its birthday
 - Where: engine/zcash_client_memory/src/wallet_write.rs:379 (min_to_scan = birthday can exceed chain_end) and :386 (ScanRange::from_parts(b..chain_end) asserts end >= start, zcash_client_backend 0.25 data_api/scanning.rs:51); same code in zcash_client_sqlite 0.23
