@@ -4,7 +4,14 @@ import { flushSync } from 'react-dom';
 import { GroupedAddress } from '../components/GroupedAddress';
 import { Icon } from '../components/icons';
 import { Notice, Screen, useHideBalances } from '../components/ui';
-import { MEMO_MAX_BYTES, SHIELDING_THRESHOLD_ZATS, TYPICAL_FEE_ZATS, shieldedTotal, type SendStage } from '../engine';
+import {
+  MEMO_MAX_BYTES,
+  SHIELDING_THRESHOLD_ZATS,
+  TYPICAL_FEE_ZATS,
+  shieldedTotal,
+  type Balances,
+  type SendStage,
+} from '../engine';
 import { useI18n, type MessageKey } from '../i18n';
 import {
   acceptsMemo,
@@ -17,6 +24,7 @@ import {
   type PaymentRequest,
 } from '../lib/address';
 import { memoBytes, memoProblem } from '../lib/memo';
+import { olderPoolSpent } from '../lib/poolCrossing';
 import { spendingDisabled } from '../lib/network';
 import { AmountError, formatZec, formatZecInput, parseZec } from '../lib/zec';
 import { useController, useWallet } from '../state/wallet';
@@ -32,6 +40,8 @@ interface Draft {
   kind: Extract<AddressCheck, { ok: true }>['kind'];
   /** Only set for a recipient that can take one. */
   memo?: string;
+  /** As reviewed: the pools it may be paid from depend on the balances then, not after the send. */
+  recipient: Recipient;
 }
 
 /** What a payment link filled in, and for which recipient. */
@@ -66,6 +76,16 @@ function tryParseZec(input: string): bigint | null {
 interface Recipient {
   label: MessageKey;
   privacy: 'shielded' | 'partial' | 'public' | null;
+  /** The outcome line, when it is not the one its privacy has (outcomeKey). */
+  outcome?: MessageKey;
+}
+
+/** What the wallet holds, for telling which pools a payment to an Orchard receiver is paid from. */
+interface Funds {
+  balances: Balances;
+  zats: bigint;
+  /** The engine sees Ironwood (ZcashEngine.ironwood): Orchard is then an older pool. */
+  ironwood: boolean;
 }
 
 /**
@@ -81,6 +101,7 @@ function feeFloor(kind: AddressKind | undefined): bigint {
 /** The outcome line under the preview, for what is known of the recipient. */
 function outcomeKey(recipient: Recipient | null): MessageKey {
   if (!recipient) return 'send.outcome.none';
+  if (recipient.outcome) return recipient.outcome;
   switch (recipient.privacy) {
     case 'shielded':
       return 'send.outcome.shielded';
@@ -99,7 +120,7 @@ const PRIVACY_WORDS = {
   public: 'send.privacy.public',
 } as const satisfies Record<string, MessageKey>;
 
-function recipientOf(address: string, kind: AddressKind): Recipient {
+function recipientOf(address: string, kind: AddressKind, funds: Funds | null): Recipient {
   switch (kind) {
     case 'transparent':
       return { label: 'send.kind.transparent', privacy: 'public' };
@@ -111,8 +132,18 @@ function recipientOf(address: string, kind: AddressKind): Recipient {
     case 'unified': {
       const receivers = unifiedReceivers(address);
       if (receivers === null) return { label: 'send.kind.unified', privacy: null };
-      // An Orchard receiver: WebZjs pays it through Ironwood, the pool the funds are in.
-      if (receivers.includes(0x03)) return { label: 'send.kind.unifiedShielded', privacy: 'shielded' };
+      // An Orchard receiver: WebZjs pays it through Ironwood. Fully shielded when Ironwood alone
+      // covers it; otherwise funds from an older pool cross into Ironwood, visibly (review
+      // round 7, ES-2; lib/poolCrossing.ts).
+      if (receivers.includes(0x03)) {
+        const older = funds && olderPoolSpent(funds.balances, funds.zats, funds.ironwood);
+        if (!older) return { label: 'send.kind.unifiedShielded', privacy: 'shielded' };
+        return {
+          label: 'send.kind.unifiedPartial',
+          privacy: 'partial',
+          outcome: older === 'sapling' ? 'send.outcome.fromSapling' : 'send.outcome.fromOrchard',
+        };
+      }
       // Sapling only: as a Sapling address. Without either only a transparent receiver is left.
       if (receivers.includes(0x02)) return { label: 'send.kind.unifiedPartial', privacy: 'partial' };
       return { label: 'send.kind.unifiedPublic', privacy: 'public' };
@@ -134,7 +165,7 @@ function KindTag({ recipient, id }: { recipient: Recipient; id?: string }) {
 export function Send({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
   const { t, lang } = useI18n();
   const controller = useController();
-  const { summary, meta, spending } = useWallet();
+  const { summary, meta, spending, ironwood } = useWallet();
   const network = useNetworkView();
   const balances = useHideBalances();
   const fmt = (z: bigint) => formatZec(z, { locale: lang });
@@ -177,10 +208,12 @@ export function Send({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
   const addressCheck = to.trim() ? checkAddress(to) : null;
   // null until the recipient is a valid address.
   const takesMemo = addressCheck?.ok ? acceptsMemo(to) : null;
-  const recipient = addressCheck?.ok && !toError ? recipientOf(to.trim(), addressCheck.kind) : null;
-  const memoUsed = memoBytes(memo);
   // Echoed under the field: a lone separator is always decimal, so "1.000" reads as 1 ZEC.
   const typedZats = tryParseZec(amount);
+  const fundsFor = (zats: bigint): Funds | null => (summary ? { balances: summary.balances, zats, ironwood } : null);
+  const recipient =
+    addressCheck?.ok && !toError ? recipientOf(to.trim(), addressCheck.kind, fundsFor(typedZats ?? 0n)) : null;
+  const memoUsed = memoBytes(memo);
 
   if (meta?.kind === 'view') {
     return (
@@ -255,7 +288,13 @@ export function Send({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
       setToError(null);
       setAmountError(null);
       setMemoError(null);
-      setDraft({ to: to.trim(), zats, kind: check.kind, memo: sendMemo });
+      setDraft({
+        to: to.trim(),
+        zats,
+        kind: check.kind,
+        memo: sendMemo,
+        recipient: recipientOf(to.trim(), check.kind, fundsFor(zats)),
+      });
       setStep('confirm');
       return;
     }
@@ -585,7 +624,7 @@ export function Send({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
 function DraftSummary({ draft, hero = false }: { draft: Draft; hero?: boolean }) {
   const { t, lang } = useI18n();
   const fmt = (z: bigint) => formatZec(z, { locale: lang });
-  const recipient = recipientOf(draft.to, draft.kind);
+  const recipient = draft.recipient;
   const fee = feeFloor(draft.kind);
   const amount = fmt(draft.zats);
   const [full, setFull] = useState(false);

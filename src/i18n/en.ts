@@ -153,7 +153,8 @@ export const en = {
   'home.balanceStopped': 'Your balance shows after Celari reloads',
   'home.hideBalances': 'Hide balances',
   'home.shielded': 'Shielded',
-  'home.shieldedHelp': 'Ironwood + Orchard + Sapling. Amounts and parties are hidden on chain.',
+  'home.shieldedHelp':
+    'Ironwood + Orchard + Sapling. Amounts and parties are hidden on chain, except value that moves from one pool to another.',
   'home.transparent': 'Transparent',
   'home.transparentHelp': 'Public on chain. Shielding it is recommended.',
   'home.pending': 'Awaiting confirmation',
@@ -166,6 +167,10 @@ export const en = {
   'home.outdatedBalance': 'Payments sent to you through the new Ironwood pool are not in this balance yet.',
   'home.orchardNote':
     '{amount} ZEC of your shielded balance is in the Orchard pool and can be spent as usual. Spending from it moves the change into Ironwood, the new shielded pool, and the amount that crosses from Orchard into Ironwood is visible on chain (the ZIP 318 turnstile). Celari does not offer a private, gradual migration to Ironwood yet.',
+  'home.saplingNote':
+    '{amount} ZEC of your shielded balance is in the older Sapling pool. A payment Celari pays from it moves the whole value of each Sapling note it spends into Ironwood, and that value is visible on chain. Payments that Ironwood alone covers do not touch it.',
+  'home.saplingNoteViewOnly':
+    '{amount} ZEC of this balance is in the older Sapling pool. When it moves into Ironwood, its value is visible on chain.',
   'home.orchardNoteViewOnly':
     '{amount} ZEC of this balance is in the Orchard pool. New shielded funds now go to the Ironwood pool; when Orchard funds move into it, the amount that crosses is visible on chain (the ZIP 318 turnstile).',
   'home.orchardMigrateNoticeViewOnly':
@@ -299,6 +304,10 @@ export const en = {
   'send.outcome.shielded': 'Shielded payment: the recipient and the memo stay private on chain.',
   'send.outcome.partial':
     'Partly shielded payment: the recipient and the memo stay private, but the amount entering the older Sapling pool can be seen on chain.',
+  'send.outcome.fromOrchard':
+    'Partly shielded payment: the recipient and the memo stay private, but it is paid from your Orchard funds, and the amount that crosses from Orchard into Ironwood is visible on chain (the ZIP 318 turnstile).',
+  'send.outcome.fromSapling':
+    'Partly shielded payment: the recipient and the memo stay private, but it spends notes from the older Sapling pool, and their whole value moving into Ironwood is visible on chain, not only this amount.',
   'send.outcome.public': 'Public payment: the amount and the recipient will be visible on chain.',
   'send.outcome.none': 'How private this payment is shows here once Celari can read the recipient address.',
   'send.outcome.unknown': 'Celari cannot tell from this address how private the payment will be.',

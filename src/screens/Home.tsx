@@ -281,6 +281,21 @@ export function Home({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
           </div>
         )}
 
+        {/*
+          Sapling notes arrive at the Sapling receiver of Celari's addresses (from a wallet that
+          only pays Sapling) or come with an older seed. A payment funded from them moves their
+          whole value into Ironwood, publicly (review round 7, ES-2; Send says so per payment).
+        */}
+        {b && b.sapling > 0n && (
+          <div className="dashboard-note">
+            <Notice tone="info">
+              <p data-testid="sapling-note">
+                {t(viewOnly ? 'home.saplingNoteViewOnly' : 'home.saplingNote', { amount: balances.fmt(b.sapling) })}
+              </p>
+            </Notice>
+          </div>
+        )}
+
         <section className="card activity" aria-labelledby={recentId}>
           <div className="card-head">
             <h2 id={recentId}>{t('home.recent')}</h2>
