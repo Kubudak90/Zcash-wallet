@@ -4,6 +4,7 @@ import { Spinner } from './components/ui';
 import { LangProvider, useI18n } from './i18n';
 import { HIDDEN_LOCK_MS, dueAutoLock } from './lib/autoLock';
 import { watchClipboard } from './lib/clipboard';
+import { BrandMark, EngravedC } from './screens/AccountLayout';
 import { CreateWallet } from './screens/CreateWallet';
 import { Main } from './screens/Main';
 import { RestoreWallet } from './screens/RestoreWallet';
@@ -82,26 +83,33 @@ function useAutoLock(active: boolean, minutes: number) {
 function Booting() {
   const { t } = useI18n();
   return (
-    <section className="screen center">
-      <img src="/celari.svg" alt="" width={64} height={64} className="logo pulse" />
-      <p className="muted">
-        <Spinner /> {t('boot.loading')}
-      </p>
-    </section>
+    <div className="boot">
+      <EngravedC className="boot-motif" />
+      <div className="boot-body">
+        <img src="/celari.svg" alt="" width={56} height={56} className="logo pulse" />
+        <p className="boot-status">
+          <Spinner /> {t('boot.loading')}
+        </p>
+      </div>
+    </div>
   );
 }
 
 function BootError({ error }: { error: string | null }) {
   const { t } = useI18n();
   return (
-    <section className="screen center">
-      <h1>{t('boot.errorTitle')}</h1>
-      <p>{error === 'isolation' ? t('boot.errorIsolation') : t('common.genericError')}</p>
-      {error && error !== 'isolation' && <code className="error-code">{error}</code>}
-      <button type="button" className="primary" onClick={() => window.location.reload()}>
-        {t('boot.retry')}
-      </button>
-    </section>
+    <div className="boot">
+      <EngravedC className="boot-motif" />
+      <section className="boot-card" aria-labelledby="boot-error-title">
+        <BrandMark />
+        <h1 id="boot-error-title">{t('boot.errorTitle')}</h1>
+        <p className="muted">{error === 'isolation' ? t('boot.errorIsolation') : t('common.genericError')}</p>
+        {error && error !== 'isolation' && <code className="error-code">{error}</code>}
+        <button type="button" className="primary" onClick={() => window.location.reload()}>
+          {t('boot.retry')}
+        </button>
+      </section>
+    </div>
   );
 }
 
