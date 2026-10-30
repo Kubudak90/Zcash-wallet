@@ -2,7 +2,7 @@ import { sha256 } from '@noble/hashes/sha256';
 import { base58check, base64urlnopad, bech32m } from '@scure/base';
 import { expect, test, type Page } from '@playwright/test';
 
-import { PASSWORD, UA, createWallet, nav, navTab } from './helpers';
+import { PASSWORD, UA, createWallet, nav, navBar, navTab } from './helpers';
 
 // Send and shield flows on the fake engine. The fake wallet holds 1.25 ZEC
 // shielded and 0.50 ZEC transparent after its first sync; sends of 0.0333 and
@@ -123,7 +123,7 @@ test('a failed spend says whether it is safe to try again', async ({ page }) => 
   await expect(page.getByRole('heading', { name: 'Transaction history' })).toBeVisible();
   const sent = page.getByTestId('history').locator('.tx-sent');
   await expect(sent).toHaveCount(1);
-  await expect(sent).toContainText('-0.0667');
+  await expect(sent).toContainText(/[-\u2212]0\.0667/);
   await page.getByRole('button', { name: 'Lock' }).click();
   await page.getByLabel('Password').fill(PASSWORD);
   await page.getByRole('button', { name: 'Unlock' }).click();
@@ -218,7 +218,7 @@ test('a failed pass keeps spending closed while the wallet is known to be behind
   await setKnobs(page, { chainGrowth: 50, failPass: true });
   await sendButton(page).click();
   await expect(page.getByRole('heading', { name: '0.10 ZEC sent' })).toBeVisible({ timeout: 10_000 });
-  await expect(page.getByTestId('sync-status')).toHaveText('Connection problem, will retry');
+  await expect(page.getByTestId('sync-status')).toHaveText('Connection problem · will retry');
 
   await page.getByRole('button', { name: 'New payment' }).click();
   await review(page, UA, '0.2');
@@ -421,6 +421,10 @@ test('the form only previews a payment; the confirm step replaces it and shows t
   await page.getByLabel('Amount (ZEC)').fill('0.1');
   await expect(page.getByLabel('Recipient address')).toHaveAccessibleDescription(/Transparent · public/);
   await expect(preview).toContainText('Public payment: the amount and the recipient will be visible on chain.');
+  // ZIP 317 asks more for a transparent output, and more again for TEX: the estimate says so.
+  await expect(preview.locator('.preview-total dd')).toHaveText('~0.10015 ZEC');
+  await page.getByLabel('Recipient address').fill(TEX);
+  await expect(preview.locator('.preview-total dd')).toHaveText('~0.1002 ZEC');
   await page.getByLabel('Recipient address').fill(UA);
   await page.getByLabel('Amount (ZEC)').fill('0.25');
   await expect(preview).toContainText('Unified · shielded');
@@ -530,4 +534,62 @@ test.describe('copying', () => {
     await page.getByRole('button', { name: 'Copy' }).click();
     await expect(page.getByRole('status').filter({ hasText: 'Copied' })).toHaveCount(1);
   });
+});
+
+for (const [width, height, full] of [
+  [375, 667, false],
+  [390, 844, true],
+] as const) {
+  test(`at ${width}x${height} a may-have-been-sent warning shows above the tab bar${full ? ', with the full address open' : ''}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height });
+    await createWallet(page);
+    await nav(page, 'Send');
+    await page.getByLabel('Recipient address').fill(UA);
+    await page.getByLabel('Amount (ZEC)').fill('0.0666');
+    await page.getByLabel('Memo (optional)').fill('one try only');
+    await page.getByRole('button', { name: 'Review' }).click();
+    if (full) await page.getByRole('button', { name: 'Show full address' }).click();
+    await page.getByLabel('Enter your password to confirm').fill(PASSWORD);
+    await sendButton(page).click();
+    const warning = page.getByText('may have reached the network anyway');
+    await expect(warning).toBeVisible({ timeout: 10_000 });
+    // In the viewport is not enough: the fixed tab bar covers the bottom of it.
+    const bar = (await navBar(page).boundingBox())!;
+    const box = (await warning.boundingBox())!;
+    expect(box.y).toBeGreaterThanOrEqual(0);
+    expect(box.y + box.height).toBeLessThanOrEqual(bar.y);
+  });
+}
+
+test('the amount checked before signing stays on one line, and the preview inside its card', async ({ page }) => {
+  await createWallet(page);
+  await nav(page, 'Send');
+  await page.getByLabel('Recipient address').fill(UA);
+  await page.getByLabel('Amount (ZEC)').fill('0.12345678');
+  /** Line boxes of each of the figure's and the unit's text (one each when nothing breaks). */
+  const lines = (selector: string) =>
+    page.locator(selector).evaluate((box) =>
+      [...box.querySelectorAll('.figure, .unit')].map((el) => {
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        return new Set([...range.getClientRects()].map((r) => Math.round(r.top))).size;
+      }),
+    );
+  for (const width of [320, 1024, 1180]) {
+    await page.setViewportSize({ width, height: 900 });
+    expect(await lines('.preview-figure'), `preview at ${width}px`).toEqual([1, 1]);
+    const card = (await page.locator('.send-preview').boundingBox())!;
+    const unit = (await page.locator('.preview-figure .unit').boundingBox())!;
+    expect(unit.x + unit.width, `preview unit inside its card at ${width}px`).toBeLessThanOrEqual(card.x + card.width);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth), `no sideways scroll at ${width}px`).toBe(width);
+  }
+  await page.setViewportSize({ width: 412, height: 839 });
+  await page.getByRole('button', { name: 'Review' }).click();
+  for (const width of [320, 1024]) {
+    await page.setViewportSize({ width, height: 900 });
+    expect(await lines('[data-testid="confirm-amount"]'), `confirm amount at ${width}px`).toEqual([1, 1]);
+  }
+  await expect(page.getByTestId('confirm-amount')).toHaveText('0.12345678 ZEC');
 });

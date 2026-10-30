@@ -210,8 +210,9 @@ const SECTIONS: { id: SectionId; title: MessageKey; index: MessageKey; icon: Ico
 const anchor = (id: SectionId) => `settings-${id}`;
 
 /**
- * The section being read, for the index: the last one whose top has passed the
- * upper third of the window, or the last of all once the page is scrolled to its end.
+ * The section being read, for the index: the last one whose top has passed a
+ * reading line near the top of the window (a third of it, at most 200px), or
+ * the last of all once the page is scrolled to its end.
  */
 function useSectionInView(): SectionId {
   const [current, setCurrent] = useState<SectionId>('general');
@@ -219,7 +220,8 @@ function useSectionInView(): SectionId {
     let frame = 0;
     const update = () => {
       frame = 0;
-      const line = window.innerHeight / 3;
+      // A fixed reading line near the top; a third of a tall window passes the next section's heading.
+      const line = Math.min(window.innerHeight / 3, 200);
       let found: SectionId = 'general';
       for (const s of SECTIONS) {
         const el = document.getElementById(anchor(s.id));

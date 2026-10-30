@@ -159,6 +159,13 @@ p {
   margin: 0;
 }
 
+/* No one-word last lines in running text (where supported; harmless elsewhere).
+   Notice bodies often hold bare text, not a <p>. */
+p,
+.notice-body {
+  text-wrap: pretty;
+}
+
 a {
   color: var(--text);
   text-decoration: underline;
@@ -346,7 +353,6 @@ button.primary {
 }
 
 button.primary:hover,
-button.primary:disabled:hover,
 button.primary[aria-disabled='true']:hover {
   background: var(--accent);
   border-color: transparent;
@@ -430,6 +436,13 @@ button.quiet-link .icon {
   height: 16px;
 }
 
+/* Confirm sending / Shield: Back is withdrawn while a spend runs (and for the moment
+   a wrong password is checked); keep its room so the card and stages do not jump. */
+.screen:has(> .confirm-layout) > .screen-head:not(:has(> button.back))::before {
+  content: '';
+  height: 32px; /* button.back's min-height; the head's 8px gap follows it */
+}
+
 button.danger-button {
   background: transparent;
   border-color: color-mix(in srgb, var(--error) 60%, transparent);
@@ -484,7 +497,6 @@ textarea[aria-invalid='true'] {
 textarea {
   display: block;
   font-family: var(--font-mono);
-  font-size: 0.9375rem;
   line-height: 1.6;
   font-variant-ligatures: none;
   resize: vertical;
@@ -611,8 +623,11 @@ input[type='checkbox'] {
 }
 
 .notice-warn {
+  /* A plain hairline card: the icon carries the tone, as the comment above says. */
   --tone: var(--warn);
-  --rail: var(--input-border);
+  --rail: var(--border-2);
+  border-left-width: 1px;
+  padding-left: 17px; /* keeps the icon and text where the 2px edge had them */
 }
 
 .notice-error {
@@ -792,11 +807,14 @@ ul.plain li + li {
   border-bottom: 1px solid var(--border);
 }
 
+/* Balance's empty Recent activity: History's empty state, smaller (its icon ring is money.css's). */
 .card-empty {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 20px 24px 24px;
+  align-items: center;
+  gap: 6px;
+  padding: 32px 24px;
+  text-align: center;
 }
 
 /* Key and value pairs (the dashboard's privacy card). */
@@ -900,51 +918,6 @@ ul.plain li + li {
   overflow-wrap: anywhere;
 }
 
-/* A spend's stages. A fixed icon column keeps every label at the same x. */
-.stages {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.stages li {
-  display: grid;
-  grid-template-columns: 1.5rem 1fr;
-  gap: 10px;
-  align-items: start;
-  color: var(--subtle);
-}
-
-.stage-icon {
-  display: grid;
-  place-items: center;
-  height: 1.55em;
-}
-
-.stage-icon:empty::before {
-  content: '';
-  width: 0.65rem;
-  height: 0.65rem;
-  border: 1.5px solid var(--input-border);
-  border-radius: 50%;
-}
-
-.stages li.current {
-  color: var(--text);
-  font-weight: 560;
-}
-
-.stages li.done {
-  color: var(--muted);
-}
-
-.stages li.done .stage-icon {
-  color: var(--ok);
-}
-
 /* A spend's outcome. */
 .result {
   display: flex;
@@ -1012,54 +985,15 @@ ul.plain li + li {
   word-break: break-all;
 }
 
-/* Recovery words (Create and Settings). */
-.seed-grid {
-  margin: 0;
-  padding: 12px;
-  list-style: none;
-  display: grid;
-  /* Wide enough for the longest BIP39 word (8 letters) plus its number, so
-     narrow screens get fewer columns instead of words split across lines. */
-  grid-template-columns: repeat(auto-fill, minmax(7.25rem, 1fr));
-  gap: 8px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r-lg);
-}
-
-.seed-grid li {
-  display: flex;
-  gap: 8px;
-  align-items: baseline;
-  min-width: 0;
-  padding: 6px 8px;
-  border-radius: var(--r-sm);
-  background: var(--surface-2);
-  font-family: var(--font-mono);
-  font-size: 0.9rem;
-  font-variant-ligatures: none;
-}
-
-.seed-index {
-  min-width: 1.4em;
-  color: var(--subtle);
-  font-size: 0.75rem;
-}
-
-/* A word broken over two lines gets copied onto paper as two words. */
-.seed-word {
-  white-space: nowrap;
-}
-
-/* Hidden until "Reveal words": blurred, and not selectable. */
+/* Recovery words (Create and Settings): laid out in styles/account.css.
+   Hidden until "Reveal words": blurred, and not selectable. */
 .seed-grid.blurred {
   filter: blur(7px);
   user-select: none;
 }
 
-/* Amounts set for reading: lining, tabular figures. */
+/* Amounts in lists and summaries: lining, tabular figures. */
 .amt,
-.balance-total,
 .pool-amount,
 .summary dd,
 .memo-count {
@@ -1080,8 +1014,7 @@ ul.plain li + li {
   grid-template-areas:
     'icon main value'
     'icon date value'
-    'icon privacy privacy'
-    'icon actions actions';
+    'icon privacy privacy';
   column-gap: 14px;
   align-items: start;
   padding: 14px 16px;
@@ -1090,6 +1023,15 @@ ul.plain li + li {
 
 .tx:first-child {
   border-top: 0;
+}
+
+/* The narrowest phones (WCAG's 320px reflow): the amount goes under the type
+   instead of squeezing it; still right-aligned, so the decimals line up. */
+@media (max-width: 379px) {
+  .tx {
+    grid-template-columns: 36px minmax(0, 1fr);
+    grid-template-areas: 'icon main' 'icon value' 'icon date' 'icon privacy';
+  }
 }
 
 .tx-icon {
@@ -1144,6 +1086,16 @@ ul.plain li + li {
   overflow-wrap: anywhere;
   /* Line breaks are the sender's, and WebZjs puts each of a transaction's memos on its own line. */
   white-space: pre-line;
+}
+
+/* Recent activity is a glance: two lines of any memo, whatever the sender typed; History shows it whole. */
+.activity .tx-memo {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  white-space: normal;
 }
 
 /* The words carry the meaning; colour is on the mark only. */
@@ -1223,6 +1175,11 @@ ul.plain li + li {
   text-align: left;
 }
 
+/* Copied once: the spoken copy of the figure (TxRow) is the one a selection takes. */
+.tx-amount .amt[aria-hidden='true'] {
+  user-select: none;
+}
+
 .amt-unit {
   color: var(--subtle);
   font-size: 0.75rem;
@@ -1245,11 +1202,6 @@ ul.plain li + li {
 
 .status-expired {
   color: var(--error);
-}
-
-.tx-actions {
-  grid-area: actions;
-  margin-top: 12px;
 }
 
 /* --- shell --------------------------------------------------------------- */
@@ -1422,10 +1374,9 @@ ul.plain li + li {
   color: var(--text);
 }
 
+/* Never cut short: a label a little wider than its column spreads into the
+   button's side padding (the button centres it), as with text spacing at 320px. */
 .tab-label {
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -1467,10 +1418,11 @@ ul.plain li + li {
     max(16px, env(safe-area-inset-left));
 }
 
-/* Phones: the pill names the state ("Up to date", "Syncing", "Stopped"); the
-   rest stays in its text and tooltip, the blocks left show under Balance's
-   progress bar and a stopped engine's notice is on every screen. "Behind the
-   network" keeps its whole line (cut short if it must be). */
+/* Phones: the pill names the state ("Up to date", "Syncing", "Stopped",
+   "Connection problem"); the rest stays in its text and tooltip, the blocks
+   left show under Balance's progress bar and a stopped engine's notice is on
+   every screen. "Behind the network" shows only its state: the block height
+   stays in the text and tooltip, and the network banner says the rest. */
 @media (max-width: 479px) {
   .pill-ok .pill-sep,
   .pill-ok .pill-sub,
@@ -1484,6 +1436,27 @@ ul.plain li + li {
     overflow: hidden;
     clip: rect(0 0 0 0);
     white-space: nowrap;
+  }
+}
+
+@media (max-width: 559px) {
+  .pill-warn .pill-head,
+  .pill-warn .pill-sep {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  /* ::first-letter needs a block container. */
+  .pill-warn .pill-sub {
+    display: inline-block;
+  }
+
+  .pill-warn .pill-sub::first-letter {
+    text-transform: uppercase;
   }
 }
 
@@ -1760,10 +1733,6 @@ ul.plain li + li {
     max-width: 760px;
   }
 
-  .content > .screen > .qr {
-    align-self: flex-start;
-  }
-
   .content .row {
     justify-content: flex-start;
   }
@@ -1864,10 +1833,16 @@ button.eye-toggle[aria-pressed='true'] {
   line-height: 1;
   color: var(--text);
   overflow-wrap: anywhere;
+  container-type: inline-size;
 }
 
+/* One line always: the figure shrinks to fit instead of breaking (a split
+   fraction reads as another amount). --chars is its length (Home.tsx, unset
+   while hidden); 0.6em is wider than any Fraunces digit. The unit may wrap. */
 .balance-total .amt {
   font-variant-numeric: lining-nums;
+  white-space: nowrap;
+  font-size: min(1em, calc(96cqi / (var(--chars) * 0.6)));
 }
 
 .balance-total .amt-frac {
@@ -1895,6 +1870,11 @@ button.eye-toggle[aria-pressed='true'] {
   line-height: 1;
   color: var(--muted);
   transform: translateY(-0.1em);
+}
+
+/* Masked: the unit centres on the dots instead of hanging on a baseline nothing marks. */
+.balance-total:has(.amt > [aria-hidden='true']) {
+  align-items: center;
 }
 
 /* No figure before the wallet's first summary: a sentence in the interface face. */
@@ -2045,8 +2025,7 @@ button.eye-toggle[aria-pressed='true'] {
   white-space: nowrap;
 }
 
-.pool-amount .unit,
-.tx-amount .unit {
+.pool-amount .unit {
   margin-left: 2px;
   color: var(--subtle);
   font-size: 0.75rem;
@@ -2060,6 +2039,23 @@ button.eye-toggle[aria-pressed='true'] {
   color: var(--subtle);
   font-size: 0.8125rem;
   line-height: 1.5;
+}
+
+/* Phones and tablets: when the name and the amount do not both fit, the
+   amount drops under the name (right-aligned) instead of being drawn over it. */
+@media (max-width: 1023px) {
+  .pool {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .pool > .pool-amount {
+    margin-left: auto;
+  }
+
+  .pool > .pool-help {
+    flex: 1 0 100%;
+  }
 }
 
 /* Phones: one row of equal tiles, however many actions there are (two or three). */
@@ -2206,6 +2202,14 @@ button.privacy-more {
     grid-template-columns: minmax(0, 1fr) 340px;
     gap: 24px;
     align-items: stretch;
+    /* Tab follows the rows: hero, privacy card, notes, activity (where supported;
+       the DOM order keeps the phone layout's order). */
+    reading-flow: grid-rows;
+  }
+
+  /* Under a shell notice: the 16px gap plus 8 is the dashboard's own 24px. */
+  .content > :is(.network-live:not(:empty), .notice) ~ .home {
+    margin-top: 8px;
   }
 
   .hero {
@@ -2218,6 +2222,12 @@ button.privacy-more {
     grid-column: 2;
     grid-row: 1;
     padding: 24px;
+  }
+
+  /* On the hero's eyebrow line: the hero has 4px more padding, centres its 1.2em
+     label in the 40px eye row, and lifts that row by 6px (18px - 0.6em in all). */
+  .privacy-card h2 {
+    margin-top: calc(18px - 0.6em);
   }
 
   /* The way to Settings closes the card, however tall the row is. */
@@ -2249,6 +2259,34 @@ button.privacy-more {
     height: auto;
     overflow: visible;
     clip: auto;
+  }
+
+  /* With the label shown, a switch carries the state (as in Settings); the
+     struck eye stays below 1024px. The name and aria-pressed are unchanged. */
+  button.eye-toggle .icon {
+    display: none;
+  }
+
+  button.eye-toggle::after {
+    content: '';
+    flex: none;
+    width: 30px;
+    height: 18px;
+    border: 1px solid var(--input-border);
+    border-radius: var(--r-pill);
+    background: radial-gradient(circle closest-side, var(--muted) 96%, transparent 100%) 2px center / 12px 12px no-repeat
+      var(--surface-2);
+    transition:
+      background-position 0.18s var(--ease),
+      background-color 0.18s var(--ease),
+      border-color 0.18s var(--ease);
+  }
+
+  button.eye-toggle[aria-pressed='true']::after {
+    border-color: var(--text);
+    background-color: var(--text);
+    background-image: radial-gradient(circle closest-side, var(--surface) 96%, transparent 100%);
+    background-position: 14px center;
   }
 
   .balance-total {
@@ -2376,11 +2414,13 @@ button.privacy-more {
     padding: 20px 24px;
   }
 
+  /* The amount column grows with the list's widest amount (--tx-int and --tx-frac
+     from useFractionWidth, inherited from the list), taking room from the privacy
+     column, which wraps, never from the transaction column. */
   .tx {
-    grid-template-columns: 36px minmax(0, 1fr) 150px 200px 140px;
-    grid-template-areas:
-      'icon main date privacy value'
-      '. actions actions actions actions';
+    --tx-amt: max(140px, calc(var(--tx-int, 0ch) + var(--tx-frac, 0ch) + 2.4em));
+    grid-template-columns: 36px minmax(0, 1fr) 150px max(64px, calc(340px - var(--tx-amt))) var(--tx-amt);
+    grid-template-areas: 'icon main date privacy value';
     column-gap: 20px;
     align-items: center;
     padding: 15px 24px;
@@ -2418,8 +2458,13 @@ button.privacy-more {
   }
 
   .tx {
-    grid-template-columns: 36px minmax(0, 1fr) 136px 176px 120px;
+    --tx-amt: max(120px, calc(var(--tx-int, 0ch) + var(--tx-frac, 0ch) + 2.4em));
+    grid-template-columns: 36px minmax(0, 1fr) 136px max(64px, calc(296px - var(--tx-amt))) var(--tx-amt);
     column-gap: 16px;
+  }
+
+  .content > :is(.network-live:not(:empty), .notice) ~ .home {
+    margin-top: 4px; /* 16 + 4: this width's 20px dashboard gap */
   }
 }
 
@@ -2436,7 +2481,8 @@ button.privacy-more {
     }
 
     .pool {
-      grid-template-columns: minmax(0, 1fr) auto;
+      display: flex;
+      flex-wrap: wrap;
       align-items: baseline;
       padding: 14px 0;
       border-top: 1px solid var(--border);
@@ -2457,11 +2503,13 @@ button.privacy-more {
 
     .pool > .pool-amount {
       margin-top: 0;
+      margin-left: auto;
       font-size: 1.25rem;
       text-align: right;
     }
 
     .pool > .pool-help {
+      flex: 1 0 100%;
       max-width: none;
       margin: 6px 0 0;
     }
@@ -2480,6 +2528,18 @@ button.privacy-more {
     .hero-actions button .icon {
       display: none;
     }
+  }
+}
+
+/* Forced colours drop gradient backgrounds, so the eye toggle's switch knob
+   would vanish: the struck eye carries the state there, as on a phone. */
+@media (min-width: 1024px) and (forced-colors: active) {
+  button.eye-toggle .icon {
+    display: inline-block;
+  }
+
+  button.eye-toggle::after {
+    display: none;
   }
 }
 

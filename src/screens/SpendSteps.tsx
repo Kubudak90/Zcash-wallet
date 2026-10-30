@@ -55,8 +55,13 @@ export function SpendConfirm({
 
   // The stages replace the form where the user pressed the button, which on a
   // phone can be well down the page: bring them into view as the spend starts.
+  // The button that had focus is gone with the form, so the stages take it, or
+  // it would fall to <body> for the whole spend. The outcome (result, or a
+  // failure) later replaces them in the same place, so it is where the user looks.
   useEffect(() => {
-    if (sending) progress.current?.scrollIntoView({ block: 'nearest' });
+    if (!sending) return;
+    progress.current?.focus({ preventScroll: true });
+    progress.current?.scrollIntoView({ block: 'nearest' });
   }, [sending]);
 
   // A spend started during a pass, or far behind the tip, would sit on
@@ -100,7 +105,8 @@ export function SpendConfirm({
   if (stage) {
     const current = STAGES.indexOf(stage);
     body = (
-      <div className="spend-progress" ref={progress}>
+      // Focusable from code only; no role or live region: the role=status line speaks the stages.
+      <div className="spend-progress" ref={progress} tabIndex={-1}>
         {/* The marks sit in a fixed column, so every label starts at the same x. */}
         <ol className="stages">
           {STAGES.map((s, i) => (

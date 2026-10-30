@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 
 import { Icon } from '../components/icons';
 import { Screen } from '../components/ui';
@@ -10,6 +10,42 @@ import { useController, useWallet } from '../state/wallet';
 import type { Tab } from './Main';
 import { useNetworkView } from './NetworkBanner';
 import { SpendConfirm } from './SpendSteps';
+
+/**
+ * Where shielding takes the funds and what it costs: the confirm step and the
+ * result list the same rows. No privacy tag: the transparent inputs, their
+ * address and the amount are public, so it is not a "Shielded" payment
+ * (History calls it "Shielded · amount public"); From and To say each side.
+ */
+function ShieldRows({ ironwood, fee }: { ironwood: boolean; fee: string }) {
+  const { t } = useI18n();
+  return (
+    <>
+      <div className="summary-move">
+        <dt>{t('shield.from')}</dt>
+        <dd>
+          <span className="kind-tag kind-public">
+            <span className="kind-mark" aria-hidden="true" />
+            {t('shield.fromValue')}
+          </span>
+        </dd>
+      </div>
+      <div className="summary-move">
+        <dt>{t('shield.to')}</dt>
+        <dd>
+          <span className="kind-tag kind-shielded">
+            <span className="kind-mark" aria-hidden="true" />
+            {t(ironwood ? 'shield.toIronwood' : 'shield.toOrchard')}
+          </span>
+        </dd>
+      </div>
+      <div>
+        <dt>{t('shield.fee')}</dt>
+        <dd>~{fee} ZEC</dd>
+      </div>
+    </>
+  );
+}
 
 /** `onClose` returns to the screen Shield was opened from. */
 export function Shield({ onNavigate, onClose }: { onNavigate: (tab: Tab) => void; onClose: () => void }) {
@@ -27,6 +63,7 @@ export function Shield({ onNavigate, onClose }: { onNavigate: (tab: Tab) => void
 
   const transparent = summary?.balances.transparent ?? 0n;
   const fmt = (z: bigint) => formatZec(z, { locale: lang });
+  const amount = fmt(transparent);
 
   return (
     // No Back once it is done, as on Send's result: Close there goes to the same place.
@@ -42,6 +79,9 @@ export function Shield({ onNavigate, onClose }: { onNavigate: (tab: Tab) => void
             </h2>
             <p className="muted">{t('shield.success')}</p>
           </div>
+          <dl className="summary">
+            <ShieldRows ironwood={ironwood} fee={fmt(TYPICAL_FEE_ZATS)} />
+          </dl>
           <div className="row spend-done-actions">
             <button type="button" className="secondary" onClick={() => onNavigate('history')}>
               {t('common.viewHistory')}
@@ -60,46 +100,19 @@ export function Shield({ onNavigate, onClose }: { onNavigate: (tab: Tab) => void
                 <div className="summary-amount">
                   <dt>{t('shield.amount')}</dt>
                   <dd>
-                    <span className="figure">{fmt(transparent)}</span> <span className="unit">ZEC</span>
-                  </dd>
-                </div>
-                <div className="summary-privacy">
-                  <dt className="visually-hidden">{t('send.privacy')}</dt>
-                  <dd>
-                    <span className="kind-tag kind-shielded">
-                      <span className="kind-mark" aria-hidden="true" />
-                      {t('send.privacy.shielded')}
-                    </span>
+                    <span className="figure" style={{ '--chars': amount.length } as CSSProperties}>
+                      {amount}
+                    </span>{' '}
+                    <span className="unit">ZEC</span>
                   </dd>
                 </div>
               </dl>
               {/* Since NU6.3 shielded funds go to Ironwood; an engine without it shielded into Orchard. */}
               <p className="summary-lead">
-                {t(ironwood ? 'shield.intro' : 'shield.introOrchard', { amount: fmt(transparent) })}
+                {t(ironwood ? 'shield.intro' : 'shield.introOrchard', { amount })}
               </p>
               <dl className="summary">
-                <div className="summary-move">
-                  <dt>{t('shield.from')}</dt>
-                  <dd>
-                    <span className="kind-tag kind-public">
-                      <span className="kind-mark" aria-hidden="true" />
-                      {t('shield.fromValue')}
-                    </span>
-                  </dd>
-                </div>
-                <div className="summary-move">
-                  <dt>{t('shield.to')}</dt>
-                  <dd>
-                    <span className="kind-tag kind-shielded">
-                      <span className="kind-mark" aria-hidden="true" />
-                      {t(ironwood ? 'shield.toIronwood' : 'shield.toOrchard')}
-                    </span>
-                  </dd>
-                </div>
-                <div>
-                  <dt>{t('send.confirmFee')}</dt>
-                  <dd>~{fmt(TYPICAL_FEE_ZATS)} ZEC</dd>
-                </div>
+                <ShieldRows ironwood={ironwood} fee={fmt(TYPICAL_FEE_ZATS)} />
               </dl>
             </div>
           )}

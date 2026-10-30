@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useId, useRef, useState, type CSSProperties, type FormEvent } from 'react';
 import { flushSync } from 'react-dom';
 
 import { GroupedAddress } from '../components/GroupedAddress';
@@ -56,14 +56,48 @@ function tryParseZec(input: string): bigint | null {
 
 /**
  * What kind of address a payment goes to, and whether that address keeps it
- * shielded, from the client-side parse (lib/address.ts). null privacy: a
- * unified address whose receivers do not decode, which the engine refuses
- * whole; no guess is shown for it.
+ * shielded, from the client-side parse (lib/address.ts). 'partial': the
+ * payment lands in Sapling, while this wallet's funds and its change are in
+ * Ironwood (Orchard before NU6.3), so the amount that crosses into Sapling
+ * shows in its value balance; History labels the same payment "Partly
+ * shielded". null privacy: a unified address whose receivers do not decode,
+ * which the engine refuses whole; no guess is shown for it.
  */
 interface Recipient {
   label: MessageKey;
-  privacy: 'shielded' | 'public' | null;
+  privacy: 'shielded' | 'partial' | 'public' | null;
 }
+
+/**
+ * The fee shown beside a payment, by recipient: ZIP 317 asks more for a
+ * transparent output (3 logical actions) and more again for TEX (measured
+ * 20,000 zats, tests/unit/spend-refusal.test.ts). Display only: the balance
+ * check and Max keep the typical fee, and the engine computes the real one.
+ */
+function feeFloor(kind: AddressKind | undefined): bigint {
+  return kind === 'tex' ? 20_000n : kind === 'transparent' ? 15_000n : TYPICAL_FEE_ZATS;
+}
+
+/** The outcome line under the preview, for what is known of the recipient. */
+function outcomeKey(recipient: Recipient | null): MessageKey {
+  if (!recipient) return 'send.outcome.none';
+  switch (recipient.privacy) {
+    case 'shielded':
+      return 'send.outcome.shielded';
+    case 'partial':
+      return 'send.outcome.partial';
+    case 'public':
+      return 'send.outcome.public';
+    case null:
+      return 'send.outcome.unknown';
+  }
+}
+
+const PRIVACY_WORDS = {
+  shielded: 'send.privacy.shielded',
+  partial: 'send.privacy.partial',
+  public: 'send.privacy.public',
+} as const satisfies Record<string, MessageKey>;
 
 function recipientOf(address: string, kind: AddressKind): Recipient {
   switch (kind) {
@@ -72,13 +106,17 @@ function recipientOf(address: string, kind: AddressKind): Recipient {
     case 'tex':
       return { label: 'send.kind.tex', privacy: 'public' };
     case 'sapling':
-      return { label: 'send.kind.sapling', privacy: 'shielded' };
-    case 'unified':
-      if (unifiedReceivers(address) === null) return { label: 'send.kind.unified', privacy: null };
-      // A Sapling or Orchard receiver takes the payment (and a memo); without one only a transparent one is left.
-      return acceptsMemo(address)
-        ? { label: 'send.kind.unifiedShielded', privacy: 'shielded' }
-        : { label: 'send.kind.unifiedPublic', privacy: 'public' };
+      // Value entering Sapling from Ironwood or Orchard shows in Sapling's value balance.
+      return { label: 'send.kind.sapling', privacy: 'partial' };
+    case 'unified': {
+      const receivers = unifiedReceivers(address);
+      if (receivers === null) return { label: 'send.kind.unified', privacy: null };
+      // An Orchard receiver: WebZjs pays it through Ironwood, the pool the funds are in.
+      if (receivers.includes(0x03)) return { label: 'send.kind.unifiedShielded', privacy: 'shielded' };
+      // Sapling only: as a Sapling address. Without either only a transparent receiver is left.
+      if (receivers.includes(0x02)) return { label: 'send.kind.unifiedPartial', privacy: 'partial' };
+      return { label: 'send.kind.unifiedPublic', privacy: 'public' };
+    }
   }
 }
 
@@ -147,7 +185,14 @@ export function Send({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
   if (meta?.kind === 'view') {
     return (
       <Screen title={t('send.title')}>
-        <Notice tone="info">{t('send.viewOnly')}</Notice>
+        <div className="stack send-blocked">
+          <Notice tone="info">{t('send.viewOnly')}</Notice>
+          <div className="row">
+            <button type="button" className="secondary" onClick={() => onNavigate('receive')}>
+              {t('nav.receive')}
+            </button>
+          </div>
+        </div>
       </Screen>
     );
   }
@@ -313,9 +358,16 @@ export function Send({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
   if (spendingDisabled(network)) {
     return (
       <Screen title={t('send.title')}>
-        <Notice tone="warn">
-          <p data-testid="spend-disabled">{disabledMessage(network, t('send.disabledOutdated'), t)}</p>
-        </Notice>
+        <div className="stack send-blocked">
+          <Notice tone="warn">
+            <p data-testid="spend-disabled">{disabledMessage(network, t('send.disabledOutdated'), t)}</p>
+          </Notice>
+          <div className="row">
+            <button type="button" className="secondary" onClick={() => onNavigate('history')}>
+              {t('common.viewHistory')}
+            </button>
+          </div>
+        </div>
       </Screen>
     );
   }
@@ -327,6 +379,8 @@ export function Send({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
     .filter(Boolean)
     .join(' ');
   const showMemo = takesMemo === true && memo !== '';
+  const fee = feeFloor(addressCheck?.ok ? addressCheck.kind : undefined);
+  const figureText = fmt(typedZats ?? 0n);
 
   return (
     <Screen title={t('send.title')} subtitle={t('send.available', { amount: balances.fmt(available) })}>
@@ -417,7 +471,7 @@ export function Send({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
             )}
             {linkFill?.amount && <p className="field-help">{t('send.uriFilled')}</p>}
             <p id={feeId} className="field-help">
-              {t('send.fee', { amount: fmt(TYPICAL_FEE_ZATS) })}
+              {t('send.fee', { amount: fmt(fee) })}
             </p>
           </div>
 
@@ -483,7 +537,10 @@ export function Send({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
             {t('send.previewTitle')}
           </h2>
           <p className={typedZats === null ? 'preview-figure empty' : 'preview-figure'}>
-            <span className="figure">{typedZats === null ? fmt(0n) : fmt(typedZats)}</span>{' '}
+            {/* --chars sizes the figure to fit its card (money.css): it never breaks or overflows. */}
+            <span className="figure" style={{ '--chars': figureText.length } as CSSProperties}>
+              {figureText}
+            </span>{' '}
             <span className="unit">ZEC</span>
           </p>
           <dl className="preview-rows">
@@ -499,24 +556,16 @@ export function Send({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
             )}
             <div>
               <dt>{t('send.confirmFee')}</dt>
-              <dd>~{fmt(TYPICAL_FEE_ZATS)} ZEC</dd>
+              <dd>~{fmt(fee)} ZEC</dd>
             </div>
             <div className="preview-total">
               <dt>{t('send.total')}</dt>
-              <dd>{typedZats === null ? '—' : `~${fmt(typedZats + TYPICAL_FEE_ZATS)} ZEC`}</dd>
+              <dd>{typedZats === null ? '—' : `~${fmt(typedZats + fee)} ZEC`}</dd>
             </div>
           </dl>
           <p className={`preview-privacy kind-${recipient?.privacy ?? 'unknown'}`}>
             <span className="kind-mark" aria-hidden="true" />
-            <span>
-              {t(
-                recipient?.privacy === 'shielded'
-                  ? 'send.outcome.shielded'
-                  : recipient?.privacy === 'public'
-                    ? 'send.outcome.public'
-                    : 'send.outcome.none',
-              )}
-            </span>
+            <span>{t(outcomeKey(recipient))}</span>
           </p>
           <button type="submit" className="primary">
             {t('send.review')}
@@ -530,12 +579,15 @@ export function Send({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
 
 /**
  * A spend's details. `hero` on the confirm step: the amount large, with the
- * payment's privacy beside it; the result screen lists the same as rows.
+ * payment's privacy beside it, and the estimated total; the result screen
+ * lists the same as rows, without a total summed from an estimate.
  */
 function DraftSummary({ draft, hero = false }: { draft: Draft; hero?: boolean }) {
   const { t, lang } = useI18n();
   const fmt = (z: bigint) => formatZec(z, { locale: lang });
   const recipient = recipientOf(draft.to, draft.kind);
+  const fee = feeFloor(draft.kind);
+  const amount = fmt(draft.zats);
   const [full, setFull] = useState(false);
   const fullId = useId();
   return (
@@ -543,7 +595,10 @@ function DraftSummary({ draft, hero = false }: { draft: Draft; hero?: boolean })
       <div className="summary-amount">
         <dt>{t('send.confirmAmount')}</dt>
         <dd data-testid="confirm-amount">
-          <span className="figure">{fmt(draft.zats)}</span> <span className="unit">ZEC</span>
+          <span className="figure" style={{ '--chars': amount.length } as CSSProperties}>
+            {amount}
+          </span>{' '}
+          <span className="unit">ZEC</span>
         </dd>
       </div>
       {recipient.privacy && (
@@ -552,7 +607,7 @@ function DraftSummary({ draft, hero = false }: { draft: Draft; hero?: boolean })
           <dd>
             <span className={`kind-tag kind-${recipient.privacy}`}>
               <span className="kind-mark" aria-hidden="true" />
-              {t(recipient.privacy === 'shielded' ? 'send.privacy.shielded' : 'send.privacy.public')}
+              {t(PRIVACY_WORDS[recipient.privacy])}
             </span>
           </dd>
         </div>
@@ -588,12 +643,14 @@ function DraftSummary({ draft, hero = false }: { draft: Draft; hero?: boolean })
       )}
       <div>
         <dt>{t('send.confirmFee')}</dt>
-        <dd>~{fmt(TYPICAL_FEE_ZATS)} ZEC</dd>
+        <dd>~{fmt(fee)} ZEC</dd>
       </div>
-      <div className="summary-total">
-        <dt>{t('send.total')}</dt>
-        <dd>~{fmt(draft.zats + TYPICAL_FEE_ZATS)} ZEC</dd>
-      </div>
+      {hero && (
+        <div className="summary-total">
+          <dt>{t('send.total')}</dt>
+          <dd>~{fmt(draft.zats + fee)} ZEC</dd>
+        </div>
+      )}
     </dl>
   );
 }

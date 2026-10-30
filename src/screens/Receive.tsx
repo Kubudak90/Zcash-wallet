@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 
 import { GroupedAddress } from '../components/GroupedAddress';
 import { Icon } from '../components/icons';
@@ -19,6 +19,16 @@ export function Receive() {
   const [visit] = useState(() => ({}));
   const [shielded, setShielded] = useState<ReceiveAddress | null>(null);
   const kindId = useId();
+  // The toggle moves between the panel's two sections, so React mounts a new
+  // button; hand focus to it, or it falls to <body>. Also after a click or a
+  // screen reader's activation that did not move focus to the button.
+  const toggleRef = useRef<HTMLButtonElement>(null);
+  const refocus = useRef(false);
+  useLayoutEffect(() => {
+    if (!refocus.current) return;
+    refocus.current = false;
+    toggleRef.current?.focus();
+  }, [transparent]);
 
   useEffect(() => {
     let current = true;
@@ -37,7 +47,15 @@ export function Receive() {
   const label = t(transparent ? 'receive.transparent' : 'receive.unified');
   const preparing = !transparent && !shielded;
   const toggle = (
-    <button type="button" className="secondary receive-toggle" onClick={() => setTransparent((v) => !v)}>
+    <button
+      type="button"
+      ref={toggleRef}
+      className="secondary receive-toggle"
+      onClick={() => {
+        refocus.current = true;
+        setTransparent((v) => !v);
+      }}
+    >
       {t(transparent ? 'receive.showUnified' : 'receive.showTransparent')}
       <Icon name="arrowRight" />
     </button>

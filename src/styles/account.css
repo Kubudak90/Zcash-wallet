@@ -84,7 +84,7 @@
 button.chip {
   min-height: 32px;
   padding: 0 12px;
-  border: 0;
+  border: 1px solid transparent;
   border-radius: 7px;
   background: transparent;
   color: var(--muted);
@@ -97,12 +97,12 @@ button.chip:hover {
   color: var(--text);
 }
 
+/* The selected one is marked at 3:1 or more (WCAG 1.4.11), not by its fill alone. */
 button.chip.active {
+  border-color: var(--input-border);
   background: var(--raised);
   color: var(--text);
-  box-shadow:
-    var(--shadow-1),
-    inset 0 0 0 1px var(--border-2);
+  box-shadow: var(--shadow-1);
 }
 
 /* --- Welcome --------------------------------------------------------------- */
@@ -138,7 +138,8 @@ button.chip.active {
   opacity: 0.85;
 }
 
-/* Phones and tablets: the letter stands in the room above the statement, its mouth in view. */
+/* Phones and tablets: the letter stands in the room above the statement, its mouth in view
+   (on phones a smaller letter and less room, below, so both choices start in view). */
 .w-statement {
   padding: 172px 0 32px;
   max-width: 640px;
@@ -421,6 +422,33 @@ button.option-button::after {
   height: 15px;
 }
 
+/* Phones: a smaller letter and less room above, so both choices start in view. */
+@media (max-width: 599px) {
+  .w-statement {
+    padding-top: 112px;
+  }
+
+  .w-motif {
+    width: 560px;
+    height: 560px;
+    right: -220px;
+    top: -170px;
+  }
+
+  /* The flow's "Step n of 3" carries this on phones; the list stays in the button's description. */
+  .option-steps {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+}
+
 /* The narrowest phones: the switch drops its globe to stay clear of the brand. */
 @media (max-width: 379px) {
   .w-lang .lang-globe {
@@ -622,6 +650,13 @@ button.option-button::after {
   margin-bottom: 2px;
 }
 
+/* Back's room while busy (Back leaves the DOM), so the heading does not move:
+   32px plus the head's 10px gap is Back's min-height plus the gap. */
+.flow-card .screen-head:not(:has(> button.back))::before {
+  content: '';
+  height: 32px;
+}
+
 .flow-card .screen-head h1 {
   font-size: 1.75rem;
   font-weight: 380;
@@ -640,6 +675,11 @@ button.option-button::after {
   min-height: 50px;
 }
 
+/* The call to action stands a little apart from the last field (12px gap + 8). */
+.flow-card form.stack > button[type='submit'] {
+  margin-top: 8px;
+}
+
 @media (min-width: 600px) {
   .flow {
     padding-inline: 24px;
@@ -649,20 +689,14 @@ button.option-button::after {
     padding: 28px 16px 20px;
   }
 
+  /* Anchored at the top, not centred: the heading stays put from step to step. */
   .flow-card {
-    margin: auto 0;
+    margin: clamp(8px, 4vh, 40px) 0 auto;
     padding: 30px 40px 38px;
   }
 
   .flow-card .screen-head h1 {
     font-size: 2rem;
-  }
-
-  /* Optical centre: a little above the middle. */
-  .flow::after {
-    content: '';
-    flex: none;
-    height: 28px;
   }
 }
 
@@ -815,7 +849,7 @@ button.option-button::after {
   flex: 1;
   min-height: 38px;
   padding: 0 12px;
-  border: 0;
+  border: 1px solid transparent;
   border-radius: 7px;
   background: transparent;
   color: var(--muted);
@@ -829,11 +863,10 @@ button.option-button::after {
 }
 
 .segmented button.active {
+  border-color: var(--input-border);
   background: var(--raised);
   color: var(--text);
-  box-shadow:
-    var(--shadow-1),
-    inset 0 0 0 1px var(--border-2);
+  box-shadow: var(--shadow-1);
 }
 
 /* Restore's two choices on the month step, as ruled rows. */
@@ -1185,17 +1218,13 @@ button.lock-forgot:hover {
   gap: 18px;
 }
 
-/* The sections' index: a row of chips on a phone, a sticky list on a wide screen. */
+/* The sections' index: wrapping chips on a phone (every one in view, none
+   behind a hidden scroll), a sticky list on a wide screen. */
 .settings-index {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   min-width: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.settings-index::-webkit-scrollbar {
-  display: none;
 }
 
 .settings-index a {
@@ -1324,7 +1353,6 @@ button.lock-forgot:hover {
   min-height: 42px;
   padding-top: 8px;
   padding-bottom: 8px;
-  font-size: 0.9375rem;
 }
 
 /* A password gate: its button in the row, its form or value across the row. */
@@ -1344,6 +1372,12 @@ button.lock-forgot:hover {
 .set-row > .gate-panel {
   grid-column: 1 / -1;
   padding-top: 4px;
+}
+
+/* The password form reads as one short column (field, error, actions), like the
+   lock card; the revealed key or phrase (div.gate-panel) keeps the whole row. */
+.set-row > form.gate-panel {
+  width: min(100%, 420px);
 }
 
 .gate-panel > button.gate-close,
@@ -1391,7 +1425,6 @@ input[type='checkbox'].switch:checked {
 .server-row input {
   grid-column: 1 / -1;
   min-height: 46px;
-  font-size: 0.9375rem;
 }
 
 .server-row button {
@@ -1501,13 +1534,15 @@ button.secondary.quiet:hover {
     justify-self: end;
   }
 
+  /* The address keeps a line of its own (it is what the user checks); the two
+     buttons sit together under it, right-aligned, Save last. */
   .server-row {
     grid-template-columns: minmax(0, 1fr) auto auto;
     align-items: center;
   }
 
-  .server-row input {
-    grid-column: auto;
+  .server-row button:first-of-type {
+    grid-column: 2;
   }
 
   .server-row button {
@@ -1587,6 +1622,14 @@ button.secondary.quiet:hover {
   }
 }
 
+/* Where the whole default address fits beside both buttons in either language: one line. */
+@media (min-width: 1366px) {
+  .server-row input,
+  .server-row button:first-of-type {
+    grid-column: auto;
+  }
+}
+
 .nowrap {
   white-space: nowrap;
 }
@@ -1595,5 +1638,47 @@ button.secondary.quiet:hover {
 @media (max-width: 419px) {
   .server-row {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Forced colours (Windows High Contrast): fills and box-shadows are dropped,
+   so the switch, the selected chip or tab and the current nav item draw
+   themselves in system colours. After the base rules: a media query adds no
+   specificity. account.css loads after styles.css, so it overrides the tab bar too. */
+@media (forced-colors: active) {
+  /* Without this the knob gradient is dropped and a backplate covers HighlightText. */
+  input[type='checkbox'].switch,
+  button.chip.active,
+  .segmented button.active {
+    forced-color-adjust: none;
+  }
+
+  input[type='checkbox'].switch {
+    border-color: CanvasText;
+    background-color: Canvas;
+    background-image: radial-gradient(circle closest-side, CanvasText 96%, transparent 100%);
+  }
+
+  input[type='checkbox'].switch:checked {
+    border-color: Highlight;
+    background-color: Highlight;
+    background-image: radial-gradient(circle closest-side, HighlightText 96%, transparent 100%);
+  }
+
+  button.chip.active,
+  .segmented button.active {
+    background: Highlight;
+    color: HighlightText;
+    box-shadow: none;
+  }
+
+  input[type='checkbox'].switch:focus-visible,
+  button.chip.active:focus-visible,
+  .segmented button.active:focus-visible {
+    outline-color: CanvasText;
+  }
+
+  .tabbar button.active::before {
+    background: Highlight;
   }
 }

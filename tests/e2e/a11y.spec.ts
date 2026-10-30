@@ -1,6 +1,16 @@
 import { expect, test, type Page } from '@playwright/test';
 
-import { PASSWORD, UA, createWallet, fillVerification, installContrast, nav, navTab, type ContrastWindow } from './helpers';
+import {
+  PASSWORD,
+  UA,
+  createWallet,
+  fillVerification,
+  installContrast,
+  nav,
+  navTab,
+  setKnobs,
+  type ContrastWindow,
+} from './helpers';
 
 type StageWindow = ContrastWindow & { stage: Promise<number> };
 
@@ -455,4 +465,86 @@ test('language buttons are labelled in their own language', async ({ page }) => 
   await expect(group.getByRole('button', { name: 'Türkçe' })).toHaveAttribute('lang', 'tr');
   await group.getByRole('button', { name: 'Türkçe' }).click();
   await expect(page.getByRole('group', { name: 'Dil' })).toBeVisible();
+});
+
+for (const colorScheme of ['light', 'dark'] as const) {
+  test.describe(`${colorScheme} theme, selected controls`, () => {
+    test.use({ colorScheme });
+
+    test('the selected language and restore mode are marked at 3:1', async ({ page }) => {
+      await page.addInitScript(installContrast);
+      await page.goto('/');
+      // A drawn border (a 0px one still has a colour), at 3:1 against the well it sits in.
+      const border = (selector: string) =>
+        page
+          .locator(selector)
+          .first()
+          .evaluate((el) =>
+            getComputedStyle(el).borderTopWidth === '0px' ? 0 : (window as unknown as ContrastWindow).contrastOf(el, 'border-top-color'),
+          );
+      expect(await border('.lang-switch .chip.active'), 'selected language').toBeGreaterThanOrEqual(3);
+      await page.getByRole('button', { name: /Restore an existing wallet/ }).click();
+      expect(await border('.segmented button.active'), 'selected restore mode').toBeGreaterThanOrEqual(3);
+    });
+  });
+}
+
+test.describe('forced colours', () => {
+  test.use({ forcedColors: 'active' });
+
+  test('the privacy switch and the selected language still show their state', async ({ page }) => {
+    await createWallet(page);
+    await nav(page, 'Settings');
+    const style = (selector: string) =>
+      page
+        .locator(selector)
+        .first()
+        .evaluate((el) => {
+          const s = getComputedStyle(el);
+          return { color: s.backgroundColor, image: s.backgroundImage };
+        });
+    const canvas = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+    const toggle = page.getByLabel('Fetch full transactions for History');
+    const on = await style('input[name="history-enhancement"]');
+    await toggle.click();
+    await expect(toggle).not.toBeChecked();
+    const off = await style('input[name="history-enhancement"]');
+    // The knob is still drawn, and on and off are filled differently.
+    expect(on.image, 'knob when on').not.toBe('none');
+    expect(off.image, 'knob when off').not.toBe('none');
+    expect(on.color, 'on and off').not.toBe(off.color);
+    // The selected language is filled, not only shaded on the page's own colour.
+    expect((await style('.lang-switch .chip.active')).color, 'selected language').not.toBe(canvas);
+  });
+});
+
+test('focus moves to what replaced the control that had it', async ({ page }) => {
+  await createWallet(page);
+
+  // Receive's toggle is rebuilt in the other section of the panel: focus follows it.
+  await nav(page, 'Receive');
+  await expect(page.getByTestId('receive-address')).toBeVisible();
+  await page.getByRole('button', { name: 'Show transparent address' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('button', { name: 'Back to shielded address' })).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('button', { name: 'Show transparent address' })).toBeFocused();
+
+  // Back or Close on Shield returns to Balance, whose heading takes focus.
+  await nav(page, 'Balance');
+  const heading = page.getByRole('heading', { name: 'Balance', exact: true });
+  await page.getByRole('button', { name: 'Shield funds' }).press('Enter');
+  await page.getByRole('button', { name: 'Back' }).press('Enter');
+  await expect(heading).toBeFocused();
+  await page.getByRole('button', { name: 'Shield funds' }).press('Enter');
+  await page.getByLabel('Enter your password to confirm').fill(PASSWORD);
+
+  // While the spend runs the stages hold focus: the button that had it is gone.
+  await setKnobs(page, { holdStage: 'proving' });
+  await page.locator('form').getByRole('button', { name: 'Shield', exact: true }).press('Enter');
+  await expect(page.locator('.stages li.current')).toContainText('zero-knowledge proofs');
+  await expect(page.locator('.spend-progress')).toBeFocused();
+  await setKnobs(page, { holdStage: undefined });
+  await page.getByRole('button', { name: 'Close' }).press('Enter', { timeout: 10_000 });
+  await expect(heading).toBeFocused();
 });

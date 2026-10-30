@@ -1,8 +1,8 @@
-import { useId, useState } from 'react';
+import { useCallback, useId, useLayoutEffect, useRef, useState, type FocusEvent, type MutableRefObject } from 'react';
 
 import { Icon } from '../components/icons';
-import { TxRow, useFractionWidth } from '../components/TxRow';
-import { CopyButton, Screen } from '../components/ui';
+import { TxRow, useFractionWidth, useTxDate } from '../components/TxRow';
+import { CopyButton, Screen, useHideBalances } from '../components/ui';
 import type { HistoryItem } from '../engine';
 import { useI18n } from '../i18n';
 import { useWallet } from '../state/wallet';
@@ -13,10 +13,13 @@ interface Month {
   txs: HistoryItem[];
 }
 
+/** Where focus was inside the list: a row's toggle, or the Copy button in its detail. */
+type RowFocus = { txid: string; copy: boolean } | null;
+
 /**
  * The list cut into months, in the engine's order: a month starts wherever
  * the previous row was in another one, so no row ever moves. Rows with no
- * block time yet (not mined) get a group of their own.
+ * block time (pending or expired) get a group of their own.
  */
 function useMonths(history: HistoryItem[]): Month[] {
   const { t, lang } = useI18n();
@@ -32,21 +35,65 @@ function useMonths(history: HistoryItem[]): Month[] {
   return months;
 }
 
-/** A History row, with its transaction ID (and the button that copies it) one click away. */
-function HistoryRow({ tx }: { tx: HistoryItem }) {
+/**
+ * A History row, with its transaction ID (and the button that copies it) one
+ * click away. Whether it is open lives in History, keyed by txid: a row that
+ * moves to another group (mined) is a new element, and keeps its state.
+ */
+function HistoryRow({
+  tx,
+  open,
+  onToggle,
+  focus,
+}: {
+  tx: HistoryItem;
+  open: boolean;
+  onToggle: (txid: string) => void;
+  focus: MutableRefObject<RowFocus>;
+}) {
   const { t } = useI18n();
-  const [open, setOpen] = useState(false);
+  const balances = useHideBalances();
+  const date = useTxDate()(tx);
   const detailId = useId();
+  const descId = useId();
+  const toggleRef = useRef<HTMLButtonElement>(null);
+  const detailRef = useRef<HTMLDivElement>(null);
+
+  // A row that moved between groups was mounted anew, and the control that had
+  // focus went with the old one: give focus back to the same control here.
+  useLayoutEffect(() => {
+    const f = focus.current;
+    if (f?.txid !== tx.txid || document.activeElement !== document.body) return;
+    (f.copy ? detailRef.current?.querySelector('button') : toggleRef.current)?.focus();
+    // On mount only: it is a moved row's first render that has to take focus.
+  }, []);
+
+  // Never the dots, and never the real amount while balances are hidden.
+  const amount = balances.hidden
+    ? t('common.amountHidden')
+    : `${tx.valueZats > 0n ? '+' : ''}${balances.fmt(tx.valueZats)} ZEC`;
+  const remember = (copy: boolean) => () => {
+    focus.current = { txid: tx.txid, copy };
+  };
+  const forget = (e: FocusEvent) => {
+    if (e.relatedTarget) focus.current = null;
+  };
+
   return (
     <TxRow tx={tx}>
       <button
+        ref={toggleRef}
         type="button"
         className="tx-more"
         aria-expanded={open}
         aria-controls={detailId}
         aria-label={t('history.txid')}
+        // Every row's toggle has this name; the description says which payment it opens.
+        aria-describedby={descId}
         title={t('history.txid')}
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => onToggle(tx.txid)}
+        onFocus={remember(false)}
+        onBlur={forget}
       >
         <svg
           className="icon"
@@ -63,8 +110,11 @@ function HistoryRow({ tx }: { tx: HistoryItem }) {
         >
           <path d="m6 9.5 6 6 6-6" />
         </svg>
+        <span id={descId} hidden>
+          {[t(`history.type.${tx.type}`), date ?? t(`history.status.${tx.status}`), amount].join(', ')}
+        </span>
       </button>
-      <div id={detailId} className="tx-detail" hidden={!open}>
+      <div ref={detailRef} id={detailId} className="tx-detail" hidden={!open} onFocus={remember(true)} onBlur={forget}>
         <p className="txid">
           <span className="txid-label">{t('history.txid')}</span>
           <code>{tx.txid}</code>
@@ -81,6 +131,17 @@ export function History() {
   const noteId = useId();
   const fraction = useFractionWidth(history);
   const months = useMonths(history);
+  const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set());
+  const toggle = useCallback(
+    (txid: string) =>
+      setOpen((s) => {
+        const next = new Set(s);
+        if (!next.delete(txid)) next.add(txid);
+        return next;
+      }),
+    [],
+  );
+  const focus = useRef<RowFocus>(null);
 
   if (history.length === 0) {
     return (
@@ -98,7 +159,8 @@ export function History() {
 
   return (
     <Screen title={t('history.title')} subtitle={<span id={noteId}>{t('history.privacyNote')}</span>}>
-      <div className="card history-card">
+      {/* The column widths (money.css) follow the amounts, so the header and the rows share them. */}
+      <div className="card history-card" style={fraction}>
         {/* Column names for the eye on a wide screen; every row says the same in its own words. */}
         <div className="tx-head" aria-hidden="true">
           <span />
@@ -109,13 +171,15 @@ export function History() {
           <span />
         </div>
         {/* The note scopes every label; a list announces its description on entry, a span would not. */}
-        <ul className="history" data-testid="history" aria-describedby={noteId} style={fraction}>
-          {months.map((month, i) => (
-            <li key={`${month.key}-${i}`} className="tx-month">
+        <ul className="history" data-testid="history" aria-describedby={noteId}>
+          {months.map((month) => (
+            // Keyed by its oldest row, which stays put when rows join at the top,
+            // the pending group goes away or a new month starts: the list is not remounted.
+            <li key={month.txs.at(-1)!.txid} className="tx-month">
               <h2 className="month-head">{month.label}</h2>
               <ul className="tx-list">
                 {month.txs.map((tx) => (
-                  <HistoryRow key={tx.txid} tx={tx} />
+                  <HistoryRow key={tx.txid} tx={tx} open={open.has(tx.txid)} onToggle={toggle} focus={focus} />
                 ))}
               </ul>
             </li>

@@ -38,7 +38,7 @@ export function useHideBalances(): { hidden: boolean; fmt: (zats: bigint) => str
 export function Amount({ zats, signed = false }: { zats: bigint; signed?: boolean }) {
   const { t } = useI18n();
   const { hidden, fmt } = useHideBalances();
-  const sign = signed && zats > 0n ? '+' : signed && hidden && zats < 0n ? '-' : '';
+  const sign = signed && zats > 0n ? '+' : signed && hidden && zats < 0n ? '\u2212' : '';
   if (!hidden) return <>{sign + fmt(zats)}</>;
   return (
     <>
@@ -58,7 +58,7 @@ export function AmountParts({ zats, signed = false }: { zats: bigint; signed?: b
   const { t, lang } = useI18n();
   const { hidden } = useHideBalances();
   if (hidden) {
-    const sign = signed && zats > 0n ? '+' : signed && zats < 0n ? '-' : '';
+    const sign = signed && zats > 0n ? '+' : signed && zats < 0n ? '\u2212' : '';
     return (
       <>
         <span aria-hidden="true">{sign + HIDDEN_AMOUNT}</span>
@@ -66,7 +66,8 @@ export function AmountParts({ zats, signed = false }: { zats: bigint; signed?: b
       </>
     );
   }
-  const sign = zats < 0n ? '-' : signed && zats > 0n ? '+' : '';
+  // A true minus (U+2212), as wide as the plus; display only, nothing parses it back.
+  const sign = zats < 0n ? '\u2212' : signed && zats > 0n ? '+' : '';
   const digits = formatZec(zats < 0n ? -zats : zats, { locale: lang });
   const point = digits.indexOf(lang === 'tr' ? ',' : '.');
   return (
