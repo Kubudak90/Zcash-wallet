@@ -43,6 +43,14 @@ describe('the CSP', () => {
     expect(line?.trim()).toBe(`Content-Security-Policy: ${HEADER_CSP}`);
     expect(HEADER_CSP).toBe(`${CSP}; frame-ancestors 'none'`);
   });
+
+  it('is the same in deploy/vercel.json, which also makes the wallet cross-origin isolated', () => {
+    const cfg = JSON.parse(read('deploy/vercel.json')) as { headers: { source: string; headers: { key: string; value: string }[] }[] };
+    const all = Object.fromEntries(cfg.headers.find((h) => h.source === '/(.*)')!.headers.map((h) => [h.key, h.value]));
+    expect(all['Content-Security-Policy']).toBe(HEADER_CSP);
+    expect(all['Cross-Origin-Opener-Policy']).toBe('same-origin');
+    expect(all['Cross-Origin-Embedder-Policy']).toBe('require-corp');
+  });
 });
 
 describe('the pinned engine check', () => {
