@@ -1,172 +1,144 @@
 # Celari
 
-**Cüzdan: https://app.celariwallet.com** · Tanıtım: https://celariwallet.com · *Wallet: https://app.celariwallet.com*
+**Wallet: https://app.celariwallet.com** · Website: https://celariwallet.com
+
+**An open-source, privacy-first Zcash wallet that runs in your browser.**
+No token, no points, no airdrop promises. Just a private ZEC wallet that works.
+
+> *Celare* (Latin): to hide, to conceal.
+
+> [!WARNING]
+> Celari is early software and **has not had an independent security audit**. The WebZjs library it is built on also says in its README that it is not audited yet. Do not use it for amounts you cannot afford to lose.
 
 > [!IMPORTANT]
-> **Bu sürüm Zcash ağının NU6.3 (Ironwood) kurallarıyla çalışıyor ve NU7'yi biliyor; ana ağda gerçek parayla yalnızca ilk denemeler yapıldı.** Ana ağ 28 Temmuz 2026'da, 3.428.143. blokta Ironwood'a geçti; NU7 3.543.405. blokta (Kasım 2026 başı) geliyor. Celari'nin motoru artık librustzcash'in bu yükseltmeleri bilen sürümleriyle derleniyor.
+> **This release runs on Zcash's NU6.3 (Ironwood) rules and knows NU7; only the first real-funds tests on mainnet have been done.** Mainnet moved to Ironwood on 28 July 2026 at block 3,428,143; NU7 activates at block 3,543,405 (early November 2026). Celari's engine is built with the librustzcash releases that implement these upgrades.
 >
-> - **Ne denendi, ne denenmedi:** Ana ağda, hiçbir şeye sahip olmayan cüzdanlarla: Ironwood bloklarının taranması (motorun saydığı Ironwood çıktıları sunucunun bildirdiği ağaç boyutlarıyla birebir tuttu), adresler, ağ denetimi ve eski sürümden yükseltme. Ekim 2026 sonunda küçük bir tutarla, gerçek parayla: Ironwood'a para alma ve Ironwood'dan şeffaf bir adrese gönderim (v6 işlem, 3.535.070. blokta Ironwood kurallarıyla madenlendi; para üstü gizli bakiyeye döndü). Gizliye aktarma, notlu gizli gönderim, Orchard'dan harcama ve NU7 sınırı henüz yalnızca yerel testlerde, sahte notlarla denendi. Bu denemeler bitene kadar yalnızca kaybetmeyi göze alabileceğin küçük tutarlar kullan.
-> - **Güncellemeden sonra tek seferlik yeniden tarama:** Yeni motor eski cüzdan veritabanını okuyamaz. Güncellemeden sonraki ilk kilit açılışında cüzdan kurtarma kelimelerinden (görüntüleme cüzdanında anahtardan) ve başlangıç bloğundan yeniden kurulur ve baştan taranır; eski kayıt, tarama ağın ucuna ulaşana kadar dokunulmadan saklanır. Tarama yalnızca kilit açıkken sürer, her kilitte duraklar ve kilidi açınca kaldığı yerden devam eder; uygulama bunu ekranda söyler. Ölçümde bir aylık aralık (yaklaşık 48.000 blok) 11 dakika kadar sürdü; çok eski bir başlangıç bloğu (özellikle 2022-2023) saatler sürebilir ve tarayıcı sekmesi birkaç GB bellek kullanabilir. Geçmişteki gönderimlerin alıcısı, notu ve ücreti tarama sırasında sunucudan yeniden istenir (Ayarlar > Gizlilik'teki anahtar açıksa; varsayılan açık). Cüzdan tarayıcıda açıldığı adrese bağlıdır: eski bir adreste (ör. deneme sürümünde) oluşturulan cüzdan app.celariwallet.com'a kendiliğinden geçmez, orada kurtarma kelimeleriyle geri yüklenir.
-> - **Eski bir başlangıç ayı pahalıdır:** Geri yüklemede seçilen ay yaklaşık 500.000 bloktan fazlasını taramak demekse (güvenlik payıyla ~14 ay) uygulama bunu o adımda söyler; geri yüklemeyi engellemez. Ölçüm, yalnızca motorla (uygulama olmadan): Ocak 2025'ten geri yükleme (784.000 blok) 51 dakika sürdü ve tarayıcı süreci en çok ~1 GB bellek kullandı. 2022-2023'teki yoğun (spam) dönemden bir başlangıç tahminen bir gün kadar sürer ve birkaç GB bellek isteyebilir; bu bellek düzeltmesinden sonra ölçülmedi. Emin olduğun en son ayı seç.
-> - **Gönderme ve gizliye aktarma açık.** Ironwood'a gelen ödemeler bakiyede görünür; para üstü ve gizliye aktarılan para Ironwood'a gider. Orchard bakiyesi her zamanki gibi harcanabilir: ondan yapılan ödeme Ironwood'a geçer ve geçen tutar zincirde görünür (ZIP 318); para üstü Orchard'da kalır, bu yüzden ondan yapılan her yeni ödeme yeniden geçer. Celari henüz Orchard'dan Ironwood'a kademeli, gizli bir geçiş sunmuyor. NU7'nin etkinleşme bloğunda ve ondan önceki son 10 blokta (yaklaşık 14 dakika) işlem hazırlanmaz; o sırada hazırlanmış bir işlem yanlış kurallarla ağa gönderilmez.
-> - **Her açılışta yeni adres:** Al ekranı her açılışta yeni, yalnızca gizli bir birleşik adres gösterir (Orchard ve Sapling alıcılı, şeffaf alıcısız; Ironwood'a ödeme Orchard alıcısına yapılır). Daha önce gösterilen adresler çalışmaya devam eder. Şeffaf (`t1…`) adres ayrı gösterilir ve değişmez.
->
-> **This release runs on Zcash's NU6.3 (Ironwood) rules and knows NU7; only the first real-funds tests on mainnet have been done.** Mainnet moved to Ironwood on 28 July 2026 at block 3,428,143; NU7 activates at block 3,543,405 (early November 2026). Celari's engine is now built with the librustzcash releases that implement these upgrades.
->
-> - **What was tested, and what was not:** on mainnet, with wallets that own nothing: scanning Ironwood blocks (the engine's count of Ironwood outputs matched the server's tree sizes exactly), addresses, the network check and the upgrade from the previous release. At the end of October 2026, with a small real amount: receiving into Ironwood and sending from Ironwood to a transparent address (a v6 transaction mined under Ironwood rules at block 3,535,070; the change came back to the shielded balance). Shielding, a shielded send with a memo, spending from Orchard and the NU7 boundary were tested only locally, with fake notes so far. Until those tests are done, use only small amounts you can afford to lose.
-> - **A one-time rescan after the update:** the new engine cannot read the old wallet database. On the first unlock after the update the wallet is rebuilt from the recovery phrase (a view-only wallet from its key) and its starting block, and rescanned; the old copy is kept untouched until the rescan reaches the network tip. The rescan runs only while the wallet is unlocked, pauses at every lock and continues after the next unlock; the app says so. A month of blocks (about 48,000) took about 11 minutes when measured; a very old starting block (especially 2022-2023) can take hours and several GB of memory in the browser tab. The recipients, memos and fees of past sends are fetched again from the server during the rescan (while the switch under Settings > Privacy is on, the default). A wallet lives in the browser storage of the address it was opened on: one made on an earlier address (such as the preview deployment) does not move to app.celariwallet.com by itself; restore it there from its recovery phrase.
+> - **What was tested, and what was not:** on mainnet, with wallets that own nothing: scanning Ironwood blocks (the engine's count of Ironwood outputs matched the server's tree sizes exactly), addresses, the network check and the upgrade from the previous release. At the end of October 2026, with a small real amount: receiving into Ironwood and sending from Ironwood to a transparent address (a v6 transaction mined under Ironwood rules at block 3,535,070; the change came back to the shielded balance). Shielding, a shielded send with a memo, spending from Orchard and the NU7 boundary were tested only locally, with fake notes, so far. Until those tests are done, use only small amounts you can afford to lose.
+> - **A one-time rescan after the update:** the new engine cannot read the old wallet database. On the first unlock after the update the wallet is rebuilt from the recovery phrase (a view-only wallet from its key) and its starting block, and rescanned; the old copy is kept untouched until the rescan reaches the network tip. The rescan runs only while the wallet is unlocked, pauses at every lock and continues after the next unlock; the app says so. A month of blocks (about 48,000) took about 11 minutes when measured; a very old starting block (especially 2022-2023) can take hours and several GB of memory in the browser tab. The recipients, memos and fees of past sends are fetched again from the server during the rescan (while the switch under Settings > Privacy is on, the default).
+> - **A wallet belongs to the address it was opened on:** it lives in that address's browser storage. A wallet made on an earlier address (such as the preview deployment) does not move to app.celariwallet.com by itself; restore it there from its recovery phrase.
 > - **An old starting month is costly:** if the month chosen for a restore means scanning more than about 500,000 blocks (~14 months with the safety margin), the app says so at that step; it does not stop the restore. Measured with the engine alone (without the app): a restore from January 2025 (784,000 blocks) took 51 minutes and the browser process peaked at ~1 GB. A start in the 2022-2023 spam era is estimated at about a day and can need several GB; it was not measured after the memory fix. Choose the latest month you are sure of.
 > - **Sending and shielding are on.** Payments received in Ironwood show in the balance; change and shielded funds go to Ironwood. An Orchard balance stays spendable: a payment from it crosses into Ironwood and the amount that crosses is visible on chain (ZIP 318); the change stays in Orchard, so each later payment from it crosses again. Celari does not offer a gradual, private Orchard-to-Ironwood migration yet. No transaction is built for the NU7 activation block or the 10 blocks before it (about 14 minutes), and one built just before is not sent under the wrong rules.
 > - **A fresh address on every opening:** Receive shows a new shielded-only unified address each time (Orchard and Sapling receivers, no transparent receiver; Ironwood payments go to the Orchard receiver). Addresses shown before keep working. The transparent (`t1…`) address is shown separately and stays the same.
 
-**Zcash için açık kaynak, gizlilik öncelikli tarayıcı cüzdanı.**
-Token yok, puan yok, "airdrop gelecek" vaadi yok. Sadece iyi çalışan, gizli bir ZEC cüzdanı.
+## Features
 
-> *Celare* (Latince): saklamak, gizlemek.
+- **Private by default:** Receive shows a new shielded-only unified address every time it opens; if the sender's wallet supports it, the payment goes to a shielded pool, today Ironwood. Earlier addresses keep working; the transparent address is kept apart.
+- **One-click shielding:** a transparent (t-address) balance is pointed out and moved into the shielded balance, in Ironwood.
+- **Network version guard:** Celari asks the server which consensus rules the network runs (lightwalletd `GetLightdInfo`) at start-up and on every sync, again before every spend and once more right before the broadcast. If the engine does not support those rules, or no answer comes, sending and shielding are switched off and the screen says why; an announced upgrade the engine will not support is shown in advance.
+- **Care at an upgrade boundary:** the engine builds no transaction for an upgrade's activation block or the 10 blocks before it, and if the network has moved to new rules it refuses a transaction built under the old ones before storing anything.
+- **Keys never leave the browser:** the recovery phrase and the wallet database are stored only encrypted (PBKDF2-SHA256, 600,000 rounds, and AES-256-GCM).
+- **The recovery phrase is the only backup:** the browser can delete this site's data on its own: Safari after 7 days of use without opening Celari (unless it is added to the Home Screen), any browser when the disk is full or site data is cleared. Celari asks for persistent storage and the create and restore screens say so, but the only way back is the recovery phrase (for a view-only wallet, its viewing key).
+- **Password on every spend:** the recovery phrase is decrypted only to sign and is not kept in memory.
+- **View-only mode:** follow a balance and its history with a viewing key (UFVK). It cannot spend, but anyone with the key sees all past and future transactions; share it only with someone you fully trust.
+- **Smart starting block:** a restore works out where to start syncing from "when did you first use this wallet?"; if you do not know, it scans from Sapling activation in October 2018, so no payment is missed (the first scan can take a day).
+- **Typo protection:** addresses are checked against their bech32, bech32m or base58check checksum before sending, and testnet addresses are refused. `zcash:` payment links (ZIP-321) are read, the memo they ask for is filled in, and links that do not follow ZIP-321 are refused rather than guessed at.
+- **Privacy labels:** every transaction is marked "Shielded", "Partly shielded" or "Transparent · public", in words and with a shape, not only in colour. History judges only by the wallet's own outputs, as WebZjs reports them, and leaves a transaction whose pool is not known unlabelled; Send never calls a payment that crosses from an older pool shielded.
+- **Encrypted memos:** a payment to a shielded address can carry a memo of up to 512 bytes, readable only by you and the recipient. Transparent and TEX addresses cannot receive one, and the form says so. TEX addresses (the deposit addresses of some exchanges) cannot be paid yet: such a payment needs two linked transactions the engine cannot build, so the form refuses the address.
+- **A payment that did not reach the network is sent again:** a payment whose broadcast failed, or that the network dropped, stays saved in the wallet and is sent again, byte for byte, every few minutes until it is mined; the screen says not to pay again.
+- **Honest fees:** fees follow ZIP 317 and grow with every extra note spent or created, so the screen shows them as a lower bound. When the spendable balance does not cover the real fee, Celari offers the amount that fits, which you confirm again.
+- **English and Turkish** interface (English on the first visit; a chosen language stays), with Turkish decimal commas (`0,25`).
+- **Use your own server:** the lightwalletd proxy can be changed in Settings.
+- **Privacy in plain sight:** the eye button on Home hides balances and amounts in History (the choice stays; the amount being sent is always shown on the confirm and result screens). A copied viewing key, and a recovery phrase copied by hand, are cleared from the clipboard after 60 seconds, as far as the browser allows.
+- **Auto-lock:** the wallet locks after the chosen idle time, or when its tab has been in the background for a minute; time asleep counts too. During a long restore the lock screen shows at once and the page reloads as soon as the running scan pass (one ends about every 5 minutes) is saved, or after 15 minutes at the latest if the pass hangs; the scan continues at the next unlock. A lock asked for during a spend waits for it at most 5 minutes.
+- **Says when the engine stops:** if the engine crashes (running out of memory, for example), the app does not sit at "Syncing" for ever: it says so and offers a reload, which continues from the last save. A sync that stops moving for 10 minutes is flagged too.
+- A step that checks the written-down recovery phrase, dark and light themes, a web app with a sidebar on wide screens and bottom tabs on phones. The fonts (Geist, Geist Mono, Fraunces) are served by the app itself; no request goes to a third party.
 
-> [!WARNING]
-> Celari erken aşamada ve **bağımsız bir güvenlik denetiminden geçmedi**. Üzerine kurulduğu WebZjs kütüphanesi de kendi README'sinde henüz denetlenmediğini belirtiyor. Kaybetmeyi göze alamayacağın miktarlar için kullanma.
-
-[English summary below](#english)
-
-## Özellikler
-
-- **Varsayılan olarak gizli:** Alma ekranı her açılışta yeni, yalnızca gizli bir birleşik (unified) adres gösterir; gönderen cüzdan destekliyorsa para gizli bir havuza, bugün Ironwood'a gider. Eski adresler çalışmaya devam eder; şeffaf adres ayrı durur.
-- **Tek tıkla gizliye aktarma:** Şeffaf (t-adres) bakiye varsa uyarır ve gizli bakiyeye, Ironwood'a aktarır.
-- **Ağ sürümü denetimi:** Celari ağın hangi kurallarla çalıştığını açılışta ve her eşitlemede sunucuya sorar (lightwalletd `GetLightdInfo`), harcamadan önce ve yayından hemen önce bir kez daha. Motor bu kuralları desteklemiyorsa ya da cevap gelmezse gönderme ve gizliye aktarma kapanır, ekranda nedeni yazar; duyurulmuş ama desteklenmeyen bir sonraki yükseltme de önceden gösterilir.
-- **Yükseltme sınırında dikkat:** Motor bir yükseltmenin etkinleşme bloğunda ve ondan önceki son 10 blokta işlem hazırlamaz; ağ yeni kurallara geçtiyse eski kurallarla hazırlanmış bir işlemi hiçbir şey kaydetmeden reddeder.
-- **Anahtarlar tarayıcıdan çıkmaz:** Kurtarma kelimeleri ve cüzdan veritabanı tarayıcıda yalnızca şifreli durur (PBKDF2-SHA256 600.000 tur + AES-256-GCM).
-- **Tek yedek kurtarma kelimeleri:** Tarayıcı bu sitenin verisini kendiliğinden silebilir: Safari, Celari 7 günlük kullanım boyunca açılmazsa (Ana Ekran'a eklenmediyse), her tarayıcı da disk dolunca ya da site verisi temizlenince. Celari tarayıcıdan kalıcı depolama ister ve oluşturma ile geri yükleme ekranları bunu söyler, ama geri dönmenin tek yolu kurtarma kelimeleri (görüntüleme cüzdanında anahtar).
-- **Her harcamada şifre:** Kurtarma kelimeleri sadece imzalama anında çözülür, bellekte tutulmaz.
-- **Sadece izleme modu:** Görüntüleme anahtarıyla (UFVK) bakiye ve geçmiş takibi. Harcama yetkisi yoktur, ama anahtarı alan herkes tüm geçmişi ve gelecekteki işlemleri görür; yalnızca tamamen güvendiğin biriyle paylaş.
-- **Akıllı başlangıç bloğu:** Geri yüklerken "cüzdanı ne zaman açtın?" sorusundan eşitleme bloğunu hesaplar; bilinmiyorsa Sapling'in başladığı Ekim 2018'den tarar, böylece hiçbir ödeme kaçmaz (ilk tarama bir gün sürebilir).
-- **Yazım hatası yakalama:** Adresler gönderimden önce bech32/bech32m/base58check sağlama toplamıyla doğrulanır. Test ağı adresleri reddedilir. `zcash:` ödeme bağlantıları (ZIP-321) okunur; istedikleri not da doldurulur, ZIP-321'e uymayan bağlantılar tahmin edilmeden reddedilir.
-- **Geçmişte gizlilik etiketi:** Her işlem "Gizli", "Kısmen gizli" ya da "Şeffaf · herkese açık" diye işaretlenir (yazıyla ve şekille, yalnızca renkle değil). Etiket, WebZjs'in söylediği gibi yalnızca cüzdanın kendi çıktılarına bakar; havuzu belli olmayan işlem etiketsiz kalır.
-- **Şifreli not (memo):** Gizli adreslere giden ödemeye 512 bayta kadar not eklenebilir; yalnızca sen ve alıcı okuyabilir. Şeffaf ve TEX adresleri not alamaz, form bunu söyler. TEX adreslerine (bazı borsaların yatırma adresleri) henüz ödeme yapılamıyor: bu ödeme birbirine bağlı iki işlem ister ve motor bunları kuramıyor; form adresi reddeder.
-- **Ağa ulaşmayan ödeme yeniden gönderilir:** Yayını düşen ya da ağın düşürdüğü bir ödeme cüzdanda kayıtlı kalır ve madenlenene kadar birkaç dakikada bir aynı haliyle yeniden gönderilir; ekran yeniden ödeme yapmamanı söyler.
-- **Dürüst ücret:** Ücret ZIP 317'ye göredir ve harcanan ya da oluşturulan her ek not için artar; ekran onu "en az" olarak gösterir. Bakiye gerçek ücreti karşılamazsa Celari sığan tutarı önerir, yeniden onaylarsın.
-- **İngilizce ve Türkçe** arayüz (ilk açılış İngilizce; seçilen dil kalır), Türkçe ondalık virgül desteği (`0,25`).
-- **Kendi sunucunu kullan:** lightwalletd vekil adresi ayarlardan değiştirilebilir.
-- **Göz önünde gizlilik:** Ana sayfadaki göz düğmesi bakiye ve geçmiş tutarlarını gizler (tercih kalıcıdır; onay ve sonuç ekranlarında gönderilen tutar her zaman görünür). Kopyalanan görüntüleme anahtarı ve elle kopyalanan kurtarma kelimeleri 60 saniye sonra panodan silinir (tarayıcının izin verdiği ölçüde).
-- **Otomatik kilit:** Belirlenen süre işlem yapılmazsa ya da sekme 1 dakika arka planda kalırsa cüzdan kilitlenir; uyku süresi de sayılır. Uzun bir geri yükleme taraması sürerken kilit ekranı hemen gelir, o anki tarama turu (tur yaklaşık 5 dakikada bir biter) kaydedilince sayfa yeniden yüklenir; tur takılırsa en geç 15 dakikada yine yüklenir. Tarama bir sonraki kilit açılışında devam eder. Bir harcama sırasında istenen kilit de harcama takılırsa en çok 5 dakika bekler.
-- **Motor durursa söyler:** Motorda bir çökme (örneğin bellek yetmemesi) olursa uygulama "Eşitleniyor"da takılı kalmaz; durduğunu söyler ve yeniden yüklemeyi önerir. Yeniden yükleme son kayıttan devam eder.
-- Kurtarma kelimelerini doğrulama adımı, koyu ve açık tema; geniş ekranda kenar çubuklu bir web uygulaması, telefonda alt sekmeler. Yazı tipleri (Geist, Geist Mono, Fraunces) uygulamanın kendi adresinden gelir, dışarıya istek gitmez.
-
-## Nasıl çalışır?
+## How it works
 
 ```
-Tarayıcı ─────────────────────────────────────────────┐
-│  React arayüzü (src/screens)                        │
+Browser ──────────────────────────────────────────────┐
+│  React interface (src/screens)                      │
 │      │                                              │
-│  WalletController (src/state) ── şifreli IndexedDB  │
+│  WalletController (src/state) ── encrypted IndexedDB│
 │      │                                              │
-│  ZcashEngine arayüzü (src/engine/types.ts)          │
+│  ZcashEngine interface (src/engine/types.ts)        │
 │      │                                              │
-│  WebZjs (Rust → WebAssembly, çok iş parçacıklı)     │
-│    + engine/zcash_client_memory (cüzdan arka ucu)   │
+│  WebZjs (Rust → WebAssembly, multi-threaded)        │
+│    + engine/zcash_client_memory (wallet backend)    │
 └──────┼──────────────────────────────────────────────┘
        │ gRPC-web
-  lightwalletd vekili (varsayılan: zcash-mainnet.chainsafe.dev)
+  lightwalletd proxy (default: zcash-mainnet.chainsafe.dev)
 ```
 
-- Motor: ChainSafe WebZjs (sabitlenmiş commit) + `patches/webzjs/` altındaki Celari yamaları + `engine/zcash_client_memory` (cüzdanın bellek içi arka ucu, okunabilir kaynak olarak bu depoda; kökeni `UPSTREAM.md`'de), librustzcash'in 2026-10 sürümleriyle (zcash_client_backend 0.25, zcash_protocol 0.11: NU6.2, NU6.3 Ironwood, NU7).
-- Bloklar tarayıcıda taranır; sunucu gizli bakiyeni veya sana gizli ödeme yapanları göremez. **IP adresini, şeffaf adreslerini (her eşitlemede sorulur) ve yayınladığın işlemleri görebilir.** Celari, notlar için ve geri yüklemeden sonra ücret ve alıcı bilgisi için kendi işlemlerinin tamamını da sunucudan ister; bu yüzden **sunucu hangi işlemlerin senin olduğunu anlayabilir.** Bunu Ayarlar > Gizlilik > **Geçmiş için işlemlerin tamamını getir** ile kapatabilirsin (varsayılan açık; aynı anahtar geri yüklemenin ay adımında da var, böylece tarama baştan kapalı başlayabilir): o zaman sunucu bunu bu yoldan öğrenmez, ama Geçmiş'te notlar görünmez ve geri yüklemeden sonra geçmiş ödemeler yalnızca net tutarlarıyla görünür; yeniden açınca eksikler getirilir. Gönderdiğin bir ödemenin durumu her iki durumda da onaylanana kadar en fazla 5 dakikada bir sorulur. Şeffaf paran birden fazla adresteyse (örneğin başka bir cüzdanın kelimeleri geri yüklendiyse) gizliye aktarma hepsini tek işlemde taşır; bu, o adreslerin aynı cüzdana ait olduğunu zincirde herkese gösterir. Daha fazla gizlilik için kendi vekilini çalıştır veya VPN/Tor kullan. Sunucu ayrıca Celari'nin hangi blokları gördüğüne de karar verir: dürüst olmayan bir sunucu hiç olmamış ödemeleri gösterebilir, gerçek ödemeleri gizleyebilir ya da gönderdiklerini iletmeyebilir. Yalnızca güvendiğin bir sunucu kullan (Ayarlar varsayılandan başka bir sunucuyu bu uyarıyla ikinci bir onaydan sonra kaydeder) ve büyük bir gelen ödemeyi başka bir sunucuda ya da blok gezgininde kontrol et.
-- İşlemler PCZT akışıyla kurulur: *oluştur → imzala (webzjs-keys) → kanıt üret → yayınla*.
-- Tohum kelimeler WebZjs'in `generate_seed_phrase` fonksiyonuyla değil, tarayıcının güvenli rastgele sayı üretecini kullanan denetlenmiş `@scure/bip39` ile üretilir. WebZjs kendi belgesinde bu fonksiyonun tarayıcıda güvenli rastgelelik kullanmayabileceğini söylüyor.
+- The engine: ChainSafe [WebZjs](https://github.com/ChainSafe/WebZjs) at a pinned commit, Celari's patches in `patches/webzjs/`, and `engine/zcash_client_memory` (the wallet's in-memory backend, kept in this repository as readable source; its origin is in `UPSTREAM.md`), built with the October 2026 librustzcash releases (zcash_client_backend 0.25, zcash_protocol 0.11: NU6.2, NU6.3 Ironwood, NU7).
+- Blocks are scanned in the browser, so the server cannot see your shielded balance or who sends you shielded payments. **It does see your IP address, your transparent addresses (asked about on every sync) and the transactions you broadcast.** Celari also asks it for its own transactions in full, for memos and, after a restore, for fees and recipients, so **the server can tell which transactions are yours.** Settings > Privacy > **Fetch full transactions for History** turns that off (on by default; the same switch is on a restore's month step, so a restore can start with it off): the server then does not learn it this way, but History shows no memos and, after a restore, past payments only by their net amount; turning it back on fetches what is missing. Either way the status of a payment you sent is asked about, at most every 5 minutes, until it confirms.
+- If your transparent funds are on more than one address (after restoring a phrase from another wallet, for example), shielding moves them in one transaction, which shows publicly that those addresses belong to the same wallet.
+- The server also decides which blocks Celari sees: a dishonest server can show payments that never happened, hide real ones, or not pass on what you send. Use only a server you trust (Settings saves a server other than the default only after a second confirmation that says so), and check a large incoming payment on another server or a block explorer. For more privacy, run your own proxy or use a VPN or Tor.
+- Transactions are built as PCZTs: *create → sign (webzjs-keys) → prove → broadcast*.
+- Recovery phrases are generated not with WebZjs's `generate_seed_phrase` but with the audited `@scure/bip39`, which uses the browser's secure random number generator; WebZjs's own documentation says its function may not use secure randomness in a browser.
 
-## Geliştirme
+## Development
 
-Gereksinimler: Node 22. WebZjs'i derlemek için ek olarak rustup, curl, clang 17+ ve wasm-pack. Rust araç zinciri (`nightly-2026-10-28`), wasm-bindgen CLI'ı (kilit dosyasındaki sürüm, `cargo install --locked`) ve x86_64 Linux'ta binaryen'in wasm-opt'u (sağlama toplamıyla doğrulanarak) betik tarafından kurulur.
+Requirements: Node 22. To build WebZjs, also rustup, curl, clang 17 or later and wasm-pack. The Rust toolchain (`nightly-2026-10-28`), the wasm-bindgen CLI (the version in the lockfile, `cargo install --locked`) and, on x86_64 Linux, binaryen's wasm-opt (checksum-verified) are installed by the build script.
 
 ```bash
 npm install
 
-# Sahte motorla arayüz geliştirme (wasm veya ağ gerekmez)
+# UI work with the fake engine (no wasm or network needed)
 npm run dev:fake
 
-# Testler
+# Tests
 npm run typecheck
-npm test               # birim testleri
-npm run test:e2e       # arayüz akışları (Playwright, sahte motor)
+npm test               # unit tests
+npm run test:e2e       # UI flows (Playwright, fake engine)
 
-# Gerçek motor: WebZjs'i sabitlenmiş commit'ten derle, sonra çalıştır
-npm run build:webzjs   # vendor/ klasörüne wasm paketlerini üretir
+# The real engine: build WebZjs from the pinned commit, then run it
+npm run build:webzjs   # builds the wasm packages into vendor/
 npm run dev            # http://localhost:5173
-npm run build          # dist/
-npm run test:e2e:real  # üretim derlemesiyle ana ağda duman testi
+npm run build          # dist/ (fails unless vendor/ matches scripts/webzjs-vendor.sha256)
+npm run test:e2e:real  # mainnet smoke test of the production build
 ```
 
-Sahte motor (`src/engine/fake.ts`) sadece geliştirme sunucusunda `VITE_FAKE_ENGINE=1` ile açılır ve üretim paketine hiç girmez.
+The fake engine (`src/engine/fake.ts`) is enabled only on the dev server with `VITE_FAKE_ENGINE=1` and never reaches the production bundle.
 
-`build:webzjs`, sabitlenmiş commit'in üstüne `patches/webzjs/` altındaki yamaları sırayla uygular (tarama ilerlemesi sayaçları, kilit düzeltmesi, not/memo desteği, librustzcash 2026-10 sürümleri ve Ironwood/NU7), `engine/webzjs.Cargo.lock`'u kilit dosyası olarak kopyalar ve `--locked` derler; uygulanamayan bir yama ya da `patches/webzjs/` veya `engine/` altında işlenmemiş bir değişiklik derlemeyi durdurur. Ayrıntılar: [`patches/webzjs/README.md`](patches/webzjs/README.md).
+`build:webzjs` applies the patches in `patches/webzjs/` to the pinned commit in order (scan progress counters, a lock fix, memo support, the librustzcash 2026-10 releases with Ironwood and NU7), copies `engine/webzjs.Cargo.lock` as the lockfile and builds with `--locked`. A patch that does not apply, or an uncommitted, untracked or index-hidden file under `patches/webzjs/` or `engine/`, stops the build. Details: [`patches/webzjs/README.md`](patches/webzjs/README.md).
 
-Motorun yerel (wasm olmayan) testleri, depodaki sabit sürümlerle (`--locked`):
+The engine's native (non-wasm) tests, with the versions pinned in the repository (`--locked`):
 
 ```bash
-scripts/test-engine-native.sh          # cüzdan arka ucu (engine/zcash_client_memory), ~15 dk
-scripts/test-engine-native.sh glue     # webzjs-wallet yapıştırıcısı, build:webzjs'ten sonra
-scripts/audit-engine.sh                # RustSec uyarıları, kaynaklar ve lisanslar (cargo-deny)
-scripts/gen-licenses.sh                # public/THIRD_PARTY_LICENSES.txt'yi yeniden üretir
+scripts/test-engine-native.sh          # the wallet backend (engine/zcash_client_memory), ~15 min
+scripts/test-engine-native.sh glue     # the webzjs-wallet glue, after build:webzjs
+scripts/audit-engine.sh                # RustSec advisories, sources and licences (cargo-deny)
+scripts/gen-licenses.sh                # regenerates public/THIRD_PARTY_LICENSES.txt
 ```
 
-Motorun tasarım kararları, bilerek yapılmayanlar (açık hatalar), gerçek parayla yapılması gereken denemeler ve derlemenin nasıl yeniden üretildiği: [`docs/engine-port.md`](docs/engine-port.md).
+The engine's design decisions, what it deliberately does not do (and fails with an explicit error instead), the tests still to do with real funds, and how the build is reproduced: [`docs/engine-port.md`](docs/engine-port.md).
 
 ### CI
 
-CI, WebZjs'i kaynaktan derler ve `vendor/` içindeki her dosyanın SHA-256 özetini `scripts/webzjs-vendor.sha256` listesiyle karşılaştırır. `main`'e gönderimler, haftalık çalışma ve `full_rebuild` ile elle başlatılan çalışmalar her zaman kaynaktan derler, liste tutmazsa başarısız olur ve ancak tutunca `vendor/`'u önbelleğe yazar. PR'lar önbellekteki `vendor/`'u aynı listeyle doğrular; tutmazsa kullanmaz, kaynaktan derler. `WEBZJS_COMMIT`'i, `patches/webzjs/` altındaki bir yamayı, `engine/` altındaki bir dosyayı veya bir araç sürümünü değiştiren PR listeyi de güncellemeli: CI yeni listeyi `webzjs-vendor-sha256` artifact'ı olarak yükler (`gh run download <run-id> -n webzjs-vendor-sha256 -D scripts`). Derleme betiği bu makinenin yollarını wasm'dan çıkarır, araçları sabitler, derlemeyi yalnızca izin verilen ortam değişkenleriyle çalıştırır ve çıktıyı değiştirmek için verilmiş ayarları (başka bir araç zinciri, rustc sarmalayıcıları, ek rustflags, `CARGO_INCREMENTAL`, wasm hedefi için C derleyicisi ve wasm-bindgen ayarları, yamalı çalışma alanı dışından cargo yapılandırması) reddeder; x86_64 Ubuntu 24.04'te clang-18 (1:18.1.3-1ubuntu1) ile yapılan yerel derlemenin CI'dakiyle aynı listeyi vermesi amaçlanıyor, ama karar CI'nın: kendi derlemesi listeyle tutmazsa başarısız olur. Ayrıntılar `.github/workflows/ci.yml` içindeki açıklamada.
+CI builds WebZjs from source and compares the SHA-256 of every file in `vendor/` with the list in `scripts/webzjs-vendor.sha256`. Pushes to `main`, the weekly run and runs started by hand with `full_rebuild` always build from source, fail if the list does not match, and only then save `vendor/` to the cache. Pull requests check the cached `vendor/` against the same list, and build from source if it does not match. A change to `WEBZJS_COMMIT`, to a patch under `patches/webzjs/`, to a file under `engine/` or to a tool version must update the list too: CI uploads the new one as the `webzjs-vendor-sha256` artifact (`gh run download <run-id> -n webzjs-vendor-sha256 -D scripts`). The build script trims this machine's paths from the wasm, pins its tools, runs the build with an allow-listed environment and refuses settings meant to change the output (another toolchain, rustc wrappers, extra rustflags, `CARGO_INCREMENTAL`, C compiler and wasm-bindgen settings for the wasm target, cargo configuration from outside the patched workspace). A local build on x86_64 Ubuntu 24.04 with clang-18 (`1:18.1.3-1ubuntu1`) is meant to give CI's list, but CI decides: its own build fails unless it matches. CI also audits npm advisories (failing on shipped packages, warning on dev tools) and the engine's Rust dependencies. Details are in the comments of `.github/workflows/ci.yml`.
 
-## Yayınlama
+## Deployment
 
-Cüzdan **https://app.celariwallet.com**, tanıtım sayfası **https://celariwallet.com** adresinde (Vercel; iki ayrı proje ve iki ayrı köken, böylece tanıtım sayfasındaki hiçbir şey cüzdanın anahtarlarının yanında çalışmaz). Cüzdanı Vercel derlemez: yayına giren, CI'ın `main`'deki kaynaktan derlemesinin `celari-dist` çıktısıdır; `deploy/make-branch.sh` onu ancak wasm dosyaları `scripts/webzjs-vendor.sha256`'daysa yalnızca yayın için açılan geçici `deploy/app` dalına koyar, yayından sonra dal silinir (depoda kalıcı dal yalnızca `main`). Adımlar [`deploy/README.md`](deploy/README.md)'de, tanıtım sayfası [`landing/`](landing/README.md)'de. Bir cüzdan, açıldığı adresin tarayıcı deposunda durur: başka bir adreste (ör. eski deneme sürümünde) oluşturulan cüzdan yeni adrese kendiliğinden geçmez, orada kurtarma kelimeleriyle geri yüklenir.
+The wallet runs at **https://app.celariwallet.com** and the website at **https://celariwallet.com**, on Vercel: two projects on two origins, so nothing of the website runs next to the wallet's keys. Vercel does not build the wallet. What it serves is the `celari-dist` artifact of CI's from-source build of `main`; `deploy/make-branch.sh` puts it on a temporary `deploy/app` branch only if its wasm files are in `scripts/webzjs-vendor.sha256`, and the branch is deleted after the release, so `main` is the repository's only branch. The steps are in [`deploy/README.md`](deploy/README.md); the website is in [`landing/`](landing/README.md).
 
-Kendin barındıracaksan: WebZjs, `SharedArrayBuffer` kullandığı için sayfanın **cross-origin isolated** olması gerekir. Sunucunun şu başlıkları göndermesi şart:
+To host it yourself: WebZjs uses `SharedArrayBuffer`, so the page must be **cross-origin isolated**. The server must send:
 
 ```
 Cross-Origin-Opener-Policy: same-origin
 Cross-Origin-Embedder-Policy: require-corp
 ```
 
-`public/_headers` dosyası Netlify ve Cloudflare Pages için bunu ve katı Content-Security-Policy'yi başlık olarak hazır yapar (Vercel için aynısı `deploy/vercel.json`'da). GitHub Pages özel başlık desteklemediğinden uygun değil. Üretim derlemesine aynı politika `<meta>` olarak da eklenir; eklenemezse derleme durur.
+`public/_headers` does this for Netlify and Cloudflare Pages, together with a strict Content-Security-Policy header (for Vercel, the same is in `deploy/vercel.json`). GitHub Pages cannot send custom headers, so it does not work. The production build also carries the policy as a `<meta>` tag, and the build fails if it cannot add it.
 
-## Yol haritası
+## Roadmap
 
-- [ ] Bağımsız güvenlik denetimi
-- [x] Cüzdan çekirdeğinin ve motorun NU7 öncesi iç incelemesi (Ekim 2026, tur 7): kasa, depolama, gönderim akışı, platform, motorun gönderim yolu, eşitleme ve derleme; 31 bulgunun hepsi düzeltildi ya da gerekçesiyle NU7 sonrasına bırakıldı ([`docs/reviews/2026-10-pre-nu7-core-review.md`](docs/reviews/2026-10-pre-nu7-core-review.md), [`docs/engine-port.md`](docs/engine-port.md)). Bağımsız bir denetimin yerini tutmaz.
-- [ ] NU7 sonrasına bırakılan motor işleri: TEX adreslerine ödeme, imzadan önce kesin ücret, adres adres gizliye aktarma, motor içinde yeniden yayın ve istek zaman aşımı
-- [ ] Ledger / Keystone donanım cüzdanı ile imzalama (PCZT akışı buna hazır)
-- [ ] Tarayıcı eklentisi (anahtarları sayfadan ayrı süreçte tutmak için)
-- [x] NU6.3 (Ironwood) ve NU7 desteği (librustzcash 2026-10 sürümleri)
-- [x] Gerçek parayla ilk ana ağ denemesi, NU7'den önce: Ironwood'a alma, Ironwood'dan şeffaf adrese gönderim, para üstü
-- [ ] Gerçek parayla kalan ana ağ denemeleri: gizliye aktarma, notlu gizli gönderim, NU7'den sonra gönderim
-- [x] Web cüzdanı arayüzü: geniş ekranda kenar çubuğu, İngilizce birincil dil, yeni logo
-- [x] celariwallet.com alan adına taşıma (cüzdan app.celariwallet.com'da, tanıtım sayfası celariwallet.com'da)
-- [ ] Orchard'dan Ironwood'a kademeli, gizli geçiş
-- [x] Gönderimde not (memo) desteği
-- [ ] Birden çok hesap, çoklu alıcılı ZIP-321
-- [ ] Test ağı modu, kendi lightwalletd vekilini kurma rehberi
-- [ ] Çevrimdışı kullanım (PWA)
+- [ ] Independent security audit
+- [x] Internal pre-NU7 review of the wallet core and the engine (October 2026, round 7): vault, storage, spend flow, platform, the engine's spend path, sync and the build; all 31 findings fixed, or deferred to after NU7 with their reasons ([`docs/reviews/2026-10-pre-nu7-core-review.md`](docs/reviews/2026-10-pre-nu7-core-review.md), [`docs/engine-port.md`](docs/engine-port.md)). It does not replace an independent audit.
+- [ ] Engine work deferred to after NU7: paying TEX addresses, the exact fee before signing, shielding one address at a time, resending inside the engine, request timeouts
+- [ ] Signing with Ledger or Keystone hardware wallets (the PCZT flow is ready for it)
+- [ ] Browser extension (to keep keys in a process apart from the page)
+- [x] NU6.3 (Ironwood) and NU7 support (librustzcash 2026-10 releases)
+- [x] First real-funds mainnet test, before NU7: receiving into Ironwood, sending from Ironwood to a transparent address, change
+- [ ] Remaining real-funds mainnet tests: shielding, a shielded send with a memo, sending after NU7
+- [x] Web wallet interface: a sidebar on wide screens, English as the primary language, a new logo
+- [x] Move to celariwallet.com (the wallet at app.celariwallet.com, the website at celariwallet.com)
+- [ ] Gradual, private migration from Orchard to Ironwood
+- [x] Memos on sends
+- [ ] Several accounts, ZIP-321 links with several recipients
+- [ ] Testnet mode, a guide to running your own lightwalletd proxy
+- [ ] Offline use (PWA)
 
-## Lisans
+## License
 
-MIT veya Apache-2.0, tercihine göre. WebZjs © ChainSafe Systems, MIT / Apache-2.0. `engine/zcash_client_memory` © Electric Coin Company, MIT / Apache-2.0 (lisans dosyaları ve köken dizinin içinde). Cüzdan motoruna derlenen Rust sandıklarının lisansları ve telif bildirimleri `public/THIRD_PARTY_LICENSES.txt`'de; uygulama bunu `/THIRD_PARTY_LICENSES.txt` adresinde sunar (Ayarlar > Hakkında).
-
----
-
-## English
-
-**Celari** is an open-source, privacy-first browser wallet for Zcash, built on ChainSafe's [WebZjs](https://github.com/ChainSafe/WebZjs). No token, no points, no airdrop promises.
-
-- Supports NU6.3 (Ironwood) and knows NU7 (see the note at the top: the first real-funds mainnet tests are done, shielding and NU7 are still pending; the update rescans the wallet once).
-- A fresh shielded-only unified address on every opening of Receive; one-click shielding of transparent funds into Ironwood.
-- Network version guard: the app asks the server which consensus rules the network runs (lightwalletd `GetLightdInfo`) at start-up, on every sync and before every broadcast, and keeps sending and shielding off while the engine does not support them or the answer does not come. No transaction is built for an upgrade's activation block or the 10 blocks before it.
-- Keys and the wallet database are stored only encrypted (PBKDF2-SHA256 600k + AES-256-GCM); the seed is decrypted only to sign and the password is asked on every spend. A copied viewing key, and a recovery phrase copied by hand, are cleared from the clipboard after 60 seconds as far as the browser allows.
-- The recovery phrase is the only backup: the browser can delete this site's data on its own (Safari after 7 days of use without opening Celari, unless it is on the Home Screen; any browser when the disk is full or site data is cleared). Celari asks for persistent storage and the create and restore screens say so.
-- History rows say whether they were shielded, partly shielded or transparent, judged from the wallet's own outputs only; a payment that crosses from an older pool is never called shielded on Send.
-- A payment whose broadcast failed, or that the network dropped, stays saved and is sent again every few minutes until it is mined. Fees follow ZIP 317 and are shown as a lower bound; when the real fee does not fit, Send offers the amount that does, to confirm again.
-- An internal pre-NU7 review of the wallet core and the engine (October 2026, 31 findings, each fixed or deferred with its reason): `docs/reviews/2026-10-pre-nu7-core-review.md`. It is not an independent audit.
-- View-only mode with a UFVK, birthday estimation from a month (or a full scan from Sapling activation when the month is unknown), checksum-validated addresses, ZIP-321 `zcash:` links, encrypted memos to shielded addresses.
-- English and Turkish UI (English on first visit; a chosen language stays), as a web app with a sidebar on wide screens and bottom tabs on phones; fonts are served by the app itself, with no third-party requests. Configurable lightwalletd gRPC-web proxy. The server cannot see shielded balances or the senders of shielded payments, but it sees your IP address, your transparent addresses (asked about on every sync) and what you broadcast, and since Celari fetches its own transactions in full (memos, and fees and recipients after a restore) it can tell which transactions are yours. Settings > Privacy > **Fetch full transactions for History** (on by default; also on a restore's month step, so a restore can start with it off) turns that off, at the cost of memos and, after a restore, of past payments showing by their net amount only; the status of a payment you sent is still asked about, at most every 5 minutes, until it confirms. If your transparent funds are on more than one address (after restoring a phrase from another wallet, for example), shielding moves them in one transaction, which shows publicly that those addresses belong to one wallet. TEX addresses cannot be paid yet (the payment needs two linked transactions the engine cannot build); the form refuses them. Run your own proxy or use a VPN/Tor for more privacy. The server also decides which blocks Celari sees: a dishonest server can show payments that never happened, hide real ones, or not pass on what you send. Use only a server you trust (Settings saves a server other than the default only after a second confirmation that says so), and check a large incoming payment on another server or a block explorer.
-
-The engine is ChainSafe WebZjs at a pinned commit, Celari's patches in `patches/webzjs/`, and the wallet backend as readable source in `engine/zcash_client_memory` (origin and licence in its `UPSTREAM.md`), built with the October 2026 librustzcash releases (zcash_client_backend 0.25, zcash_protocol 0.11).
-
-**Not audited. Use small amounts only.** The wallet runs at https://app.celariwallet.com (CI's from-source build, pinned by its hash list; see `deploy/README.md`), the landing page at https://celariwallet.com (`landing/`). See the Turkish sections above for commands: `npm run dev:fake` for UI work, `npm run build:webzjs && npm run build` for a real build. Hosting requires COOP/COEP headers (see `public/_headers`). CI pins the WebZjs build output by SHA-256 in `scripts/webzjs-vendor.sha256`; changing the WebZjs commit, its patches, `engine/` or a tool version needs a new list, which CI uploads as the `webzjs-vendor-sha256` artifact (see `.github/workflows/ci.yml`). The build script trims machine paths, pins its tools, runs the build with an environment of its own (an allow-list) and refuses anything meant to change the output (another toolchain, rustc wrappers, extra rustflags, `CARGO_INCREMENTAL`, C compiler and wasm-bindgen settings for the wasm target, cargo configuration from outside the patched workspace); a local build on x86_64 Ubuntu 24.04 with clang-18 is meant to reproduce CI's list and says whether it does, but CI's own build decides. The engine's native tests run with `scripts/test-engine-native.sh` (backend) and `scripts/test-engine-native.sh glue`, its dependency audit with `scripts/audit-engine.sh` (cargo-deny, also in CI); the licence notices of the crates in the wasm are in `public/THIRD_PARTY_LICENSES.txt`, served by the app and linked from Settings > About. The engine's design record, its known gaps and the real-funds checklist: [`docs/engine-port.md`](docs/engine-port.md).
+MIT or Apache-2.0, at your option. WebZjs © ChainSafe Systems, MIT / Apache-2.0. `engine/zcash_client_memory` © Electric Coin Company, MIT / Apache-2.0 (licence files and origin in its directory). The licences and copyright notices of the Rust crates compiled into the wallet engine are in `public/THIRD_PARTY_LICENSES.txt`, which the app serves at `/THIRD_PARTY_LICENSES.txt` (Settings > About).
