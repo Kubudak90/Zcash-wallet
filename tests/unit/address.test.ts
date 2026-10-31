@@ -10,6 +10,7 @@ import {
   parsePaymentInput,
   shortAddress,
   unifiedReceivers,
+  unpayableReason,
 } from '../../src/lib/address';
 
 const bytes = (n: number, fill = 7) => new Uint8Array(n).fill(fill);
@@ -105,6 +106,15 @@ describe('checkAddress', () => {
     expect(checkAddress('hello')).toEqual({ ok: false, reason: 'invalid' });
     expect(checkAddress('0x52908400098527886E0F7030069857D2E4169EE7')).toEqual({ ok: false, reason: 'invalid' });
     expect(checkAddress(UA.slice(0, 20) + UA.slice(20).toUpperCase())).toEqual({ ok: false, reason: 'invalid' });
+  });
+});
+
+describe('unpayableReason (review round 7, SPEND-2)', () => {
+  it('refuses TEX, which takes a ZIP 320 pair the engine cannot build, and passes the others through', () => {
+    expect(unpayableReason(checkAddress(TEX))).toBe('texUnsupported');
+    expect(unpayableReason(checkAddress(T1))).toBeNull();
+    expect(unpayableReason(checkAddress(''))).toBe('empty');
+    expect(unpayableReason(checkAddress('hello'))).toBe('invalid');
   });
 });
 

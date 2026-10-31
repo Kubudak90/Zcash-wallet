@@ -169,7 +169,7 @@ export const en = {
   'home.shieldBelowThreshold': 'At least {amount} ZEC is needed to shield.',
   'home.outdatedBalance': 'Payments sent to you through the new Ironwood pool are not in this balance yet.',
   'home.orchardNote':
-    '{amount} ZEC of your shielded balance is in the Orchard pool and can be spent as usual. Spending from it moves the change into Ironwood, the new shielded pool, and the amount that crosses from Orchard into Ironwood is visible on chain (the ZIP 318 turnstile). Celari does not offer a private, gradual migration to Ironwood yet.',
+    '{amount} ZEC of your shielded balance is in the Orchard pool and can be spent as usual. A payment from it crosses into Ironwood, the new shielded pool, and the amount that crosses is visible on chain (the ZIP 318 turnstile). The change stays in Orchard, so each later payment from it crosses again. Celari does not offer a private, gradual migration to Ironwood yet.',
   'home.saplingNote':
     '{amount} ZEC of your shielded balance is in the older Sapling pool. A payment Celari pays from it moves the whole value of each Sapling note it spends into Ironwood, and that value is visible on chain. Payments that Ironwood alone covers do not touch it.',
   'home.saplingNoteViewOnly':
@@ -221,12 +221,14 @@ export const en = {
   'send.amount': 'Amount (ZEC)',
   'send.max': 'Max',
   'send.available': 'Spendable shielded balance: {amount} ZEC',
-  'send.fee': 'Network fee about {amount} ZEC',
+  'send.fee':
+    'Network fee at least {amount} ZEC: ZIP 317 adds 0.00005 ZEC for each further note the payment spends or creates. History shows the fee paid.',
+  'send.atLeast': 'at least {amount} ZEC',
   'send.review': 'Review',
   'send.confirmTitle': 'Confirm sending',
   'send.confirmTo': 'Recipient',
   'send.confirmAmount': 'Amount',
-  'send.confirmFee': 'Estimated fee',
+  'send.confirmFee': 'Network fee',
   'send.confirmPassword': 'Enter your password to confirm',
   'send.sendNow': 'Send',
   'send.stage.building': 'Building the transaction…',
@@ -244,19 +246,18 @@ export const en = {
   'send.err.address.empty': 'Enter the recipient address.',
   'send.err.address.invalid': 'This is not a valid Zcash address. There may be a typo.',
   'send.err.address.testnet': 'This is a testnet address. Celari runs on mainnet.',
+  'send.err.address.texUnsupported':
+    'Celari cannot pay TEX addresses yet: such a payment needs two linked transactions, which its engine cannot build. Nothing is sent; ask the exchange for a t1 or unified address.',
   'send.err.amount.empty': 'Enter an amount.',
   'send.err.amount.invalid': 'Invalid amount.',
   'send.err.amount.tooManyDecimals': 'At most 8 decimal places.',
   'send.err.amount.zero': 'The amount must be greater than zero.',
   'send.err.amount.insufficient': 'Your shielded balance does not cover this amount plus the fee.',
   'send.transparentWarn': 'You are sending to a transparent address: the amount and recipient will be public on chain.',
-  'send.texWarn':
-    'This is a TEX address (used by some exchanges). Funds reach it through a transparent intermediate step, which is public.',
   'send.viewOnly': 'You are in view-only mode; this wallet cannot send.',
   'send.disabledOutdated': 'Sending is disabled until Celari is updated for the current Zcash network.',
   'send.nothingSent': 'Nothing was sent.',
   'send.failed': 'Sending failed.',
-  'send.failedHint': 'The balance may not cover the network fee. Lower the amount slightly and try again.',
   'send.uriFilled': 'Amount filled in from the payment link.',
   'send.sentTitle': '{amount} ZEC sent',
   'send.stageDone': 'done',
@@ -274,7 +275,10 @@ export const en = {
     'Nothing was sent: a network upgrade activated while the transaction was being prepared, so it could never be mined. Try again; a new one is built under the new rules.',
   'send.refused.expired':
     'Nothing was sent: the transaction would have expired before it could be mined. Try again; a new one is built.',
-  'send.maybeSent': 'The transaction may have reached the network anyway. Check History before you try again.',
+  'send.maybeSent':
+    'The transaction is saved in the wallet and may have reached the network anyway. Celari sends it again every few minutes until it is mined, so do not pay again. If it is never mined, the funds become spendable again when it expires (after some payments from Orchard, only weeks later).',
+  'send.sendFit': 'Send {amount} ZEC instead',
+  'send.fitNote': 'That is the spendable balance less the fee this payment needs. You review and confirm it again.',
   'send.shieldFirst':
     'You also have {amount} ZEC of transparent funds. Only shielded funds can be sent, so shield them first.',
   'send.err.amount.insufficientShieldFirst':
@@ -303,7 +307,7 @@ export const en = {
   'send.kind.transparent': 'Transparent · public',
   'send.kind.tex': 'TEX · public',
   'send.previewTitle': 'Payment summary',
-  'send.total': 'Estimated total',
+  'send.total': 'Total',
   'send.outcome.shielded': 'Shielded payment: the recipient and the memo stay private on chain.',
   'send.outcome.partial':
     'Partly shielded payment: the recipient and the memo stay private, but the amount entering the older Sapling pool can be seen on chain.',
@@ -325,8 +329,9 @@ export const en = {
 
   'shield.title': 'Shield funds',
   'shield.intro':
-    '{amount} ZEC of transparent funds will move to your shielded balance, into the Ironwood pool. The network fee is deducted. The amount and your transparent address are visible on chain.',
-  'shield.introOrchard': '{amount} ZEC of transparent funds will move to your shielded Orchard balance. The network fee is deducted. The amount and your transparent address are visible on chain.',
+    '{amount} ZEC of transparent funds will move to your shielded balance, into the Ironwood pool. The network fee is deducted. The amount and your transparent address are visible on chain. If your transparent funds are on more than one address (for example after restoring a phrase from another wallet), they move in one transaction, which shows publicly that those addresses belong to the same wallet.',
+  'shield.introOrchard':
+    '{amount} ZEC of transparent funds will move to your shielded Orchard balance. The network fee is deducted. The amount and your transparent address are visible on chain. If your transparent funds are on more than one address (for example after restoring a phrase from another wallet), they move in one transaction, which shows publicly that those addresses belong to the same wallet.',
   'shield.confirm': 'Shield',
   'shield.success': 'It will appear in your shielded balance once confirmed.',
   'shield.sentTitle': '{amount} ZEC is being shielded',

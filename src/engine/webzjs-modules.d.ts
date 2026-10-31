@@ -99,12 +99,13 @@ declare module '@chainsafe/webzjs-wallet' {
       offset?: number | null,
     ): Promise<TransactionHistoryResponse>;
     get_latest_block(): Promise<bigint>;
-    detect_birthday_from_transparent_address(transparent_address: string): Promise<number | undefined>;
     // `memo` comes from patches/webzjs/0002-memo.patch.
     pczt_create(account_id: number, to_address: string, value: bigint, memo?: string | null): Promise<Pczt>;
     pczt_shield(account_id: number): Promise<Pczt>;
     pczt_prove(pczt: Pczt, sapling_proof_gen_key?: ProofGenerationKey | null): Promise<Pczt>;
     pczt_send(pczt: Pczt): Promise<void>;
+    /** Sends stored transactions again; `txids` is their 32-byte ids in internal order, concatenated. */
+    send_authorized_transactions(txids: Uint8Array): Promise<void>;
   }
 }
 

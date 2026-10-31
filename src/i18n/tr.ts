@@ -170,7 +170,7 @@ export const tr: Record<MessageKey, string> = {
   'home.shieldBelowThreshold': 'Gizliye aktarmak için en az {amount} ZEC gerekir.',
   'home.outdatedBalance': 'Yeni Ironwood havuzu üzerinden sana gönderilen ödemeler henüz bu bakiyede yok.',
   'home.orchardNote':
-    'Gizli bakiyenin {amount} ZEC’lik kısmı Orchard havuzunda ve her zamanki gibi harcanabilir. Ondan harcadığında para üstü yeni gizli havuz Ironwood’a geçer; Orchard’dan Ironwood’a geçen tutar zincirde görünür (ZIP 318 turnike kuralı). Celari henüz Ironwood’a gizli ve kademeli bir taşıma sunmuyor.',
+    'Gizli bakiyenin {amount} ZEC’lik kısmı Orchard havuzunda ve her zamanki gibi harcanabilir. Ondan yapılan bir ödeme yeni gizli havuz Ironwood’a geçer ve geçen tutar zincirde görünür (ZIP 318 turnike kuralı). Para üstü Orchard’da kalır, bu yüzden ondan yapılan her yeni ödeme yeniden geçer. Celari henüz Ironwood’a gizli ve kademeli bir taşıma sunmuyor.',
   'home.saplingNote':
     'Gizli bakiyenin {amount} ZEC’lik kısmı eski Sapling havuzunda. Celari ondan bir ödeme yaptığında harcadığı her Sapling notunun değerinin tamamı Ironwood’a geçer ve zincirde görünür. Ironwood’un tek başına karşıladığı ödemeler ona dokunmaz.',
   'home.saplingNoteViewOnly':
@@ -222,12 +222,14 @@ export const tr: Record<MessageKey, string> = {
   'send.amount': 'Tutar (ZEC)',
   'send.max': 'Tümü',
   'send.available': 'Gönderilebilir gizli bakiye: {amount} ZEC',
-  'send.fee': 'Ağ ücreti yaklaşık {amount} ZEC',
+  'send.fee':
+    'Ağ ücreti en az {amount} ZEC: ZIP 317, ödemenin harcadığı ya da oluşturduğu her ek not için 0,00005 ZEC ekler. Ödenen ücret Geçmiş’te görünür.',
+  'send.atLeast': 'en az {amount} ZEC',
   'send.review': 'Gözden geçir',
   'send.confirmTitle': 'Gönderimi onayla',
   'send.confirmTo': 'Alıcı',
   'send.confirmAmount': 'Tutar',
-  'send.confirmFee': 'Tahmini ücret',
+  'send.confirmFee': 'Ağ ücreti',
   'send.confirmPassword': 'Onaylamak için şifreni gir',
   'send.sendNow': 'Gönder',
   'send.stage.building': 'İşlem hazırlanıyor…',
@@ -245,19 +247,18 @@ export const tr: Record<MessageKey, string> = {
   'send.err.address.empty': 'Alıcı adresini gir.',
   'send.err.address.invalid': 'Bu geçerli bir Zcash adresi değil. Bir harf hatası olabilir.',
   'send.err.address.testnet': 'Bu bir test ağı adresi. Celari ana ağda çalışır.',
+  'send.err.address.texUnsupported':
+    'Celari henüz TEX adreslerine ödeme yapamıyor: böyle bir ödeme birbirine bağlı iki işlem gerektirir ve Celari’nin motoru bunları kuramıyor. Hiçbir şey gönderilmez; borsadan bir t1 ya da birleşik adres iste.',
   'send.err.amount.empty': 'Tutarı gir.',
   'send.err.amount.invalid': 'Geçersiz tutar.',
   'send.err.amount.tooManyDecimals': 'En fazla 8 ondalık basamak girebilirsin.',
   'send.err.amount.zero': 'Tutar sıfırdan büyük olmalı.',
   'send.err.amount.insufficient': 'Gizli bakiyen bu tutarı ve ücreti karşılamıyor.',
   'send.transparentWarn': 'Şeffaf bir adrese gönderiyorsun: tutar ve alıcı zincirde herkese açık görünecek.',
-  'send.texWarn':
-    'Bu bir TEX adresi (bazı borsalar kullanır). Para buraya şeffaf bir ara adım üzerinden gider ve bu adım herkese açıktır.',
   'send.viewOnly': 'Sadece izleme modundasın; bu cüzdandan para gönderilemez.',
   'send.disabledOutdated': 'Celari güncel Zcash ağı için güncellenene kadar gönderme kapalı.',
   'send.nothingSent': 'Hiçbir şey gönderilmedi.',
   'send.failed': 'Gönderim başarısız.',
-  'send.failedHint': 'Bakiye ağ ücretini karşılamıyor olabilir. Tutarı biraz azaltıp tekrar dene.',
   'send.uriFilled': 'Tutar ödeme bağlantısından dolduruldu.',
   'send.sentTitle': '{amount} ZEC gönderildi',
   'send.stageDone': 'tamamlandı',
@@ -275,7 +276,10 @@ export const tr: Record<MessageKey, string> = {
     'Hiçbir şey gönderilmedi: işlem hazırlanırken bir ağ yükseltmesi etkinleşti, bu yüzden bu işlem hiçbir bloğa giremezdi. Tekrar dene; yeni kurallarla yeni bir işlem oluşturulur.',
   'send.refused.expired':
     'Hiçbir şey gönderilmedi: işlemin süresi bir bloğa giremeden dolacaktı. Tekrar dene; yeni bir işlem oluşturulur.',
-  'send.maybeSent': 'İşlem yine de ağa ulaşmış olabilir. Tekrar denemeden önce Geçmiş’e bak.',
+  'send.maybeSent':
+    'İşlem cüzdana kaydedildi ve yine de ağa ulaşmış olabilir. Celari onu madenlenene kadar birkaç dakikada bir yeniden gönderir; bu yüzden yeniden ödeme yapma. Hiç madenlenmezse, süresi dolduğunda para yeniden harcanabilir olur (Orchard’dan yapılan bazı ödemelerde ancak haftalar sonra).',
+  'send.sendFit': 'Bunun yerine {amount} ZEC gönder',
+  'send.fitNote': 'Bu, harcanabilir bakiyeden bu ödemenin gerektirdiği ücretin düşülmüş hâli. Onu yeniden gözden geçirip onaylarsın.',
   'send.shieldFirst':
     '{amount} ZEC şeffaf bakiyen de var. Yalnızca gizli bakiye gönderilebilir; göndermek için önce gizliye aktar.',
   'send.err.amount.insufficientShieldFirst':
@@ -304,7 +308,7 @@ export const tr: Record<MessageKey, string> = {
   'send.kind.transparent': 'Şeffaf · herkese açık',
   'send.kind.tex': 'TEX · herkese açık',
   'send.previewTitle': 'Ödeme özeti',
-  'send.total': 'Tahmini toplam',
+  'send.total': 'Toplam',
   'send.outcome.shielded': 'Gizli ödeme: alıcı ve not zincirde gizli kalır.',
   'send.outcome.partial':
     'Kısmen gizli ödeme: alıcı ve not gizli kalır, ama eski Sapling havuzuna geçen tutar zincirde görülebilir.',
@@ -325,8 +329,10 @@ export const tr: Record<MessageKey, string> = {
   'send.hideAddress': 'Adresin tamamını gizle',
 
   'shield.title': 'Gizliye aktar',
-  'shield.intro': '{amount} ZEC şeffaf bakiyen gizli bakiyene, Ironwood havuzuna aktarılacak. Ağ ücreti bu tutardan düşülür. Tutar ve şeffaf adresin zincirde görünür.',
-  'shield.introOrchard': '{amount} ZEC şeffaf bakiyen gizli Orchard bakiyene aktarılacak. Ağ ücreti bu tutardan düşülür. Tutar ve şeffaf adresin zincirde görünür.',
+  'shield.intro':
+    '{amount} ZEC şeffaf bakiyen gizli bakiyene, Ironwood havuzuna aktarılacak. Ağ ücreti bu tutardan düşülür. Tutar ve şeffaf adresin zincirde görünür. Şeffaf paran birden fazla adresteyse (örneğin başka bir cüzdanın kelimelerini geri yükledikten sonra), hepsi tek işlemde aktarılır ve bu, o adreslerin aynı cüzdana ait olduğunu herkese gösterir.',
+  'shield.introOrchard':
+    '{amount} ZEC şeffaf bakiyen gizli Orchard bakiyene aktarılacak. Ağ ücreti bu tutardan düşülür. Tutar ve şeffaf adresin zincirde görünür. Şeffaf paran birden fazla adresteyse (örneğin başka bir cüzdanın kelimelerini geri yükledikten sonra), hepsi tek işlemde aktarılır ve bu, o adreslerin aynı cüzdana ait olduğunu herkese gösterir.',
   'shield.confirm': 'Aktar',
   'shield.success': 'Onaylanınca gizli bakiyende görünecek.',
   'shield.sentTitle': '{amount} ZEC gizliye aktarılıyor',

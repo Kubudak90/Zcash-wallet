@@ -157,6 +157,8 @@ export interface FakeKnobs {
   refuseSpend?: 'UpgradePending' | 'PcztWrongBranch' | 'PcztExpired';
   /** Set by the fake: the last value setHistoryEnhancement() received (undefined: never called). */
   historyEnhancement?: boolean;
+  /** Set by the fake: the txids rebroadcast() was called with, in order. */
+  rebroadcasts?: string[];
 }
 const knobs = (): FakeKnobs => (globalThis as { __fakeEngine?: FakeKnobs }).__fakeEngine ?? {};
 const chainTip = () => TIP + (knobs().chainGrowth ?? 0);
@@ -271,6 +273,12 @@ export class FakeEngine implements ZcashEngine {
 
   async latestHeight(): Promise<number> {
     return chainTip() + (knobs().tipAhead ?? 0);
+  }
+
+  async rebroadcast(txid: string): Promise<void> {
+    this.crash.check();
+    const g = globalThis as { __fakeEngine?: FakeKnobs };
+    g.__fakeEngine = { ...g.__fakeEngine, rebroadcasts: [...(g.__fakeEngine?.rebroadcasts ?? []), txid] };
   }
 
   get ironwood(): boolean {
@@ -634,6 +642,9 @@ export class FakeEngine implements ZcashEngine {
     const fee = BigInt(knobs().engineFee ?? TYPICAL_FEE_ZATS);
     // The errors WebZjs (patches/webzjs/0002-memo.patch) and the adapter give.
     const check = () => {
+      // WebZjs proposes a ZIP 320 pair for a TEX recipient, and create_pczt_from_proposal
+      // refuses every proposal of more than one step (review round 7, SPEND-2).
+      if (to.trim().toLowerCase().startsWith('tex1')) throw new Error('Failed to create Pczt: ProposalNotSupported');
       if (zats + fee > spendable) {
         throw new Error(
           `An generic error occurred: Failed to propose the transfer (possibly insufficient balance): InsufficientFunds { available: Zatoshis(${spendable}), required: Zatoshis(${zats + fee}) }`,

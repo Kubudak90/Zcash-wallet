@@ -281,6 +281,15 @@ export interface ZcashEngine {
    */
   send(account: number, to: string, zats: bigint, auth: SpendAuthority, memo?: string): Promise<void>;
   shield(account: number, auth: SpendAuthority): Promise<void>;
+  /**
+   * Sends a transaction the wallet stored (`txid` as History shows it) to the network again,
+   * byte for byte. WebZjs stores a spend before it broadcasts it once, and nothing sends it
+   * again: after a failed broadcast or a mempool drop its notes stay spent until it expires,
+   * which for a ZIP 318 canonical crossing from Orchard is weeks (review round 7, ES-1). The
+   * node's answer for one it already has, or can no longer accept, is an error, and is only
+   * logged by the caller. Optional: engines without it never resend.
+   */
+  rebroadcast?(txid: string): Promise<void>;
 }
 
 /** Spendable shielded value: Sapling + Orchard + Ironwood. */

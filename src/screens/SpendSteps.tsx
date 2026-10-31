@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'rea
 
 import { Icon, type IconName } from '../components/icons';
 import { ErrorDetails, Notice, PasswordField, Spinner } from '../components/ui';
-import { SpendRefusedError, type SendStage } from '../engine';
+import { SpendRefusedError, type SendStage, type SpendRefusal } from '../engine';
 import { useI18n } from '../i18n';
 import { spendingDisabled } from '../lib/network';
 import { refusalText } from '../lib/spendRefusal';
@@ -23,7 +23,7 @@ export function SpendConfirm({
   submitIcon,
   run,
   disabledText,
-  failureHint,
+  refusalAction,
   note,
   onViewHistory,
 }: {
@@ -33,8 +33,8 @@ export function SpendConfirm({
   run: (password: string, onStage: (s: SendStage) => void) => Promise<void>;
   /** Shown in place of the form while the network runs rules this version does not support. */
   disabledText: string;
-  /** Shown when building the transaction failed, before anything was signed. */
-  failureHint?: string;
+  /** Something to do about a refusal of the engine, under the line that explains it (e.g. a smaller amount). */
+  refusalAction?: (refusal: SpendRefusal) => ReactNode;
   /** A line above the password field: what the password does. */
   note?: ReactNode;
   onViewHistory: () => void;
@@ -98,7 +98,6 @@ export function SpendConfirm({
   const maybeSent = error?.stage === 'broadcasting' && !refusal;
   let hint: string | undefined;
   if (refusal) hint = refusalText(refusal, t, lang);
-  else if (error?.stage === 'building') hint = failureHint ?? t('send.failedRetry');
   else if (error?.stage) hint = t('send.failedRetry');
 
   let body: ReactNode;
@@ -168,6 +167,7 @@ export function SpendConfirm({
           <Notice tone="error">
             <strong>{t('send.failed')}</strong>
             {hint && <p data-testid="spend-failure">{hint}</p>}
+            {refusal && refusalAction?.(refusal)}
             {/* The engine's own text, in English, only where Celari has no line of its own for it. */}
             {!refusal && <ErrorDetails error={error.cause} />}
           </Notice>

@@ -301,6 +301,15 @@ export class WebzjsEngine implements ZcashEngine {
     await this.signProveSend(pczt, auth);
   }
 
+  async rebroadcast(txid: string): Promise<void> {
+    // History shows a txid in display order (TxId::to_string); TxId::from_bytes takes the
+    // internal order, the reverse.
+    if (!/^[0-9a-f]{64}$/i.test(txid)) throw new Error(`not a txid: ${txid}`);
+    const bytes = new Uint8Array(32);
+    for (let i = 0; i < 32; i++) bytes[31 - i] = parseInt(txid.slice(2 * i, 2 * i + 2), 16);
+    await this.guarded(() => this.open_.send_authorized_transactions(bytes));
+  }
+
   async shield(account: number, auth: SpendAuthority): Promise<void> {
     auth.onStage?.('building');
     const pczt = await this.guarded(() => this.open_.pczt_shield(account)).catch((e) => {

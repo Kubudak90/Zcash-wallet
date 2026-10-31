@@ -9,6 +9,20 @@ import { formatZec } from './zec';
 /** Blocks without sends around an upgrade: the last 10 before it and its first one (docs/engine-port.md, Decision 7). */
 const UPGRADE_PAUSE_BLOCKS = 11;
 
+/**
+ * For a payment of `zats` the engine refused for funds: the amount that fits instead, the
+ * spendable balance less the fee the engine asked for this payment, or null if there is none
+ * below `zats` (review round 7, SPEND-3 and ES-4). The fee grows with every note spent or
+ * created (ZIP 317), so Max (the balance less the typical fee) is refused once the wallet holds
+ * three notes or more; a Max payment has no change, so requiredZats - zats is then exactly the
+ * fee of spending every note, and the amount returned builds. The user confirms it again.
+ */
+export function fittingAmount(refusal: SpendRefusal, zats: bigint): bigint | null {
+  if (refusal.reason !== 'insufficientFunds') return null;
+  const fit = refusal.availableZats - (refusal.requiredZats - zats);
+  return fit > 0n && fit < zats ? fit : null;
+}
+
 /** The line that says why the engine refused a spend; each one says that nothing was sent. */
 export function refusalText(refusal: SpendRefusal, t: Translate, lang: Lang): string {
   const n = (x: number) => x.toLocaleString(lang === 'tr' ? 'tr-TR' : 'en-US');

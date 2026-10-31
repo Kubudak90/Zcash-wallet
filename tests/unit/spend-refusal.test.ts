@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { EngineStoppedError, SpendRefusedError, type SpendRefusal } from '../../src/engine/types';
 import { buildError, sendError } from '../../src/engine/webzjs-errors';
 import { translate, type Lang } from '../../src/i18n';
-import { refusalText } from '../../src/lib/spendRefusal';
+import { fittingAmount, refusalText } from '../../src/lib/spendRefusal';
 
 // What the vendored engine threw in Chromium (final review E2E-2, the production wasm with the
 // form's own balance check switched off, final-e2e/logs/send-probe-2.log): plain Errors.
@@ -167,5 +167,27 @@ describe('the engine source still says what buildError and sendError match', () 
   it("puts the proposal's error, InsufficientFunds included, into the generic error in Debug form", () => {
     expect(patch).toContain('Error::Generic(format!("Failed to propose the transfer (possibly insufficient balance): {e:?}"))');
     expect(patch).toContain('#[error("An generic error occurred: {0}")]');
+  });
+});
+
+describe('fittingAmount (review round 7, SPEND-3 and ES-4)', () => {
+  const funds = (availableZats: bigint, requiredZats: bigint): SpendRefusal => ({
+    reason: 'insufficientFunds',
+    availableZats,
+    requiredZats,
+  });
+
+  it('offers the spendable balance less the fee the engine asked for', () => {
+    // Measured natively: 4 Ironwood notes after a send with split change; Max (available - 10,000)
+    // is refused with required 399,985,000, and available - 20,000 builds.
+    expect(fittingAmount(funds(399_975_000n, 399_985_000n), 399_965_000n)).toBe(399_955_000n);
+    // One 1 ZEC Orchard note: Max needs 20,000 (2 + 2 actions).
+    expect(fittingAmount(funds(100_000_000n, 100_010_000n), 99_990_000n)).toBe(99_980_000n);
+  });
+
+  it('offers nothing that is not below the payment, nor for another refusal', () => {
+    expect(fittingAmount(funds(10_000n, 1_000_000n), 500_000n)).toBeNull();
+    expect(fittingAmount(funds(1_000_000n, 900_000n), 890_000n)).toBeNull();
+    expect(fittingAmount({ reason: 'expired' }, 1n)).toBeNull();
   });
 });
