@@ -1,0 +1,183 @@
+<!doctype html>
+<!-- Written by landing/build.py; edit that, not this file. -->
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#0d0c0a" />
+    <title>Celari: tarayıcında gizli bir Zcash cüzdanı</title>
+    <meta name="description" content="Celari, tarayıcıda çalışan, açık kaynak ve gizlilik öncelikli bir Zcash cüzdanı. Varsayılan olarak gizli, anahtarlar kendi cihazında şifreli. Token yok, hesap yok." />
+    <link rel="canonical" href="https://celariwallet.com/tr/" />
+    <link rel="alternate" hreflang="en" href="https://celariwallet.com/" />
+    <link rel="alternate" hreflang="tr" href="https://celariwallet.com/tr/" />
+    <link rel="alternate" hreflang="x-default" href="https://celariwallet.com/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Celari: tarayıcında gizli bir Zcash cüzdanı" />
+    <meta property="og:description" content="Celari, tarayıcıda çalışan, açık kaynak ve gizlilik öncelikli bir Zcash cüzdanı. Varsayılan olarak gizli, anahtarlar kendi cihazında şifreli. Token yok, hesap yok." />
+    <meta property="og:url" content="https://celariwallet.com/tr/" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/svg+xml" sizes="any" href="/favicon.svg" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="preload" href="/fonts/fraunces-latin-opsz-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="/site.css" />
+  </head>
+  <body>
+    <a class="skip" href="#main">İçeriğe geç</a>
+    <header class="top">
+      <div class="wrap">
+      <a class="lockup" href="/tr/" aria-label="Celari">
+        <svg class="mark" viewBox="11 6.626 42.242 50.747" aria-hidden="true" focusable="false"><path fill="currentColor" d="M43.471 27.99L31.09 20.253A18.129 18.129 0 0 0 25.23 17.89A81.33 81.33 0 0 0 15.508 16.443L27.354 9.041C32.507 5.821 35.083 5.821 40.236 9.041L52.965 16.995A2.205 2.205 0 0 1 53.243 20.529L44.779 27.887A1.103 1.103 0 0 1 43.471 27.99ZM11 39.995L11 22.137A4.41 4.41 0 0 1 15.818 17.746A80.06 80.06 0 0 1 24.968 19.133A16.859 16.859 0 0 1 30.417 21.33L30.659 21.481L30.236 21.778A91.651 91.651 0 0 0 12.28 38.32A26.205 26.205 0 0 0 11 39.995ZM11 42.295L11.533 41.475A24.935 24.935 0 0 1 13.258 39.131A90.381 90.381 0 0 1 18.259 33.588A35.295 35.295 0 0 0 32.397 48.918A90.817 90.817 0 0 0 42.096 53.797L40.236 54.959C35.083 58.179 32.507 58.179 27.354 54.959L13.073 46.035A4.41 4.41 0 0 1 11 42.295ZM31.424 43.538L43.471 36.01A1.103 1.103 0 0 1 44.779 36.113L53.243 43.471A2.205 2.205 0 0 1 52.965 47.005L43.409 52.976L43 52.802A89.547 89.547 0 0 1 33.75 48.23A31.362 31.362 0 0 1 31.424 43.538Z" /><path class="facet" d="M28.868 24.331A32.632 32.632 0 0 0 31.561 46.913A34.025 34.025 0 0 1 19.213 32.629A90.381 90.381 0 0 1 28.868 24.331Z" /></svg>
+        <svg class="word" viewBox="0 0 359.11 104.29" aria-hidden="true" focusable="false"><path fill="currentColor" d="M50.43 104.29L50.43 104.29Q39.57 104.29 30.36 100.36Q21.14 96.43 14.29 89.36Q7.43 82.29 3.71 72.93Q0 63.57 0 52.86L0 52.86Q0 42.14 3.71 32.79Q7.43 23.43 14.29 16.43Q21.14 9.43 30.36 5.43Q39.57 1.43 50.43 1.43L50.43 1.43Q62.57 1.43 71.43 5.43Q80.29 9.43 87.14 16.29L87.14 16.29L76 27.43Q71.57 22.57 65.21 19.86Q58.86 17.14 50.43 17.14L50.43 17.14Q43 17.14 36.86 19.71Q30.71 22.29 26.21 27.07Q21.71 31.86 19.29 38.43Q16.86 45 16.86 52.86L16.86 52.86Q16.86 60.71 19.29 67.29Q21.71 73.86 26.21 78.64Q30.71 83.43 36.86 86Q43 88.57 50.43 88.57L50.43 88.57Q59.57 88.57 65.93 85.79Q72.29 83 76.71 78.14L76.71 78.14L87.86 89.29Q81 96.29 71.71 100.29Q62.43 104.29 50.43 104.29ZM128 104.29L128 104.29Q117.71 104.29 109.5 99.64Q101.29 95 96.5 86.86Q91.71 78.71 91.71 68.57Q91.71 58.43 96.43 50.36Q101.14 42.29 109.21 37.57Q117.29 32.86 127.14 32.86L127.14 32.86Q136.71 32.86 144.07 37.29Q151.43 41.71 155.64 49.43Q159.86 57.14 159.86 67L159.86 67Q159.86 68.71 159.64 70.5Q159.43 72.29 159 74.43L159 74.43L107.86 74.43Q108.43 77.14 109.71 79.43L109.71 79.43Q112.29 84.29 117 86.93Q121.71 89.57 127.86 89.57L127.86 89.57Q133.14 89.57 137.64 87.71Q142.14 85.86 145.29 82.29L145.29 82.29L155.29 92.43Q150.29 98.29 143.14 101.29Q136 104.29 128 104.29ZM107.86 61.57L107.86 61.57L144.43 61.57Q143.71 58.57 142.57 56.14L142.57 56.14Q140.43 51.86 136.5 49.57Q132.57 47.29 126.86 47.29L126.86 47.29Q120.86 47.29 116.43 49.86Q112 52.43 109.57 57L109.57 57Q108.43 59.14 107.86 61.57ZM187 102.86L171.29 102.86L171.29 0L187 0L187 102.86ZM232 104.29L232 104.29Q222.71 104.29 215.21 99.57Q207.71 94.86 203.36 86.79Q199 78.71 199 68.71L199 68.71Q199 58.57 203.36 50.5Q207.71 42.43 215.21 37.64Q222.71 32.86 232 32.86L232 32.86Q239.86 32.86 246 36.14L246 36.14Q250 38.43 253 41.86L253 41.86L253 34.29L268.71 34.29L268.71 102.86L253 102.86L253 95.43Q250.14 98.71 246 100.86L246 100.86Q239.86 104.29 232 104.29ZM234.57 89.43L234.57 89.43Q243.29 89.43 248.64 83.57Q254 77.71 254 68.57L254 68.57Q254 62.43 251.57 57.71Q249.14 53 244.79 50.36Q240.43 47.71 234.57 47.71L234.57 47.71Q228.86 47.71 224.5 50.36Q220.14 53 217.64 57.71Q215.14 62.43 215.14 68.57Q215.14 74.71 217.64 79.43Q220.14 84.14 224.5 86.79Q228.86 89.43 234.57 89.43ZM300.71 102.86L285 102.86L285 34.29L300.71 34.29L300.71 41.43Q300.86 41.14 301.14 40.86L301.14 40.86Q306.86 32.86 318.57 32.86L318.57 32.86Q323.71 32.86 327.86 34.71Q332 36.57 335.57 40.71L335.57 40.71L325.29 51.29Q323.43 49.29 321.14 48.43Q318.86 47.57 315.86 47.57L315.86 47.57Q309.29 47.57 305 51.71Q300.71 55.86 300.71 64.71L300.71 64.71L300.71 102.86ZM357.86 102.86L342.14 102.86L342.14 34.29L357.86 34.29L357.86 102.86ZM340.89 10.54C340.89 5.51 344.97 1.43 350 1.43C355.03 1.43 359.11 5.51 359.11 10.54C359.11 15.58 355.03 19.66 350 19.66C344.97 19.66 340.89 15.58 340.89 10.54Z" /></svg>
+      </a>
+      <nav aria-label="Celari">
+        <a class="section-link" href="#features">Özellikler</a>
+        <a class="section-link" href="#how">Nasıl çalışır</a>
+        <a class="section-link" href="#before">Başlamadan önce</a>
+        <a class="lang" href="/" hreflang="en" lang="en">English</a>
+      </nav>
+      <a class="button primary small" href="https://app.celariwallet.com">Cüzdanı aç</a>
+      </div>
+    </header>
+
+    <main id="main">
+      <div class="hero">
+        <div class="wrap">
+          <div>
+            <p class="eyebrow"><span>Zcash</span><span>Ironwood (NU6.3)</span><span class="gold">NU7’ye hazır</span></p>
+            <h1>Gizli para,<br /><em>senin</em> tarayıcında.</h1>
+            <p class="lede">Celari, tamamen tarayıcında çalışan açık kaynak bir Zcash cüzdanı. Ödemeler varsayılan olarak gizli havuza gider, anahtarların kendi cihazında şifreli durur ve açılacak bir hesap yoktur. Token yok, puan yok, “airdrop gelecek” vaadi yok.</p>
+            <div class="actions">
+              <a class="button primary" href="https://app.celariwallet.com">Cüzdanı aç</a>
+              <a class="button secondary" href="https://github.com/Kubudak90/Zcash-wallet">Kaynak kodu oku</a>
+            </div>
+            <p class="caution"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" d="M8 1.75 15 14.25H1L8 1.75Z" /><path stroke="currentColor" stroke-width="1.5" stroke-linecap="round" d="M8 6.5v3.5M8 12.1v.1" /></svg><span><span class="visually-hidden">Dikkat: </span>Erken aşamada ve henüz bağımsız bir güvenlik denetiminden geçmedi. Kaybetmeyi göze alabileceğin tutarlar kullan.</span></p>
+          </div>
+          <div class="card" aria-hidden="true">
+            <div class="card-label">Gizli bakiye</div>
+            <div class="card-figure">•••• <small>ZEC</small></div>
+            <span class="tag">Gizli · Ironwood</span>
+            <div class="card-label addr-label">Al ekranını her açışında yeni bir adres</div>
+            <div class="address">u1q8m4w7…h2x93ka9</div>
+            <div class="card-foot"><span>Yalnızca gizli</span><span>Eskiler çalışmaya devam eder</span></div>
+          </div>
+        </div>
+      </div>
+
+      <section id="features">
+        <div class="wrap">
+          <div class="section-head">
+            <h2>Doğrulanabilen gizlilik.</h2>
+            <p>Bu sayfadaki her iddia kaynak kodda; tarayıcına ulaşan derleme de dosya dosya sabitlenmiş.</p>
+          </div>
+          <div class="grid">
+        <article class="feature">
+          <span class="num">01</span>
+          <h3>Varsayılan olarak gizli</h3>
+          <p>Al ekranı her seferinde yeni, yalnızca gizli bir adres gösterir; ödeme yapanlar ödemelerini adres üzerinden birbirine bağlayamaz. Şeffaf bakiye tek tıkla gizli havuza aktarılır.</p>
+        </article>
+        <article class="feature">
+          <span class="num">02</span>
+          <h3>Anahtarlar cihazında kalır</h3>
+          <p>Kurtarma kelimeleri ve cüzdan veritabanı yalnızca şifreli saklanır (PBKDF2-SHA256, 600.000 tur ve AES-256-GCM). Kelimeler yalnızca imzalamak için çözülür; her harcamada şifren sorulur.</p>
+        </article>
+        <article class="feature">
+          <span class="num">03</span>
+          <h3>Ağın kurallarını bilir</h3>
+          <p>Celari her harcamadan önce ve her yayından hemen önce ağın hangi kurallarla çalıştığını sorar. NU7 gibi bir yükseltmenin çevresinde, ağın reddedeceği bir işlemi göndermek yerine bekler.</p>
+        </article>
+        <article class="feature">
+          <span class="num">04</span>
+          <h3>Dürüst etiketler</h3>
+          <p>Her ödeme gizli mi, kısmen gizli mi, herkese açık mı, nedeniyle söyler. Eski bir havuzdan geçip tutarını zincirde gösteren bir ödemeye asla gizli denmez.</p>
+        </article>
+        <article class="feature">
+          <span class="num">05</span>
+          <h3>Kendini kilitler</h3>
+          <p>Boşta kalan ya da bir dakika arka planda kalan sekmedeki cüzdan kilitlenir. Kopyalanan görüntüleme anahtarı ve kurtarma kelimeleri, tarayıcının izin verdiği ölçüde bir dakika sonra panodan silinir.</p>
+        </article>
+        <article class="feature">
+          <span class="num">06</span>
+          <h3>Açık ve yeniden üretilebilir</h3>
+          <p>MIT ya da Apache-2.0. Cüzdan motoru CI’da kaynaktan derlenir; yayına giren WebAssembly, depoda tutulan SHA-256 listesiyle birebir aynı olmak zorundadır.</p>
+        </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="how">
+        <div class="wrap">
+          <div class="section-head">
+            <h2>Nasıl çalışır</h2>
+            <p>Tarayıcıda bir hafif istemci: bloklar bir lightwalletd sunucusundan indirilir ve WebAssembly ile senin cihazında taranır.</p>
+          </div>
+          <div class="split">
+            <div class="panel">
+              <h3>Sende kalanlar</h3>
+              <ul>
+            <li>Gizli bakiyen ve sana gizli havuzda ödeme yapanlar.</li>
+            <li>Kurtarma kelimelerin ve harcama anahtarların: tarayıcıdan hiç çıkmazlar.</li>
+            <li>Notların (memo): yalnızca sen ve alıcı okuyabilirsiniz.</li>
+              </ul>
+            </div>
+            <div class="panel sees">
+              <h3>Sunucunun gördükleri</h3>
+              <ul>
+            <li>IP adresin, şeffaf adreslerin ve yayınladığın işlemler.</li>
+            <li>Geçmiş işlemlerin tamamını getirdiği sürece hangi işlemlerin senin olduğu (bunu kapatabilirsin).</li>
+            <li>Celari’nin hangi blokları göreceğine o karar verir: güvendiğin bir sunucu kullan ya da kendininkini çalıştır.</li>
+              </ul>
+            </div>
+          </div>
+          <p class="flow"><span>Oluştur</span> <i aria-hidden="true">→</i> <span>İmzala</span> <i aria-hidden="true">→</i> <span>Kanıtla</span> <i aria-hidden="true">→</i> <span>Yayınla</span></p>
+          <p class="flow-note">Her ödeme tarayıcında kanıtlanan bir PCZT’dir.</p>
+        </div>
+      </section>
+
+      <section id="before">
+        <div class="wrap">
+          <div class="section-head">
+            <h2>Başlamadan önce</h2>
+          </div>
+          <div class="notes">
+        <div class="note">
+          <h3>Henüz denetlenmedi</h3>
+          <p>Celari ve üzerine kurulduğu WebZjs motoru bağımsız bir güvenlik denetiminden geçmedi. Küçük tutarlarla başla.</p>
+        </div>
+        <div class="note">
+          <h3>Tek yedek kurtarma kelimelerin</h3>
+          <p>Celari cüzdanı yalnızca bu tarayıcıda tutar ve tarayıcılar site verisini kendiliğinden silebilir (Safari, 7 gün ziyaret edilmezse; Celari Ana Ekran’da değilse). 24 kelimeyi yaz.</p>
+        </div>
+        <div class="note">
+          <h3>Geri yükleme zaman alır</h3>
+          <p>Geri yükleme zinciri verdiğin aydan itibaren tarar. Ocak 2025’ten başlayan bir geri yükleme ölçümde yaklaşık 50 dakika sürdü; 2022-2023’teki yoğun dönemden bir başlangıç bir gün ve birkaç GB bellek isteyebilir.</p>
+        </div>
+        <div class="note">
+          <h3>Bazı ödemeler henüz yok</h3>
+          <p>TEX adresleri (bazı borsalar kullanır) motorun henüz kuramadığı, birbirine bağlı iki işlem ister; form bunları sonradan düşmek yerine baştan reddeder.</p>
+        </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="closing">
+        <div class="wrap">
+          <h2>İşini kendine saklayan bir Zcash cüzdanı.</h2>
+          <p>Bir dakikada cüzdan oluştur ya da kurtarma kelimelerinden veya bir görüntüleme anahtarından geri yükle.</p>
+          <div class="actions">
+            <a class="button primary" href="https://app.celariwallet.com">Cüzdanı aç</a>
+            <a class="button secondary" href="https://github.com/Kubudak90/Zcash-wallet">Kaynak kodu oku</a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="wrap">
+        <p>Celari açık kaynaktır (MIT ya da Apache-2.0); ChainSafe’in WebZjs’i ve Zcash’in librustzcash kütüphaneleri üzerine kuruludur. Electric Coin Company ya da Zcash Foundation ile bağı yoktur.</p>
+        <nav aria-label="Links"><a href="https://github.com/Kubudak90/Zcash-wallet">Kaynak kod</a><a href="https://app.celariwallet.com">Cüzdan</a></nav>
+      </div>
+    </footer>
+  </body>
+</html>
