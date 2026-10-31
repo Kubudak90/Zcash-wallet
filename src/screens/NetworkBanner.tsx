@@ -17,7 +17,8 @@ export function disabledMessage(
   t: Translate,
 ): string {
   if (view.kind === 'outdated') return outdated;
-  return t(view.kind === 'serverBehind' ? 'network.serverBehind' : 'network.unreachable');
+  if (view.kind === 'serverBehind') return t(view.clock ? 'network.serverBehindClock' : 'network.serverBehind');
+  return t('network.unreachable');
 }
 
 /**
@@ -46,7 +47,7 @@ export function NetworkBanner() {
           )}
           {view.kind === 'serverBehind' && (
             <Notice tone="warn" live={false}>
-              <p>{t('network.serverBehind')}</p>
+              <p>{t(view.clock ? 'network.serverBehindClock' : 'network.serverBehind')}</p>
             </Notice>
           )}
           {view.kind === 'unverified' && (

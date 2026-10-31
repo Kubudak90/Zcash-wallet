@@ -1,7 +1,7 @@
 // Browser persistence. The vault and wallet database are only ever stored
 // encrypted (see vault.ts); settings and metadata hold nothing secret.
 
-import { createStore, del, get, promisifyRequest, set, type UseStore } from 'idb-keyval';
+import { createStore, del, get, set } from 'idb-keyval';
 
 import type { EncryptedBlob, VaultRecord } from './vault';
 
@@ -52,15 +52,6 @@ export const DEFAULT_SERVER = import.meta.env.VITE_DEFAULT_LIGHTWALLETD || 'http
  */
 export function defaultSettings(): Settings {
   return { lang: 'en', serverUrl: DEFAULT_SERVER, autoLockMinutes: 15, hideBalances: false, historyEnhancement: true };
-}
-
-/** Puts and deletes keys in one IndexedDB transaction: all of them happen, or none. */
-function writeAll(puts: [string, unknown][], deletes: string[], customStore: UseStore = store): Promise<void> {
-  return customStore('readwrite', (s) => {
-    for (const [key, value] of puts) s.put(value, key);
-    for (const key of deletes) s.delete(key);
-    return promisifyRequest(s.transaction);
-  });
 }
 
 /**
@@ -178,5 +169,16 @@ export const storage = {
   },
   setSettings: (settings: Settings) => set('settings', settings, store),
 
-  wipeWallet: () => writeAll([], ['vault', 'meta', 'db', LEGACY_DB]),
+  /**
+   * Removes the wallet whose vault has `salt`, in one transaction: true once removed (or when
+   * no vault is stored, the leftovers go). False, writing nothing, when the stored vault is
+   * another one: the confirmation was given for a wallet that another tab removed and
+   * replaced since (review round 8, F-01).
+   */
+  wipeWallet: (salt: string | null) =>
+    readThenWrite(({ vault }, s) => {
+      if (vault !== undefined && vault.kdf.salt !== salt) return false;
+      for (const key of ['vault', 'meta', 'db', LEGACY_DB]) s.delete(key);
+      return true;
+    }),
 };

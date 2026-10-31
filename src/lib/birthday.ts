@@ -16,6 +16,13 @@ export const SAFETY_MARGIN_DAYS = 14;
 const NEW_WALLET_MARGIN_SECONDS = 10 * BLOCK_TIME_SECONDS;
 
 /**
+ * A mainnet height a server reported at a time (2026-10-28 12:50:36 UTC): the chain has surely
+ * reached it whenever this code runs, whatever the device's clock says. Move it forward now and
+ * then; it never needs to be exact. Also the engine's floor (engine/webzjs-upgrades.ts chainFloor).
+ */
+export const CHAIN_ANCHOR = { height: 3_533_575, time: Date.UTC(2026, 9, 28, 12, 50, 36) };
+
+/**
  * The height `seconds` of block time below `height`. Blocks are 75 s apart
  * below NU7's activation height and 25 s apart from it on (as in ZIP 208, a
  * block follows the spacing in force at its own height), so a span across
@@ -27,6 +34,36 @@ export function heightBefore(height: number, seconds: number): number {
   const fastSeconds = fastBlocks * NU7_BLOCK_TIME_SECONDS;
   if (seconds <= fastSeconds) return Math.floor(height - seconds / NU7_BLOCK_TIME_SECONDS);
   return Math.floor(height - fastBlocks - (seconds - fastSeconds) / BLOCK_TIME_SECONDS);
+}
+
+/**
+ * The block time from height `from` up to `to` (0 if `to` is not above it), each block at the
+ * spacing in force at its own height: the inverse of heightBefore.
+ */
+export function secondsBetween(from: number, to: number): number {
+  if (to <= from) return 0;
+  const fast = Math.max(0, to - Math.max(from, NU7_ACTIVATION_HEIGHT - 1));
+  return fast * NU7_BLOCK_TIME_SECONDS + (to - from - fast) * BLOCK_TIME_SECONDS;
+}
+
+/**
+ * About when the chain was at `height`, counted from CHAIN_ANCHOR at the target spacing. Blocks
+ * have averaged a little slower than it (about 75.4 s since Blossom), so for an honest tip this
+ * is not later than the real time.
+ */
+export function chainTime(height: number): Date {
+  return new Date(CHAIN_ANCHOR.time + secondsBetween(CHAIN_ANCHOR.height, height) * 1000);
+}
+
+/**
+ * "Now" for a restore: the device's clock, but never earlier than the time the network's tip
+ * implies (review round 8, A-1). With a clock that is behind, the months since the chosen one
+ * would look fewer, the birthday land too late, and payments received in between never be
+ * found. A clock that is ahead only makes the scan start earlier. Without a tip, the clock.
+ */
+export function restoreNow(tipHeight: number | null, device: Date = new Date()): Date {
+  if (tipHeight === null) return device;
+  return new Date(Math.max(device.getTime(), chainTime(tipHeight).getTime()));
 }
 
 /**

@@ -138,3 +138,40 @@ test('a wallet removed in another tab is not written back by the tab that had it
   await expect(welcome(page)).toBeVisible();
   expect(await walletEntries(page)).toEqual({});
 });
+
+test('a removal confirmed in a tab left open removes nothing once another tab stored another wallet (review round 8, F-01)', async ({
+  context,
+  page,
+}) => {
+  await createWallet(page);
+  // The lock screen of a second tab, with the removal typed and armed.
+  const stale = await context.newPage();
+  await stale.goto('/');
+  await expect(lockScreen(stale)).toBeVisible();
+  await stale.getByRole('button', { name: 'I forgot my password' }).click();
+  await stale.getByLabel('Type DELETE to confirm').fill('DELETE');
+
+  // Meanwhile the first tab removes that wallet and creates another.
+  await nav(page, 'Settings');
+  await page.getByLabel('Type DELETE to confirm').fill('DELETE');
+  await page.getByRole('button', { name: 'Remove wallet from this browser' }).click();
+  await createHere(page);
+  // Its first pass saved, so the lock below reloads at once (not a soft lock that reloads later).
+  await expect(page.getByTestId('sync-status')).toHaveText(/^Up to date/, { timeout: 20_000 });
+  const second = await walletEntries(page);
+  await lock(page);
+
+  // The armed button of the stale tab was for the first wallet: the second one stays.
+  await stale.getByRole('button', { name: 'Remove wallet from this browser' }).click();
+  await expect(stale.getByText(/^Nothing was removed: the wallet stored in this browser changed in another tab/)).toBeVisible();
+  const after = await walletEntries(stale);
+  expect(after.vault).toEqual(second.vault);
+  expect(after.meta).toEqual(second.meta);
+  expect(after.db).toBeDefined();
+  await unlock(page);
+  await expect(page.getByTestId('balance-total')).toBeVisible();
+
+  // Reloaded, the stale tab shows the wallet stored now, and removes it only when asked again.
+  await stale.reload();
+  await expect(lockScreen(stale)).toBeVisible();
+});

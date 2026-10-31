@@ -3,23 +3,16 @@ import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } fr
 import { Icon, type IconName } from '../components/icons';
 import { ClipboardClearNote, CopyButton, ErrorDetails, Notice, PasswordField, Screen } from '../components/ui';
 import { useI18n, type MessageKey } from '../i18n';
+import { normalizeServerUrl } from '../lib/serverUrl';
 import { DEFAULT_SERVER } from '../lib/storage';
 import { WrongPasswordError, type Secret } from '../lib/vault';
-import { NotASeedWalletError } from '../state/controller';
+import { NotASeedWalletError, WalletChangedError } from '../state/controller';
 import { useController, useWallet } from '../state/wallet';
 import { SeedGrid } from './CreateWallet';
 import { LanguageSwitch } from './LanguageSwitch';
 
 const AUTO_LOCK_CHOICES = [5, 15, 30, 60];
 const SOURCE_URL = 'https://github.com/Kubudak90/zcash-wallet';
-
-function isHttpsUrl(value: string): boolean {
-  try {
-    return new URL(value).protocol === 'https:';
-  } catch {
-    return false;
-  }
-}
 
 async function seedPhraseOf(secret: Secret): Promise<string> {
   if (secret.kind !== 'seed') throw new NotASeedWalletError();
@@ -155,7 +148,16 @@ export function WipeWallet() {
   const controller = useController();
   const { meta } = useWallet();
   const [typed, setTyped] = useState('');
+  const [error, setError] = useState<unknown>(null);
   const word = t('settings.wipeWord');
+  const wipe = async () => {
+    setError(null);
+    try {
+      await controller.wipe();
+    } catch (e) {
+      setError(e);
+    }
+  };
   return (
     <div className="stack wipe">
       <p className="wipe-help">
@@ -171,12 +173,18 @@ export function WipeWallet() {
           type="button"
           className="danger-button"
           disabled={confirmWord(typed) !== confirmWord(word)}
-          onClick={() => void controller.wipe()}
+          onClick={() => void wipe()}
         >
           <Icon name="trash" />
           {t('settings.wipe')}
         </button>
       </div>
+      {error != null && (
+        <Notice tone="error">
+          <p>{t(error instanceof WalletChangedError ? 'settings.wipeChanged' : 'common.genericError')}</p>
+          <ErrorDetails error={error} />
+        </Notice>
+      )}
     </div>
   );
 }
@@ -263,10 +271,16 @@ export function Settings() {
   const controller = useController();
   const { settings, meta } = useWallet();
   const [server, setServer] = useState(settings.serverUrl);
-  const serverValid = isHttpsUrl(server);
+  // Checked, compared and saved in one form (review round 8, A-4).
+  const serverUrl = normalizeServerUrl(server);
+  const serverValid = serverUrl !== null;
+  // A server saved before addresses were normalised, compared in the same form.
+  const savedServer = normalizeServerUrl(settings.serverUrl) ?? settings.serverUrl;
   /** A server other than the default was saved once: its trust note waits for a second "Save and restart". */
   const [serverConfirm, setServerConfirm] = useState(false);
-  const saveServer = () => void controller.saveSettings({ ...settings, serverUrl: server.trim() }, { restart: true });
+  const saveServer = () => {
+    if (serverUrl !== null) void controller.saveSettings({ ...settings, serverUrl }, { restart: true });
+  };
   const serverId = useId();
   const serverHelpId = useId();
   const serverErrorId = useId();
@@ -441,11 +455,11 @@ export function Settings() {
                 <button
                   type="button"
                   className="secondary"
-                  disabled={!serverValid || server === settings.serverUrl || serverConfirm}
+                  disabled={!serverValid || serverUrl === savedServer || serverConfirm}
                   onClick={() => {
                     // The server decides what Celari believes about the chain (review round 7,
                     // PLAT-4): another one than the default is saved only after saying so.
-                    if (server.trim() !== DEFAULT_SERVER) setServerConfirm(true);
+                    if (serverUrl !== DEFAULT_SERVER) setServerConfirm(true);
                     else saveServer();
                   }}
                 >

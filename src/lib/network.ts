@@ -20,8 +20,11 @@ export type NetworkView =
   | { kind: 'supported' }
   /** The network runs rules the engine does not support; `upgrade` names them (one or a list). */
   | { kind: 'outdated'; upgrade: string }
-  /** The server runs older rules than the network, or lags behind it: another server may do. */
-  | { kind: 'serverBehind' }
+  /**
+   * The server runs older rules than the network, or lags behind it: another server may do.
+   * `clock`: its tip is only behind what the device's clock implies, so the clock may be ahead.
+   */
+  | { kind: 'serverBehind'; clock?: true }
   /** The last check failed, so support is not verified. */
   | { kind: 'unverified' };
 
@@ -87,7 +90,8 @@ export function networkView(check: NetworkCheck): NetworkView {
   }
   if (error !== null) return { kind: 'unverified' };
   if (!status) return { kind: 'checking' };
-  return status.supported ? { kind: 'supported' } : { kind: 'serverBehind' };
+  if (status.supported) return { kind: 'supported' };
+  return status.tipBelowClock ? { kind: 'serverBehind', clock: true } : { kind: 'serverBehind' };
 }
 
 /** Spending needs a fresh, successful check that says the engine supports the network. */

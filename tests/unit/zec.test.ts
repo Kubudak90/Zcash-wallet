@@ -12,6 +12,11 @@ describe('parseZec', () => {
     ['0.00000001', 1n],
     ['  2.1  ', 210_000_000n],
     ['21000000', 2_100_000_000_000_000n],
+    // Both separators: the last is the decimal one (review round 8, A-3).
+    ['1,000.5', 100_050_000_000n],
+    ['1.000,5', 100_050_000_000n],
+    ['1,234,567.00000001', 123_456_700_000_001n],
+    ['12.345,', 1_234_500_000_000n],
   ])('parses %j', (input, zats) => {
     expect(parseZec(input)).toBe(zats);
   });
@@ -20,8 +25,13 @@ describe('parseZec', () => {
     ['', 'empty'],
     ['   ', 'empty'],
     ['abc', 'invalid'],
-    ['1.000,5', 'invalid'],
-    ['1,000.5', 'invalid'],
+    ['1.000.5', 'invalid'],
+    ['1,000,5', 'invalid'],
+    ['1,00.5', 'invalid'],
+    ['1234,567.5', 'invalid'],
+    [',000.5', 'invalid'],
+    ['1,000.5.0', 'invalid'],
+    ['1,000.123456789', 'tooManyDecimals'],
     ['-1', 'invalid'],
     ['1e3', 'invalid'],
     ['0.000000001', 'tooManyDecimals'],
@@ -35,6 +45,17 @@ describe('parseZec', () => {
       expect((e as AmountError).code).toBe(code);
     }
   });
+});
+
+describe('an amount Celari shows', () => {
+  it.each([123_456_789_012n, 1_500_000_000_000n, 2_100_000_000_000_000n, 100_000_000n, 1n])(
+    'pastes back as the same amount: %s zats',
+    (zats) => {
+      for (const locale of ['en', 'tr'] as const) {
+        expect(parseZec(formatZec(zats, { locale })), locale).toBe(zats);
+      }
+    },
+  );
 });
 
 describe('formatZec', () => {

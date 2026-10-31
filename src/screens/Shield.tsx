@@ -9,7 +9,7 @@ import { formatZec } from '../lib/zec';
 import { useController, useWallet } from '../state/wallet';
 import type { Tab } from './Main';
 import { useNetworkView } from './NetworkBanner';
-import { SpendConfirm } from './SpendSteps';
+import { SpendConfirm, UnsavedSpendNotice } from './SpendSteps';
 
 /**
  * Where shielding takes the funds and what it costs: the confirm step and the
@@ -80,6 +80,7 @@ export function Shield({ onNavigate, onClose }: { onNavigate: (tab: Tab) => void
             </h2>
             <p className="muted">{t('shield.success')}</p>
           </div>
+          <UnsavedSpendNotice />
           <dl className="summary">
             <ShieldRows ironwood={ironwood} fee={fmt(TYPICAL_FEE_ZATS)} />
           </dl>

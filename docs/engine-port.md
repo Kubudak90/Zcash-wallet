@@ -309,7 +309,7 @@ noted.
 
 | Finding | Outcome |
 | --- | --- |
-| VAULT-1 · major: the database key in memory also opened the seed vault | Partly. A version 2 vault seals the secret under its own HKDF key, which the database key cannot stand in for, and this release reads it; it still writes version 1, because the build deployed before it reads only version 1 and a rollback in the weeks around NU7 would then refuse the password. Switch `VAULT_WRITE_VERSION` to 2 once no rollback to a build before this one is planned. |
+| VAULT-1 · major: the database key in memory also opened the seed vault | Partly in this round. A version 2 vault seals the secret under its own HKDF key, which the database key cannot stand in for, and this release reads it; it still wrote version 1, because the build deployed before it read only version 1 and a rollback in the weeks around NU7 would then refuse the password. Done in round 8 (K-01): version 2 is written. |
 | VAULT-2, SPEND-5, PLAT-1 · major (one root cause): pages overwrote each other's saved wallet; a stale tab replaced a stored wallet without the typed-DELETE guard | Fixed. Opening or creating a wallet takes a Web Lock held until the page unloads (`src/lib/tabLock.ts`); `saveWallet` refuses while a wallet is stored; `setDb` and `replaceDb` write only while the stored vault is this page's; `revealSecret` never shows another wallet's phrase. `tests/e2e/tabs.spec.ts`. |
 | VAULT-3 · minor: a soft lock behind a hung pass kept the key in memory for ever | Fixed. The soft lock reloads after 15 minutes at the latest, or once the pass is seen to stall; a wrong password meanwhile does not undo it. `tests/e2e/hangs.spec.ts`. |
 | VAULT-4 · minor: a recovery phrase copied by hand was never cleared from the clipboard | Fixed. The phrase grid is marked like the viewing key; the note shows under what was copied. |
@@ -356,6 +356,34 @@ files) before the change, and two builds of the new engine gave the new list.
 MEASURED in CI: run 41206285784 (`workflow_dispatch`, `full_rebuild`, 7eb52d8)
 built from source, matched the new list, passed the production build and the
 mainnet smoke test; the app job and the engine audit passed too.
+
+## Review round 8: two external reports
+
+Two reviews of `4ad86c3` came in on 2026-10-31 (its `src/` and engine are those of
+f92daa1, the build app.celariwallet.com served): one with four findings reproduced
+in a browser on the fake engine (K-01, F-01 to F-03), one white-box review of the
+app and the engine with four app findings (A-1 to A-4), six engine notes (B-1 to
+B-6), a failing UI test and a script note. Each claim was checked against the code
+first; all the app findings held. Every fix has a regression test, and the new
+browser tests were run against the code before the fixes: all failed there.
+
+| Finding | Outcome |
+| --- | --- |
+| K-01 · high (needs access to an unlocked tab): new vaults were still written in version 1, so the database key kept while unlocked opened the recovery phrase (VAULT-1's deferred part) | Fixed: `VAULT_WRITE_VERSION` is 2, and a version 1 vault is sealed again on its next unlock. Round 7 kept version 1 for a rollback to a build that reads only version 1; app.celariwallet.com has never served one (its only earlier deployment, f92daa1, reads both), and each origin has its own storage. `tests/unit/vault.test.ts`. |
+| F-01 · medium: a removal confirmed in a tab left on the lock screen removed a wallet another tab stored since | Fixed: "Remove wallet" removes only the wallet whose vault the page showed (the open one, or on the lock screen the one stored when the page booted), checked and deleted in one IndexedDB transaction; otherwise nothing is removed and the panel says so. The other tab is not told of the change (no broadcast); the check at the removal is what protects. `tests/e2e/tabs.spec.ts`. |
+| F-02 · medium: the resend skipped the wallet's own unmined shieldings and crossings between its pools | Fixed: resend candidates are chosen by type (pending and not `received`; the engine calls a transaction received only when the wallet spent nothing in it), not by the sign of the value. The engine gives a shielding or a crossing the value that arrived, above 0, so ES-1's resend left out exactly the ZIP 318 crossings it was meant for. The fake engine now gives a shielding that shape. `src/lib/resend.ts`, `tests/unit/webzjs-history.test.ts`, `tests/e2e/spend.spec.ts`. |
+| F-03 · medium: after a send, a failed read skipped the save, and a failed save was swallowed while the screen said "sent" | Fixed: the save runs even when the refresh fails; a failed save sets `unsavedSpend`, and the result (and the "may have reached the network" notice) says so, not to pay again, and to keep the page open; the next successful save clears it. A lock asked for during the spend still reloads at once; the transaction then shows in History again once it is mined. Storing the authorised transaction where the app can save it before the broadcast is an engine change, below. `tests/e2e/spend.spec.ts`. |
+| A-1 · medium: a restore's starting block came from the device's clock; a clock behind put it too late, and payments in between were never found | Fixed: the restore's "now" is the later of the clock and the time the network's tip implies (counted from the chain anchor at the target spacing, which mainnet runs slightly slower than); the month field's latest month too. A clock ahead only starts the scan earlier. `tests/unit/seed-birthday.test.ts`. |
+| A-2 · medium: with the clock days ahead, every server read as behind, and the banner blamed the server | Message fixed: spending stays off (the clock's floor is what keeps a server stuck in the past from passing for current), but when only the floor puts the server behind the banner says the device's clock may be ahead. `tests/unit/webzjs-upgrades.test.ts`. |
+| A-3 · low: amounts Celari shows from 1,000 ZEC up ("1,234.56"; Turkish "1.234,56") could not be pasted back | Fixed: with both separators the last is the decimal one and the other must group thousands; a single separator is still the decimal one. `tests/unit/zec.test.ts`. |
+| A-4 · low: the server address was checked for https only; a fragment or query broke every request, and the saved server typed with a space asked to be trusted again | Fixed: `src/lib/serverUrl.ts` refuses user info, a query and a fragment, and gives one form (no trailing slash) that Settings checks, compares and saves. `tests/unit/server-url.test.ts`, `tests/e2e/wallet.spec.ts`. |
+| B-1 · low to medium: a `GetStatus` answer's mined height is believed as long as it fits a `u32`; one above the tip marks an unmined send mined for good, and it is never resent | Deferred with the other bounds on server answers (SYNC-4), below: an engine change. As V-1 says, the glue guards against a wrong server, not a hostile one, which can give a plausible height. |
+| B-2 to B-6: message counts, advisory input locks, ZIP 320 checks, memory, `async-std` | Already in the list below. |
+| The forced-colours test failed every time on macOS Chrome | The test read the switch's colour in the frame of the click, where a transition (even of 0.01 ms) still gives its start value; it polls now. |
+| `deploy/make-branch.sh` needs bash 4.4 and `sha256sum` | It says so when they are missing, and `deploy/README.md` does too. |
+
+The reports' own files (a patch with a bilingual README, evidence, reproduction
+scripts) are not in the repository.
 
 ## Deferred: explicit errors and known gaps
 
@@ -413,16 +441,20 @@ not reached.
   - Resending stored unmined transactions inside `sync_pass`, and a retry of
     `SendTransaction` in `pczt_send` on transport errors (ES-1; the app resends
     meanwhile).
+  - A step in `pczt_send` between storing the transaction and broadcasting it, so
+    the app saves the wallet before anything leaves it (round 8, F-03; the app
+    says when the save after a send failed meanwhile).
   - Orchard-receiver payments proposed from Ironwood and Orchard first, Sapling
     only after consent (ES-2; the app labels them meanwhile).
   - A per-request idle timeout in the transport (re-armed on every frame; not
     tonic-web-wasm-client's total timeout) (SYNC-5).
   - Bounds on server answers: more messages than blocks asked for, a height over
-    `u32`, a hash that is not 32 bytes, an unbounded `GetTaddressTxids` (SYNC-4).
+    `u32`, a hash that is not 32 bytes, an unbounded `GetTaddressTxids` (SYNC-4),
+    and a mined height above the network's tip in a `GetStatus` or `Enhancement`
+    answer (round 8, B-1).
   - SYNC-1's glue companion (a send re-syncs when the wallet's tip is far above
     the network's) and a clock ceiling for the tip (it would refuse honest tips on
     a device whose clock is behind, and NU7 changes the block time).
-  - Writing version 2 vaults (VAULT-1), once no rollback is planned.
 
 ## Before real funds depend on it
 
@@ -532,8 +564,8 @@ from `.webzjs/target/webzjs-vendor.sha256`, and let CI's from-source run confirm
 | --- | --- | --- |
 | Backend (`engine/zcash_client_memory`): zcash_client_backend's backend-independent suite, PCZT tests, mainnet Ironwood vectors | `scripts/test-engine-native.sh` | 206 tests: 200 passed, 0 failed, 6 ignored (the ones sqlite ignores); 513 s on 4 cores. The two new ones (SYNC-1, SYNC-2) fail on the engine before the fix. 2026-10-29: 198 passed, 0 failed, 6 ignored, confirmed by a reviewer's run on a clean checkout (the script now refuses an uncommitted engine/, DRIFT-3) |
 | Glue (`webzjs-wallet`): history, NU7 rules, sync passes, data requests, against a mock lightwalletd | `bash scripts/build-webzjs.sh && scripts/test-engine-native.sh glue` | 68 passed, 0 failed; 193 s, on the round-7 engine |
-| App UI tests (fake engine) | `npm run test:e2e` | 120 passed, 0 failed (5.5 min); unit tests (`npm test`): 269 passed |
-| Mainnet smoke test (real engine, production build) | `npm run test:e2e:real` | passed in 12.4 s on the round-7 build, network supported, with the CSP as a header (`vite preview`) and checked as both header and `<meta>` |
+| App UI tests (fake engine) | `npm run test:e2e` | 124 passed, 0 failed (6.0 min), review round 8; unit tests (`npm test`): 306 passed. Round 7: 120 and 269 |
+| Mainnet smoke test (real engine, production build) | `npm run test:e2e:real` | passed in 14.6 s on the round-8 build (a version 2 vault created, locked and unlocked), network supported; round 7: 12.4 s, with the CSP as a header (`vite preview`) and checked as both header and `<meta>` |
 | Mainnet restore from 2026-10 (production build, through a proxy; a reviewer's spec outside the repository) | - | 622 s; "blocks left" 49,148 -> 39,148 -> 29,148 -> 19,142 -> 9,142 -> 2,277 -> 1 -> Up to date, one rise of 4 blocks (the chain's growth); before Decision 21 it went back to ~48,800 at the second pass and ended at ~21,100 |
 | Upgrade from main's build to this one, mainnet (outside the repository, a reviewer's script) | - | 18/18 checks: rebuilt once, `db-legacy` kept until the tip, notices (en, tr); labels 49,269 -> 39,269, soft-lock reload, 29,274 at the first paint after the unlock (before the fix for the unlock: 49,174 for a moment), 19,264 -> 9,264 -> 2,278 -> "1 block left" -> up to date at 3,534,987 at 628 s; no count rose |
 | Build guards | `scripts/test-build-webzjs-guards.sh` | 27 of 27 (4 new clean-tree cases, DRIFT-2). 2026-10-29: 23 of 23 |

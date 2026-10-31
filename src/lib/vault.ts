@@ -11,11 +11,11 @@
 // password. A version 2 vault seals it under a second key derived from the same bits
 // with HKDF ('celari/secret/v2'), which the database key cannot stand in for and which
 // is dropped as soon as the secret is open; the database key, and so every stored
-// database blob, stays as it is. This release reads both versions but still writes
-// version 1 (VAULT_WRITE_VERSION): the build deployed before it reads only version 1,
-// so writing version 2 now would lock a wallet out ("wrong password") on a rollback in
-// the weeks around NU7. Switching VAULT_WRITE_VERSION to 2 later upgrades each vault on
-// its next unlock, and a rollback to this release still opens it.
+// database blob, stays as it is. New vaults are written in version 2 (VAULT_WRITE_VERSION),
+// and a version 1 vault is sealed again in version 2 on its next unlock (review round 8,
+// K-01). Version 1 is still read. Round 7 kept writing version 1 for a rollback to a build
+// that read only version 1; app.celariwallet.com has never served such a build (its first
+// deployment, f92daa1, reads both), and each origin has its own storage.
 
 import { fromBase64, toBase64 } from './bytes';
 
@@ -31,7 +31,7 @@ const SECRET_KEY_INFO = 'celari/secret/v2';
 export type VaultVersion = 1 | 2;
 
 /** The version new vaults are written in and older ones are upgraded to on unlock (see above). */
-export const VAULT_WRITE_VERSION: VaultVersion = 1;
+export const VAULT_WRITE_VERSION: VaultVersion = 2;
 
 export type Secret =
   | { kind: 'seed'; phrase: string }

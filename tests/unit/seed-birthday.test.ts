@@ -10,6 +10,8 @@ import {
   heightBefore,
   newWalletBirthday,
   parseBirthdayMonth,
+  restoreNow,
+  secondsBetween,
   syncProgress,
 } from '../../src/lib/birthday';
 import {
@@ -214,5 +216,57 @@ describe('blocksToScan (the restore notice for an old birthday)', () => {
   it('counts from the date alone, at 75 s a block, before the tip is known', () => {
     expect(blocksToScan('2025-01', null, now)).toBe(blocksToScan('2025-01', tip, now));
     expect(blocksToScan('2026-10', null, now)).toBe(Math.floor((42.5 * 86_400) / 75));
+  });
+});
+
+// Review round 8, A-1: the restore's birthday counted the months since the chosen one on the
+// device's clock alone; a clock behind put it too late, and the payments in between were never
+// found. The network's tip now sets a floor under "now".
+describe('restoreNow (a restore on a device whose clock is wrong)', () => {
+  const DAY = 86_400_000;
+  // A tip under NU6.3 rules, and a time a little after the one it implies at 75 s blocks
+  // (2026-11-03 02:41 UTC), as mainnet's slightly slower blocks put it.
+  const tip = 3_540_000;
+  const real = new Date(Date.UTC(2026, 10, 3, 6));
+  const march = new Date('2026-03-01T00:00:00Z');
+
+  it('counts block time across NU7 as heightBefore does', () => {
+    for (const [from, to] of [
+      [3_500_000, 3_533_575],
+      [3_533_575, NU7_ACTIVATION_HEIGHT + 5_000],
+      [NU7_ACTIVATION_HEIGHT, NU7_ACTIVATION_HEIGHT + 100],
+      [NU7_ACTIVATION_HEIGHT - 1, NU7_ACTIVATION_HEIGHT + 100],
+    ] as const) {
+      expect(heightBefore(to, secondsBetween(from, to)), `${from} -> ${to}`).toBe(from);
+    }
+    expect(secondsBetween(10, 10)).toBe(0);
+    expect(secondsBetween(10, 5)).toBe(0);
+  });
+
+  it('gives the same birthday with a clock six months behind as with a right one', () => {
+    const right = estimateBirthday(march, tip, restoreNow(tip, real));
+    const behind = estimateBirthday(march, tip, restoreNow(tip, new Date(real.getTime() - 183 * DAY)));
+    // Before the fix: 3,460,512, about 210,000 blocks (six months) too late.
+    expect(estimateBirthday(march, tip, new Date(real.getTime() - 183 * DAY))).toBeGreaterThan(right + 200_000);
+    // The chain's own time can differ from the clock's by the drift of 75 s blocks: a few hours.
+    expect(Math.abs(behind - right)).toBeLessThan(400);
+    // And never later than the right one by more than that drift.
+    expect(behind).toBeLessThanOrEqual(right + 400);
+  });
+
+  it('keeps a clock that is right or ahead, and the clock when there is no tip', () => {
+    expect(restoreNow(tip, real)).toEqual(real);
+    const ahead = new Date(real.getTime() + 30 * DAY);
+    expect(restoreNow(tip, ahead)).toEqual(ahead);
+    const behind = new Date(real.getTime() - 183 * DAY);
+    expect(restoreNow(null, behind)).toEqual(behind);
+  });
+
+  it('offers this month even when the clock says an earlier one', () => {
+    const behind = new Date(real.getTime() - 183 * DAY);
+    expect(parseBirthdayMonth('2026-10', behind)).toBeNull();
+    expect(parseBirthdayMonth('2026-10', restoreNow(tip, behind))).toBe('2026-10');
+    const scan = (now: Date) => blocksToScan('2026-03', tip, now);
+    expect(Math.abs(scan(restoreNow(tip, behind)) - scan(restoreNow(tip, real)))).toBeLessThan(400);
   });
 });

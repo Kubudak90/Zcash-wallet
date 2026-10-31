@@ -491,7 +491,9 @@ for (const colorScheme of ['light', 'dark'] as const) {
 
 test.describe('forced colours', () => {
   // Reduced motion: the switch's colours are read before and after a click, and a
-  // transition still running would give a colour in between (a flaky CI failure).
+  // transition still running would give a colour in between (a flaky CI failure). Even a
+  // 0.01 ms transition still shows its start value in the frame of the click, so the colour
+  // after it is polled (review round 8: failed every time on macOS Chrome).
   test.use({ forcedColors: 'active', reducedMotion: 'reduce' });
 
   test('the privacy switch and the selected language still show their state', async ({ page }) => {
@@ -510,11 +512,11 @@ test.describe('forced colours', () => {
     const on = await style('input[name="history-enhancement"]');
     await toggle.click();
     await expect(toggle).not.toBeChecked();
-    const off = await style('input[name="history-enhancement"]');
     // The knob is still drawn, and on and off are filled differently.
+    await expect.poll(async () => (await style('input[name="history-enhancement"]')).color, 'on and off').not.toBe(on.color);
+    const off = await style('input[name="history-enhancement"]');
     expect(on.image, 'knob when on').not.toBe('none');
     expect(off.image, 'knob when off').not.toBe('none');
-    expect(on.color, 'on and off').not.toBe(off.color);
     // The selected language is filled, not only shaded on the page's own colour.
     expect((await style('.lang-switch .chip.active')).color, 'selected language').not.toBe(canvas);
   });

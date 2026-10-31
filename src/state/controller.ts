@@ -29,6 +29,7 @@ import {
 import { isShieldedOnlyUnified } from '../lib/address';
 import { canSpend, nextCheck, type NetworkCheck } from '../lib/network';
 import { storage, type Settings, type WalletMeta } from '../lib/storage';
+import { resendable } from '../lib/resend';
 import { holdTabLock, type ReleaseTabLock } from '../lib/tabLock';
 import { CATCH_UP_BLOCKS, STALL_MS, catchUpFor, type QueueReading, type SyncInfo } from '../lib/syncView';
 import { createVault, decryptDb, encryptDb, unlockVault, type Secret, type VaultRecord } from '../lib/vault';
@@ -58,6 +59,11 @@ export interface WalletState {
    * rescanned from its birthday; the old database is kept until a pass reaches the tip (see unlock()).
    */
   upgradeRescan: boolean;
+  /**
+   * The last send or shield may be out, but saving the wallet after it failed (review round 8,
+   * F-03): after a reload History would not show it until it is mined. Cleared by the next save.
+   */
+  unsavedSpend: boolean;
 }
 
 const SYNC_INTERVAL_MS = 30_000;
@@ -135,6 +141,17 @@ export class OtherTabError extends Error {
   }
 }
 
+/**
+ * "Remove wallet" refused: the wallet stored now is not the one the confirmation was given for
+ * (another tab removed it and stored another since this page showed it). Nothing was removed.
+ */
+export class WalletChangedError extends Error {
+  constructor() {
+    super('the wallet stored in this browser changed in another tab; nothing was removed');
+    this.name = 'WalletChangedError';
+  }
+}
+
 /** A spend refused before anything left the wallet: the network check did not say yes (see canSpend). */
 export class NetworkNotSupportedError extends Error {
   constructor() {
@@ -174,6 +191,11 @@ export class WalletController {
    * still has it: another page may have removed the wallet, or replaced it (storage.setDb).
    */
   private vaultSalt: string | null = null;
+  /**
+   * The salt of the vault stored when the page booted: the wallet its lock screen is for, before
+   * any is open. "Remove wallet" removes only that one (wipe(), review round 8, F-01).
+   */
+  private bootSalt: string | null = null;
   /** Held from opening a wallet until the page unloads (lib/tabLock.ts). */
   private tabLock: ReleaseTabLock | null = null;
   private listeners = new Set<() => void>();
@@ -222,6 +244,7 @@ export class WalletController {
       spending: false,
       softLocked: false,
       upgradeRescan: false,
+      unsavedSpend: false,
     };
   }
 
@@ -263,6 +286,7 @@ export class WalletController {
       void this.checkNetwork();
       const meta = (await storage.getMeta()) ?? null;
       const vault = await storage.getVault();
+      this.bootSalt = vault?.kdf.salt ?? null;
       // A rescan after an upgrade that has not reached the tip yet: the lock screen says so.
       const upgradeRescan = !!(vault && meta) && (await storage.hasLegacyDb());
       this.set({ phase: vault && meta ? 'locked' : 'welcome', meta, upgradeRescan });
@@ -673,10 +697,25 @@ export class WalletController {
     if (this.lockAfterPass && !this.unlocking) this.reloadLocked();
   }
 
+  /**
+   * Removes the wallet this page shows: the open one, or on the lock screen the one stored when
+   * the page booted. Throws WalletChangedError, removing nothing, when the stored wallet is
+   * another one: a confirmation given in a page left open must not remove a wallet stored since
+   * in another tab (review round 8, F-01). A page with a wallet open then reloads instead, as
+   * when a save finds its wallet replaced.
+   */
   async wipe(): Promise<void> {
+    const salt = this.vaultSalt ?? this.bootSalt;
+    const open = this.key !== null;
     // First, so a pass that ends meanwhile cannot write the database back (see persist).
     this.key = null;
-    await storage.wipeWallet();
+    if (!(await storage.wipeWallet(salt))) {
+      if (open) {
+        this.walletGone();
+        return;
+      }
+      throw new WalletChangedError();
+    }
     window.location.reload();
   }
 
@@ -933,6 +972,7 @@ export class WalletController {
         this.walletGone();
         return false;
       }
+      if (this.state.unsavedSpend) this.set({ unsavedSpend: false });
       return true;
     });
     this.persisting = run.catch(() => undefined);
@@ -1047,10 +1087,8 @@ export class WalletController {
       // After a success the transaction is out. After a failed broadcast it may
       // be too: WebZjs stores it before broadcasting. Either way History must
       // show it and the saved wallet keep it, before a deferred lock reloads;
-      // a failed refresh must not read as a failed send.
-      if (!failure || broadcasting) {
-        await this.afterSpend(failure ? null : pendingBefore).catch((e) => console.warn('refresh after spend failed', e));
-      }
+      // a failed refresh or save must not read as a failed send (it says so instead).
+      if (!failure || broadcasting) await this.afterSpend(failure ? null : pendingBefore);
       if (failure) throw failure.cause;
     } finally {
       window.removeEventListener('beforeunload', confirmLeave);
@@ -1065,27 +1103,36 @@ export class WalletController {
   }
 
   /**
+   * Shows the spend in History and saves the wallet with it. A failed refresh does not skip the
+   * save, and a failed save is not thrown, which would read as a failed send, but shown
+   * (unsavedSpend, review round 8, F-03); the next pass saves again.
+   *
    * `sentBefore`: after a broadcast that succeeded, the unmined sends from before the spend; the
    * new one is recorded as just sent, so its first resend waits REBROADCAST_MS. A send whose
    * broadcast failed (null) is not, so the first pass after it sends it again; nor is an
    * earlier one still waiting for its resend.
    */
-  private async afterSpend(sentBefore: Set<string> | null) {
-    await this.refresh();
-    await this.persist();
+  private async afterSpend(sentBefore: Set<string> | null): Promise<void> {
+    await this.refresh().catch((e) => console.warn('refresh after spend failed', e));
+    const saved = await this.persist().catch((e) => {
+      console.warn('saving the wallet after a spend failed', e);
+      return false;
+    });
+    // false also when the page is about to reload (the wallet was removed or replaced elsewhere).
+    if (!saved) this.set({ unsavedSpend: true });
     if (!sentBefore) return;
     const now = Date.now();
     for (const tx of this.pendingSends()) if (!sentBefore.has(tx.txid)) this.sentAt.set(tx.txid, now);
   }
 
-  /** The wallet's own unmined transactions in History: sends and shieldings (value below 0). */
+  /** The wallet's own unmined transactions in History: sends and shieldings (lib/resend.ts). */
   private pendingSends() {
-    return this.state.history.filter((tx) => tx.status === 'pending' && tx.valueZats < 0n);
+    return resendable(this.state.history);
   }
 
   /**
-   * Sends the wallet's own unmined transactions (sends and shieldings: pending, value below 0)
-   * to the network again, each at most every REBROADCAST_MS (review round 7, ES-1). WebZjs
+   * Sends the wallet's own unmined transactions (sends and shieldings, lib/resend.ts) to the
+   * network again, each at most every REBROADCAST_MS (review round 7, ES-1). WebZjs
    * stores a spend before its one broadcast and never sends it again, so after a failed
    * broadcast, or a node or mempool that dropped it, its notes stayed spent until it expired:
    * 40 blocks for most sends, weeks for a ZIP 318 canonical crossing from Orchard. Errors (the

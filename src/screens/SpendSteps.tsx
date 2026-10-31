@@ -15,6 +15,21 @@ import { disabledMessage, useNetworkView } from './NetworkBanner';
 const STAGES: SendStage[] = ['building', 'signing', 'proving', 'broadcasting'];
 
 /**
+ * Saving the wallet after the last send or shield failed (WalletState.unsavedSpend, review round 8,
+ * F-03). Gone once a later pass saves it.
+ */
+export function UnsavedSpendNotice() {
+  const { t } = useI18n();
+  const { unsavedSpend } = useWallet();
+  if (!unsavedSpend) return null;
+  return (
+    <Notice tone="warn">
+      <p data-testid="unsaved-spend">{t('send.unsaved')}</p>
+    </Notice>
+  );
+}
+
+/**
  * Password confirmation plus live progress for a spend (send or shield). The
  * screen puts it in its confirm panel: the form, then the stages in its place.
  */
@@ -138,6 +153,7 @@ export function SpendConfirm({
           <p>{t('send.maybeSent')}</p>
           <ErrorDetails error={error.cause} />
         </Notice>
+        <UnsavedSpendNotice />
         <button type="button" className="primary" onClick={onViewHistory}>
           {t('common.viewHistory')}
         </button>

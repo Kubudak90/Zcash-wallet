@@ -107,26 +107,35 @@ async function openWith(key: CryptoKey, blob: EncryptedBlob): Promise<string[]> 
   return opened;
 }
 
-// Review round 7, VAULT-1: the database key the controller keeps while unlocked must not
-// open the stored secret. Version 2 vaults seal it under a separate HKDF key; this release
-// reads them but still writes version 1, which the build deployed before it can open.
+// Review round 7, VAULT-1, and round 8, K-01: the database key the controller keeps while
+// unlocked must not open the stored secret. Version 2 vaults seal it under a separate HKDF
+// key; new vaults are written in version 2, and version 1 ones are still read and upgraded.
 describe('vault versions', () => {
   const seed = { kind: 'seed', phrase } as const;
   const db = new Uint8Array([7, 7, 7, 0, 1, 2]);
 
   it('opens a version 1 vault and database written by the code before version 2', async () => {
     const { record, dbBlob } = await vaultV1('correct horse', JSON.stringify(seed), db);
-    const { secret, key, upgraded } = await unlockVault(record, 'correct horse');
+    const { secret, key } = await unlockVault(record, 'correct horse', 1);
     expect(secret).toEqual(seed);
     expect(await decryptDb(key, dbBlob)).toEqual(db);
-    expect(upgraded).toBeNull();
     await expect(unlockVault(record, 'wrong horse')).rejects.toBeInstanceOf(WrongPasswordError);
   });
 
-  it('still writes version 1, so a rollback to the build before it opens new wallets', async () => {
-    expect(VAULT_WRITE_VERSION).toBe(1);
-    const { record } = await createVault('correct horse', seed, FAST);
-    expect(record.v).toBe(1);
+  it('writes version 2 by default: the key kept while unlocked cannot open a new wallet\'s secret', async () => {
+    expect(VAULT_WRITE_VERSION).toBe(2);
+    const { record, key } = await createVault('correct horse', seed, FAST);
+    expect(record.v).toBe(2);
+    expect(await openWith(key, record.secret)).toEqual([]);
+  });
+
+  it('upgrades a version 1 vault on a default unlock', async () => {
+    const { record, dbBlob } = await vaultV1('correct horse', JSON.stringify(seed), db);
+    const { key, upgraded } = await unlockVault(record, 'correct horse');
+    expect(upgraded?.v).toBe(2);
+    expect(upgraded?.kdf).toEqual(record.kdf);
+    expect(await openWith(key, upgraded!.secret)).toEqual([]);
+    expect(await decryptDb(key, dbBlob)).toEqual(db);
   });
 
   it('hands out a database key that cannot open the secret of a version 2 vault', async () => {
@@ -162,8 +171,8 @@ describe('vault versions', () => {
     expect(again.secret).toEqual(seed);
     expect(again.upgraded).toBeNull();
     expect(await decryptDb(again.key, dbBlob)).toEqual(db);
-    // And this release, which writes version 1, still opens it (a rollback after the switch).
-    expect((await unlockVault(upgraded!, 'correct horse')).secret).toEqual(seed);
+    // And a build that writes version 1 still opens it (the round 7 release).
+    expect((await unlockVault(upgraded!, 'correct horse', 1)).secret).toEqual(seed);
   });
 
   it('refuses a vault version it does not know without calling it a wrong password', async () => {

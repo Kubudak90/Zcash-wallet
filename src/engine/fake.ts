@@ -159,6 +159,12 @@ export interface FakeKnobs {
   historyEnhancement?: boolean;
   /** Set by the fake: the txids rebroadcast() was called with, in order. */
   rebroadcasts?: string[];
+  /**
+   * Once a spend is stored (just before its broadcast): `holdPass` sets that knob, so no pass
+   * saves the wallet before a test looks; `summaryFails` makes the next summary() throw, as a
+   * read after the spend may (review round 8, F-03).
+   */
+  afterSpend?: { holdPass?: boolean; summaryFails?: boolean };
 }
 const knobs = (): FakeKnobs => (globalThis as { __fakeEngine?: FakeKnobs }).__fakeEngine ?? {};
 const chainTip = () => TIP + (knobs().chainGrowth ?? 0);
@@ -257,6 +263,8 @@ export class FakeEngine implements ZcashEngine {
   private endedEarly = false;
   /** Notices a trap (knob trapDuringPass) as WebzjsEngine does. */
   private crash = new CrashWatch(typeof window === 'undefined' ? null : window);
+  /** FakeKnobs.afterSpend.summaryFails: the next summary() throws. */
+  private summaryFails = false;
 
   async init(): Promise<void> {
     await sleep(50);
@@ -554,6 +562,10 @@ export class FakeEngine implements ZcashEngine {
   async summary(id: number): Promise<Summary | null> {
     this.crash.check();
     await this.pass;
+    if (this.summaryFails) {
+      this.summaryFails = false;
+      throw new Error('fake summary failure');
+    }
     const a = this.accounts.find((x) => x.id === id);
     if (!a) return null;
     if (!knobs().summaryBeforePass && a.tip < a.birthday) return null;
@@ -624,7 +636,12 @@ export class FakeEngine implements ZcashEngine {
       }
       // pczt_send checks the branch and the expiry before it stores the transaction.
       if (stage === 'broadcasting' && refuse && refuse !== 'UpgradePending') throw sendError(engineRefusal(refuse, chainTip()));
-      if (stage === 'broadcasting') store();
+      if (stage === 'broadcasting') {
+        store();
+        const then = knobs().afterSpend;
+        if (then?.holdPass) (globalThis as { __fakeEngine?: FakeKnobs }).__fakeEngine = { ...knobs(), holdPass: true };
+        if (then?.summaryFails) this.summaryFails = true;
+      }
       await sleep(stage === 'proving' ? 600 : 150);
       while (stage === 'proving' && knobs().holdSpend) await sleep(50);
       if (stage === failAt) throw new Error(`fake ${stage} failure`);
@@ -692,7 +709,8 @@ export class FakeEngine implements ZcashEngine {
       a.history.unshift({
         txid: hex(hash(a.keyHash + 'shield' + Date.now())),
         type: 'shielded',
-        valueZats: (-TYPICAL_FEE_ZATS).toString(),
+        // As WebZjs's history gives it: what arrived in the shielded pool, above 0 (review round 8, F-02).
+        valueZats: (transparent - TYPICAL_FEE_ZATS).toString(),
         feeZats: TYPICAL_FEE_ZATS.toString(),
         height: null,
         confirmations: 0,

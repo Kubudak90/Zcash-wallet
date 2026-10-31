@@ -14,17 +14,26 @@ export class AmountError extends Error {
 }
 
 /**
+ * Both separators, as formatZec writes 1,000 ZEC and more: English "1,234.5", Turkish "1.234,5".
+ * The last one is the decimal separator, and the other one groups thousands, in groups of three.
+ */
+const GROUPED = [/^(\d{1,3}(?:,\d{3})+)\.(\d*)$/, /^(\d{1,3}(?:\.\d{3})+),(\d*)$/];
+
+/**
  * Parses a user-typed ZEC amount into zatoshis.
  * Accepts either "." or "," as the decimal separator (Turkish keyboards use ",").
  * A single separator is always read as the decimal one, so "1.000" and "1,000"
  * both mean 1 ZEC; the Send form echoes the parsed value so this stays visible.
- * Inputs with more than one separator, such as "1.000,5", are rejected.
+ * With both, the last is the decimal one and the other must group thousands, so an amount
+ * Celari shows, such as "1,234.56" or "1.234,56", can be pasted back (review round 8, A-3);
+ * anything else with more than one separator, such as "1.000.5" or "1,00.5", is rejected.
  */
 export function parseZec(input: string): bigint {
   const trimmed = input.trim();
   if (trimmed === '') throw new AmountError('empty');
 
-  const normalized = trimmed.replace(',', '.');
+  const grouped = GROUPED.map((re) => re.exec(trimmed)).find((m) => m !== null);
+  const normalized = grouped ? `${grouped[1]!.replace(/[.,]/g, '')}.${grouped[2]}` : trimmed.replace(',', '.');
   if (!/^(\d+(\.\d*)?|\.\d+)$/.test(normalized)) throw new AmountError('invalid');
 
   const [whole = '', frac = ''] = normalized.split('.');

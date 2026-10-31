@@ -90,6 +90,12 @@ export interface NetworkStatus {
   behind?: 'engine' | 'server';
   /** For 'engine': the upgrades the engine lacks, by name, oldest first (e.g. ['NU6.2', 'NU6.3']), when known. */
   lacks?: string[];
+  /**
+   * For 'server': its tip is under the height the device's clock says the chain has surely
+   * reached. Either the server lags, or this device's clock is ahead (review round 8, A-2);
+   * spending stays off either way.
+   */
+  tipBelowClock?: boolean;
   upcoming?: UpcomingUpgrade;
 }
 

@@ -9,6 +9,8 @@
 // which implements NU6.2, NU6.3 (Ironwood) and NU7. Add an upgrade here only
 // once the vendored engine really implements it.
 
+import { CHAIN_ANCHOR } from '../lib/birthday';
+
 import { localStatus, networkStatusFor, type EngineRules, type KnownUpgrade, type LightdInfo } from './lightd';
 import type { NetworkStatus } from './types';
 
@@ -36,12 +38,6 @@ export const WEBZJS_MISSING_UPGRADES: readonly KnownUpgrade[] = [];
 
 export const WEBZJS_RULES: EngineRules = { known: WEBZJS_UPGRADES, missing: WEBZJS_MISSING_UPGRADES };
 
-/**
- * A mainnet height a server reported at a time (2026-10-28 12:50:36 UTC): the
- * chain has surely reached it whenever this code runs, whatever the device's
- * clock says. Move it forward now and then; it never needs to be exact.
- */
-const CHAIN_ANCHOR = { height: 3_533_575, time: Date.UTC(2026, 9, 28, 12, 50, 36) };
 /**
  * Slower than mainnet has ever averaged since Blossom (about 75.4 s), and
  * blind to NU7's 25 s blocks, so the floor stays under the real height.

@@ -151,6 +151,8 @@ export const tr: Record<MessageKey, string> = {
   'network.unreachable': 'Celari ağ sürümünü doğrulayamadı. Doğrulayana kadar gönderme ve gizliye aktarma kapalı kalır.',
   'network.serverBehind':
     'Celari’nin kullandığı sunucu Zcash ağının gerisinde. Ayarlar’dan güvendiğin başka bir sunucu seç. O zamana kadar gönderme ve gizliye aktarma kapalı kalır.',
+  'network.serverBehindClock':
+    'Celari’nin kullandığı sunucu, bu cihazın tarih ve saatine göre olması gerekenden eski bir zincir bildiriyor. Ya bu cihazın saati ileride (tarih ve saat ayarlarını kontrol et) ya da sunucu Zcash ağının gerisinde (Ayarlar’dan güvendiğin başka bir sunucu seç). O zamana kadar gönderme ve gizliye aktarma kapalı kalır.',
   'network.upcoming':
     '{height}. blokta ağ {upgrade} kurallarına geçiyor; Celari’nin bu sürümü bunu desteklemiyor. O andan itibaren Celari güncellenene kadar gönderme ve gizliye aktarma kapanır.',
 
@@ -278,6 +280,8 @@ export const tr: Record<MessageKey, string> = {
     'Hiçbir şey gönderilmedi: işlem hazırlanırken bir ağ yükseltmesi etkinleşti, bu yüzden bu işlem hiçbir bloğa giremezdi. Tekrar dene; yeni kurallarla yeni bir işlem oluşturulur.',
   'send.refused.expired':
     'Hiçbir şey gönderilmedi: işlemin süresi bir bloğa giremeden dolacaktı. Tekrar dene; yeni bir işlem oluşturulur.',
+  'send.unsaved':
+    'Bu tarayıcı, bu işlemden sonra cüzdanı kaydedemedi. İşlem yine de gönderilmiş olabilir: yeniden ödeme yapma. Bu sayfayı açık tut; Celari bir sonraki eşitlemede yeniden dener. Kayıt başarılı olana kadar sayfa yenilenirse işlem, Geçmiş’te ancak madenlendiğinde görünür.',
   'send.maybeSent':
     'İşlem cüzdana kaydedildi ve yine de ağa ulaşmış olabilir. Celari onu madenlenene kadar birkaç dakikada bir yeniden gönderir; bu yüzden yeniden ödeme yapma. Hiç madenlenmezse, süresi dolduğunda para yeniden harcanabilir olur (Orchard’dan yapılan bazı ödemelerde ancak haftalar sonra).',
   'send.sendFit': 'Bunun yerine {amount} ZEC gönder',
@@ -385,7 +389,7 @@ export const tr: Record<MessageKey, string> = {
   'settings.serverShort': 'Sunucu',
   'settings.serverSave': 'Kaydet ve yeniden başlat',
   'settings.serverReset': 'Varsayılana dön',
-  'settings.serverInvalid': 'https:// ile başlayan geçerli bir adres gir.',
+  'settings.serverInvalid': 'https:// ile başlayan, kullanıcı adı, “?” ve “#” içermeyen geçerli bir adres gir.',
   'settings.privacy': 'Gizlilik',
   'settings.historyEnhancement': 'Geçmiş için işlemlerin tamamını getir',
   'settings.historyEnhancementHelp':
@@ -413,6 +417,8 @@ export const tr: Record<MessageKey, string> = {
     'Görüntüleme anahtarın yanında değilse bu cüzdanı yeniden ekleyemezsin. Harcama yetkisi olmadığı için para kaybı olmaz.',
   'settings.wipeConfirm': 'Onaylamak için {word} yaz',
   'settings.wipeWord': 'SİL',
+  'settings.wipeChanged':
+    'Hiçbir şey silinmedi: bu sayfa açıldığından beri başka bir sekmede bu tarayıcıdaki cüzdan değişti. Şu an kayıtlı cüzdanı görmek için sayfayı yenile.',
   'settings.about': 'Hakkında',
   'settings.aboutText':
     'Celari açık kaynaktır (MIT / Apache-2.0) ve ChainSafe’in WebZjs kütüphanesi üzerine kuruludur. Token yok, puan yok, airdrop vaadi yok.',

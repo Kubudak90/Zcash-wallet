@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { historyFrom, type RawHistoryEntry } from '../../src/engine/webzjs-history';
+import { resendable } from '../../src/lib/resend';
 
 // Entries as webzjs-wallet's get_transaction_history hands them over: TransactionHistoryEntry
 // through serde_wasm_bindgen, where an Option that is None arrives as undefined (its default;
@@ -56,5 +57,27 @@ describe('historyFrom', () => {
   it('reads amounts handed over as BigInt too', () => {
     const [tx] = historyFrom([entry({ value: -300_000n, fee: 10_000n, timestamp: 1_793_000_000n })]);
     expect(tx).toMatchObject({ valueZats: -300_000n, feeZats: 10_000n, timestamp: 1_793_000_000 });
+  });
+});
+
+// Review round 8, F-02: the rows the controller sends again, from rows in the shapes the engine's
+// classify() gives (patches/webzjs/0004-ironwood-nu7.patch): a payment's value is below 0, a
+// shielding's or a crossing between the wallet's own pools is what arrived, above 0.
+describe('resendable', () => {
+  const pending = { status: 'Pending', block_height: undefined, confirmations: 0, timestamp: undefined };
+  const rows = historyFrom([
+    entry({ ...pending, txid: '01'.repeat(32), tx_type: 'Sent', value: -10_000_000, fee: 10_000 }),
+    // 50,000,000 transparent zats shielded, all of it back in the wallet but the fee.
+    entry({ ...pending, txid: '02'.repeat(32), tx_type: 'Shielded', value: 49_990_000, fee: 10_000, pool: 'mixed' }),
+    // A ZIP 318 canonical crossing: Orchard notes into the wallet's own Ironwood address.
+    entry({ ...pending, txid: '03'.repeat(32), tx_type: 'Shielded', value: 20_000_000, fee: 15_000, pool: 'mixed' }),
+    // Paid to this wallet and not mined yet: someone else's to send.
+    entry({ ...pending, txid: '04'.repeat(32), tx_type: 'Received', value: 5_000_000 }),
+    entry({ txid: '05'.repeat(32), tx_type: 'Sent', value: -1_000 }),
+    entry({ ...pending, txid: '06'.repeat(32), tx_type: 'Shielded', value: 1_000, status: 'Expired' }),
+  ]);
+
+  it('sends again every unmined transaction the wallet funded, whatever the sign of its value', () => {
+    expect(resendable(rows).map((tx) => tx.txid)).toEqual(['01'.repeat(32), '02'.repeat(32), '03'.repeat(32)]);
   });
 });

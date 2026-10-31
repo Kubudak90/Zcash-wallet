@@ -108,8 +108,18 @@ test('settings: reveal recovery phrase and viewing key, then wipe', async ({ pag
   await server.fill('http://insecure.example');
   await expect(server).toHaveAttribute('aria-invalid', 'true');
   await expect(server).toHaveAccessibleDescription(/valid address starting with https/);
+  // A fragment, a query or a user name would break every request to it (review round 8, A-4).
+  for (const bad of ['https://other.example/#x', 'https://other.example/?a=1', 'https://me@other.example']) {
+    await server.fill(bad);
+    await expect(server, bad).toHaveAttribute('aria-invalid', 'true');
+  }
   await page.getByRole('button', { name: 'Reset to default' }).click();
   await expect(server).toHaveAttribute('aria-invalid', 'false');
+  // The saved server typed again with a space or a slash is the same server: nothing to save or trust.
+  const saved = await server.inputValue();
+  await server.fill(` ${saved}/ `);
+  await expect(server).toHaveAttribute('aria-invalid', 'false');
+  await expect(page.getByRole('button', { name: 'Save and restart' })).toBeDisabled();
   // What a server can fake, in the help and before another server than the default is saved
   // (review round 7, PLAT-4): the first "Save and restart" only says so.
   await expect(server).toHaveAccessibleDescription(/a dishonest server can show payments that never happened/);

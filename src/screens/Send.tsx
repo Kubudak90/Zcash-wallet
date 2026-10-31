@@ -32,7 +32,7 @@ import { AmountError, formatZec, formatZecInput, parseZec } from '../lib/zec';
 import { useController, useWallet } from '../state/wallet';
 import type { Tab } from './Main';
 import { disabledMessage, useNetworkView } from './NetworkBanner';
-import { SpendConfirm } from './SpendSteps';
+import { SpendConfirm, UnsavedSpendNotice } from './SpendSteps';
 
 type Step = 'form' | 'confirm' | 'done';
 
@@ -345,6 +345,7 @@ export function Send({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
             </h2>
             <p className="muted">{t('send.success')}</p>
           </div>
+          <UnsavedSpendNotice />
           <DraftSummary draft={draft} />
           <div className="row spend-done-actions">
             <button type="button" className="secondary" onClick={() => onNavigate('history')}>

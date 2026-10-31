@@ -283,7 +283,7 @@ export function networkStatusFor(info: LightdInfo, rules: EngineRules, chain: st
 
   const expected = rules.known.filter((u) => u.activation <= info.blockHeight).at(-1);
   if (expected?.branchId === info.consensusBranchId) {
-    return info.blockHeight + LAG_BLOCKS < floorHeight ? server : { ...status, supported: true };
+    return info.blockHeight + LAG_BLOCKS < floorHeight ? { ...server, tipBelowClock: true } : { ...status, supported: true };
   }
   if (reported && expected && reported.activation < expected.activation) {
     // Still on an older branch but announcing an upgrade at a height the engine does not know:

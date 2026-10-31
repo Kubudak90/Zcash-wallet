@@ -12,6 +12,13 @@
 # pushes nothing.
 set -euo pipefail
 
+# mapfile, and "${a[@]}" of an empty array under set -u: bash 4.4 or later (macOS ships 3.2).
+if [ "${BASH_VERSINFO[0]}" -lt 4 ] || { [ "${BASH_VERSINFO[0]}" -eq 4 ] && [ "${BASH_VERSINFO[1]}" -lt 4 ]; }; then
+  echo "error: needs bash 4.4 or later (this is $BASH_VERSION; on macOS: brew install bash, then run it with that bash)" >&2
+  exit 1
+fi
+command -v sha256sum >/dev/null || { echo "error: sha256sum not found (GNU coreutils; on macOS: brew install coreutils)" >&2; exit 1; }
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 dist="$(cd "$1" && pwd)"
 commit="$(git -C "$ROOT" rev-parse --verify "$2^{commit}")"

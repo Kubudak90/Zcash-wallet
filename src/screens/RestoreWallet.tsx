@@ -10,6 +10,7 @@ import {
   currentMonth,
   estimateBirthday,
   parseBirthdayMonth,
+  restoreNow,
 } from '../lib/birthday';
 import { isValidSeedPhrase, normalizeSeedPhrase } from '../lib/seed';
 import type { Secret } from '../lib/vault';
@@ -62,11 +63,13 @@ export function RestoreWallet({ onCancel }: { onCancel: () => void }) {
     };
   }, [step, tip, controller]);
 
+  // The device's clock, or the time the network's tip implies if that is later (review round 8, A-1).
+  const now = restoreNow(tip);
   // Browsers without a month picker show a text box, where people type '05.2023'.
-  const parsedMonth = parseBirthdayMonth(month);
+  const parsedMonth = parseBirthdayMonth(month, now);
   const monthError = !unknown && monthTouched && month.trim() !== '' && parsedMonth === null;
   // A start this old means hours of scanning: say so, without stopping anyone who is sure.
-  const longScan = !unknown && parsedMonth !== null ? blocksToScan(parsedMonth, tip) : 0;
+  const longScan = !unknown && parsedMonth !== null ? blocksToScan(parsedMonth, tip, now) : 0;
   const showLongScan = longScan > LONG_SCAN_BLOCKS;
 
   async function submitSecret(e: FormEvent) {
@@ -108,7 +111,8 @@ export function RestoreWallet({ onCancel }: { onCancel: () => void }) {
         height = SAPLING_ACTIVATION_HEIGHT;
       } else {
         if (!parsedMonth) return;
-        height = estimateBirthday(new Date(`${parsedMonth}-01T00:00:00Z`), await controller.latestHeight());
+        const latest = await controller.latestHeight();
+        height = estimateBirthday(new Date(`${parsedMonth}-01T00:00:00Z`), latest, restoreNow(latest));
       }
       setBirthday(height);
       setStep('password');
@@ -178,7 +182,7 @@ export function RestoreWallet({ onCancel }: { onCancel: () => void }) {
                 type="month"
                 name="birthday-month"
                 min={SAPLING_MONTH}
-                max={currentMonth()}
+                max={currentMonth(now)}
                 placeholder={t('restore.birthdayPlaceholder')}
                 value={month}
                 disabled={unknown}

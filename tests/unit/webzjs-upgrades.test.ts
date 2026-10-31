@@ -10,6 +10,7 @@ import {
   webzjsNetworkStatus,
 } from '../../src/engine/webzjs-upgrades';
 import { NU7_ACTIVATION_HEIGHT } from '../../src/lib/birthday';
+import { networkView } from '../../src/lib/network';
 
 const CAPTURED = new Uint8Array(readFileSync(new URL('../fixtures/lightdinfo.bin', import.meta.url)));
 // The anchor chainFloor counts from: 3,533,575 at 2026-10-28 12:50:36 UTC.
@@ -55,6 +56,21 @@ describe('WebZjs and the network it runs on', () => {
     }
     // A year on, the captured answer is from a server far under the floor: that server is behind.
     expect(webzjsNetworkStatus(live, new Date(ANCHOR + 365 * DAY))).toMatchObject({ supported: false, behind: 'server' });
+  });
+
+  it('says the clock may be ahead when only the clock puts the server behind (review round 8, A-2)', () => {
+    const live = decodeLightdInfo(grpcWebUnary(CAPTURED));
+    const honest = { ...live, blockHeight: 3_533_575 + Math.floor((3 * DAY) / 75_400) };
+    expect(webzjsNetworkStatus(honest, new Date(ANCHOR + 3 * DAY))).toMatchObject({ supported: true });
+    // The same server, on a device whose clock is 30 days ahead: spending stays off (the floor
+    // is what keeps a server stuck in the past from passing for current), but not on the server alone.
+    const ahead = webzjsNetworkStatus(honest, new Date(ANCHOR + 33 * DAY));
+    expect(ahead).toMatchObject({ supported: false, behind: 'server', tipBelowClock: true });
+    expect(networkView({ status: ahead, error: null })).toEqual({ kind: 'serverBehind', clock: true });
+    // A server on rules from before NU6.2 is behind whatever the clock says.
+    const old = webzjsNetworkStatus(stuck, new Date(ANCHOR));
+    expect(old.tipBelowClock).toBeUndefined();
+    expect(networkView({ status: old, error: null })).toEqual({ kind: 'serverBehind' });
   });
 
   it('knows NU6.2, NU6.3 and NU7, and lacks nothing', () => {

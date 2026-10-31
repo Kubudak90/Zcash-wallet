@@ -32,6 +32,7 @@ type Knobs = {
   engineFee?: number;
   refuseSpend?: 'UpgradePending' | 'PcztWrongBranch' | 'PcztExpired';
   rebroadcasts?: string[];
+  afterSpend?: { holdPass?: boolean; summaryFails?: boolean };
 };
 
 /** Changes the fake engine's knobs (src/engine/fake.ts) on the running page. */
@@ -648,4 +649,77 @@ test('a send whose broadcast failed is sent again after the next pass, then ever
   const sent = await rebroadcasts();
   expect(new Set(sent).size).toBe(2);
   expect(sent.every((txid) => /^[0-9a-f]{64}$/.test(txid))).toBe(true);
+});
+
+test('a shielding the network has not mined is sent again too (review round 8, F-02)', async ({ page }) => {
+  // WebZjs gives a shielding the value that arrived in the shielded pool, above 0 (as the fake
+  // does now); the resend once picked only values below 0, so it never sent shieldings or
+  // ZIP 318 crossings again.
+  await page.clock.install();
+  await createWallet(page);
+  const rebroadcasts = () =>
+    page.evaluate(() => (globalThis as { __fakeEngine?: Knobs }).__fakeEngine?.rebroadcasts ?? []);
+  await page.getByRole('button', { name: 'Shield funds' }).click();
+  await page.getByLabel('Enter your password to confirm').fill(PASSWORD);
+  await page.getByRole('button', { name: 'Shield', exact: true }).click();
+  await expect(page.getByRole('heading', { name: /is being shielded/ })).toBeVisible({ timeout: 10_000 });
+  await page.getByRole('button', { name: 'Close' }).click();
+  await nav(page, 'History');
+  await expect(page.getByTestId('history').locator('.tx-shielded .tx-amount')).toHaveText(/^\+/);
+
+  for (let i = 0; i < 6; i++) await page.clock.fastForward(60_000);
+  await expect.poll(rebroadcasts).toHaveLength(1);
+});
+
+/** Locks, reloads to the lock screen, unlocks, and returns the sent rows of History. */
+async function sentRowsAfterReload(page: Page) {
+  await page.getByRole('button', { name: 'Lock' }).click();
+  await expect(page.getByRole('heading', { name: 'Your wallet is locked' })).toBeVisible();
+  await page.getByLabel('Password').fill(PASSWORD);
+  await page.getByRole('button', { name: 'Unlock' }).click();
+  await expect(page.getByTestId('balance-total')).toBeVisible();
+  await nav(page, 'History');
+  return page.getByTestId('history').locator('.tx-sent');
+}
+
+test('a send is saved even when reading the wallet after it fails (review round 8, F-03)', async ({ page }) => {
+  await createWallet(page);
+  const warnings: string[] = [];
+  page.on('console', (m) => void (m.type() === 'warning' && warnings.push(m.text())));
+  // No pass saves the wallet before the reload below: only the save after the send can.
+  await setKnobs(page, { afterSpend: { holdPass: true, summaryFails: true } });
+  await nav(page, 'Send');
+  await review(page, UA, '0.1');
+  await sendButton(page).click();
+  await expect(page.getByRole('heading', { name: '0.10 ZEC sent' })).toBeVisible({ timeout: 10_000 });
+  expect(warnings.some((w) => w.startsWith('refresh after spend failed'))).toBe(true);
+  await expect(page.getByTestId('unsaved-spend')).toHaveCount(0);
+
+  await expect(await sentRowsAfterReload(page)).toHaveCount(1);
+});
+
+test('a send whose save fails says so on its result, until a later pass saves it (review round 8, F-03)', async ({ page }) => {
+  await createWallet(page);
+  await setKnobs(page, { afterSpend: { holdPass: true } });
+  // The browser refuses to store the wallet database, as with a full disk.
+  await page.evaluate(() => {
+    const g = globalThis as { __refuseDb?: boolean };
+    g.__refuseDb = true;
+    const put = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function (this: IDBObjectStore, value: unknown, key?: IDBValidKey) {
+      if (key === 'db' && g.__refuseDb) throw new DOMException('injected storage failure', 'QuotaExceededError');
+      return put.call(this, value, key);
+    };
+  });
+  await nav(page, 'Send');
+  await review(page, UA, '0.1');
+  await sendButton(page).click();
+  await expect(page.getByRole('heading', { name: '0.10 ZEC sent' })).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId('unsaved-spend')).toHaveText(/could not save the wallet after this transaction.*do not pay again/);
+
+  // Storage works again and the held pass ends: it saves, and the warning goes.
+  await page.evaluate(() => void ((globalThis as { __refuseDb?: boolean }).__refuseDb = false));
+  await setKnobs(page, { holdPass: false });
+  await expect(page.getByTestId('unsaved-spend')).toHaveCount(0, { timeout: 10_000 });
+  await expect(await sentRowsAfterReload(page)).toHaveCount(1);
 });

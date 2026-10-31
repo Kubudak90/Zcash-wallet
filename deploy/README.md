@@ -13,7 +13,9 @@ of a from-source run on `main`, which CI builds only after `vendor/` matched
 2. Download its `celari-dist` artifact and unpack it.
 3. `deploy/make-branch.sh <unpacked-dir> <commit>`: refuses a dist whose wasm
    files are not in that commit's hash list, then commits the dist with
-   `deploy/vercel.json` and a README to the branch `deploy/app`.
+   `deploy/vercel.json` and a README to the branch `deploy/app`. It needs bash
+   4.4 or later and `sha256sum` (on macOS, Homebrew's `bash` and `coreutils`),
+   and says so when they are missing.
 4. `git push origin deploy/app`, then deploy that commit of `deploy/app` to
    production in the Vercel project `celari-app` (app.celariwallet.com).
 5. Once it is live and checked (headers, the wasm hashes it serves, `npm run

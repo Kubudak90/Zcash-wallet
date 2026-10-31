@@ -150,6 +150,8 @@ export const en = {
   'network.unreachable': 'Celari could not check the network version. Sending and shielding stay disabled until it can.',
   'network.serverBehind':
     'The server Celari uses is behind the Zcash network. Choose another server you trust in Settings. Sending and shielding stay disabled until then.',
+  'network.serverBehindClock':
+    'The server Celari uses reports an older chain than this device’s date and time imply. Either this device’s clock is ahead (check its date and time settings), or the server is behind the Zcash network (choose another server you trust in Settings). Sending and shielding stay disabled until then.',
   'network.upcoming':
     'At block {height} the network switches to {upgrade}, which this version of Celari does not support. From then on, sending and shielding stop until Celari is updated.',
 
@@ -277,6 +279,8 @@ export const en = {
     'Nothing was sent: a network upgrade activated while the transaction was being prepared, so it could never be mined. Try again; a new one is built under the new rules.',
   'send.refused.expired':
     'Nothing was sent: the transaction would have expired before it could be mined. Try again; a new one is built.',
+  'send.unsaved':
+    'This browser could not save the wallet after this transaction. It may be out all the same: do not pay again. Keep this page open; Celari tries again on its next sync. Until it succeeds, after a reload History shows the transaction only once it is mined.',
   'send.maybeSent':
     'The transaction is saved in the wallet and may have reached the network anyway. Celari sends it again every few minutes until it is mined, so do not pay again. If it is never mined, the funds become spendable again when it expires (after some payments from Orchard, only weeks later).',
   'send.sendFit': 'Send {amount} ZEC instead',
@@ -384,7 +388,7 @@ export const en = {
   'settings.serverShort': 'Server',
   'settings.serverSave': 'Save and restart',
   'settings.serverReset': 'Reset to default',
-  'settings.serverInvalid': 'Enter a valid address starting with https://.',
+  'settings.serverInvalid': 'Enter a valid address starting with https://, without a user name, “?” or “#”.',
   'settings.privacy': 'Privacy',
   'settings.historyEnhancement': 'Fetch full transactions for History',
   'settings.historyEnhancementHelp':
@@ -411,6 +415,8 @@ export const en = {
   'settings.wipeHelpView': 'Without your viewing key you cannot add this wallet again. It cannot spend, so no funds are lost.',
   'settings.wipeConfirm': 'Type {word} to confirm',
   'settings.wipeWord': 'DELETE',
+  'settings.wipeChanged':
+    'Nothing was removed: the wallet stored in this browser changed in another tab since this page opened. Reload this page to see the wallet stored now.',
   'settings.about': 'About',
   'settings.aboutText':
     'Celari is open source (MIT / Apache-2.0) and built on ChainSafe’s WebZjs library. No token, no points, no airdrop promises.',
