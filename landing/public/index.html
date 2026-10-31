@@ -5,8 +5,9 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="referrer" content="no-referrer" />
-    <meta name="color-scheme" content="dark" />
-    <meta name="theme-color" content="#0d0c0a" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f4f1ea" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0d0c0a" />
     <title>Celari: a private Zcash wallet in your browser</title>
     <meta name="description" content="Celari is an open-source, privacy-first Zcash wallet that runs in your browser. Shielded by default, keys encrypted on your device. No token, no account." />
     <link rel="canonical" href="https://celariwallet.com/" />
@@ -21,6 +22,7 @@
     <link rel="icon" type="image/svg+xml" sizes="any" href="/favicon.svg" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <link rel="preload" href="/fonts/fraunces-latin-opsz-normal.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/fraunces-latin-opsz-italic.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="stylesheet" href="/site.css" />
   </head>
   <body>
@@ -39,135 +41,217 @@
       </nav>
       <a class="button primary small" href="https://app.celariwallet.com">Open the wallet</a>
       </div>
+      <span class="progress" aria-hidden="true"></span>
     </header>
 
     <main id="main">
       <div class="hero">
-        <div class="wrap">
-          <div>
-            <p class="eyebrow"><span>Zcash</span><span>Ironwood (NU6.3)</span><span class="gold">Ready for NU7</span></p>
-            <h1>Private money,<br />kept in <em>your</em> browser.</h1>
-            <p class="lede">Celari is an open-source Zcash wallet that runs entirely in your browser. Payments go to the shielded pool by default, your keys are encrypted on your own device, and there is no account to make. No token, no points, no airdrop promises.</p>
-            <div class="actions">
-              <a class="button primary" href="https://app.celariwallet.com">Open the wallet</a>
-              <a class="button secondary" href="https://github.com/Kubudak90/Zcash-wallet">Read the source</a>
+        <div class="glow" aria-hidden="true"></div>
+        <div class="hero-motif" aria-hidden="true">
+        <svg class="engraved" viewBox="0 0 1200 1200" aria-hidden="true" focusable="false">
+          <defs><clipPath id="engraved-clip" clipPathUnits="userSpaceOnUse"><path d="M8 43.361L8 20.639A4.866 4.866 0 0 1 10.288 16.512L26.047 6.665C31.733 3.112 34.576 3.112 40.262 6.665L54.308 15.442A2.433 2.433 0 0 1 54.615 19.342L44.225 28.373A1.217 1.217 0 0 1 42.782 28.487L28.846 19.779A36.009 36.009 0 0 0 28.846 44.221L42.782 35.513A1.217 1.217 0 0 1 44.225 35.627L54.615 44.658A2.433 2.433 0 0 1 54.308 48.558L40.262 57.335C34.576 60.888 31.733 60.888 26.047 57.335L10.288 47.488A4.866 4.866 0 0 1 8 43.361Z" /></clipPath></defs>
+          <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1">
+            <g class="echoes"><path class="i0" d="M716.29 522.9L635.74 472.57A67.45 67.45 0 0 0 564.26 472.57L484.99 522.1A24.47 24.47 0 0 0 473.48 542.86L473.48 657.14A24.47 24.47 0 0 0 484.99 677.9L564.26 727.43A67.45 67.45 0 0 0 635.74 727.43L716.29 677.1" stroke-opacity="0.140" vector-effect="non-scaling-stroke" /><path class="i1" d="M735.71 506.03L642.66 447.89A80.51 80.51 0 0 0 557.34 447.89L462.71 507.02A29.21 29.21 0 0 0 448.98 531.79L448.98 668.21A29.21 29.21 0 0 0 462.71 692.98L557.34 752.11A80.51 80.51 0 0 0 642.66 752.11L735.71 693.97" stroke-opacity="0.122" vector-effect="non-scaling-stroke" /><path class="i2" d="M756.07 488.33L649.92 422A94.21 94.21 0 0 0 550.08 422L439.35 491.19A34.19 34.19 0 0 0 423.28 520.18L423.28 679.82A34.19 34.19 0 0 0 439.35 708.81L550.08 778A94.21 94.21 0 0 0 649.92 778L756.07 711.67" stroke-opacity="0.106" vector-effect="non-scaling-stroke" /><path class="i3" d="M777.38 469.8L657.52 394.91A108.55 108.55 0 0 0 542.48 394.91L414.9 474.63A39.39 39.39 0 0 0 396.38 508.04L396.38 691.96A39.39 39.39 0 0 0 414.9 725.37L542.48 805.09A108.55 108.55 0 0 0 657.52 805.09L777.38 730.2" stroke-opacity="0.092" vector-effect="non-scaling-stroke" /><path class="i4" d="M799.63 450.46L665.46 366.62A123.53 123.53 0 0 0 534.54 366.62L389.36 457.34A44.82 44.82 0 0 0 368.29 495.35L368.29 704.65A44.82 44.82 0 0 0 389.36 742.66L534.54 833.38A123.53 123.53 0 0 0 665.46 833.38L799.63 749.54" stroke-opacity="0.080" vector-effect="non-scaling-stroke" /><path class="i5" d="M822.84 430.29L673.73 337.12A139.14 139.14 0 0 0 526.27 337.12L362.74 439.3A50.49 50.49 0 0 0 339 482.12L339 717.88A50.49 50.49 0 0 0 362.74 760.7L526.27 862.88A139.14 139.14 0 0 0 673.73 862.88L822.84 769.71" stroke-opacity="0.070" vector-effect="non-scaling-stroke" /><path class="i6" d="M846.99 409.3L682.34 306.42A155.39 155.39 0 0 0 517.66 306.42L335.03 420.54A56.38 56.38 0 0 0 308.52 468.35L308.52 731.65A56.38 56.38 0 0 0 335.03 779.46L517.66 893.58A155.39 155.39 0 0 0 682.34 893.58L846.99 790.7" stroke-opacity="0.061" vector-effect="non-scaling-stroke" /><path class="i7" d="M872.09 387.48L691.29 274.51A172.28 172.28 0 0 0 508.71 274.51L306.23 401.03A62.51 62.51 0 0 0 276.84 454.05L276.84 745.95A62.51 62.51 0 0 0 306.23 798.97L508.71 925.49A172.28 172.28 0 0 0 691.29 925.49L872.09 812.52" stroke-opacity="0.053" vector-effect="non-scaling-stroke" /><path class="i8" d="M898.13 364.85L700.58 241.4A189.8 189.8 0 0 0 499.42 241.4L276.35 380.79A68.87 68.87 0 0 0 243.97 439.2L243.97 760.8A68.87 68.87 0 0 0 276.35 819.21L499.42 958.6A189.8 189.8 0 0 0 700.58 958.6L898.13 835.15" stroke-opacity="0.046" vector-effect="non-scaling-stroke" /><path class="i9" d="M925.12 341.38L710.2 207.09A207.96 207.96 0 0 0 489.8 207.09L245.38 359.82A75.46 75.46 0 0 0 209.9 423.81L209.9 776.19A75.46 75.46 0 0 0 245.38 840.18L489.8 992.91A207.96 207.96 0 0 0 710.2 992.91L925.12 858.62" stroke-opacity="0.040" vector-effect="non-scaling-stroke" /><path class="i10" d="M953.06 317.1L720.17 171.57A226.76 226.76 0 0 0 479.83 171.57L213.32 338.11A82.28 82.28 0 0 0 174.64 407.89L174.64 792.11A82.28 82.28 0 0 0 213.32 861.89L479.83 1028.43A226.76 226.76 0 0 0 720.17 1028.43L953.06 882.9" stroke-opacity="0.035" vector-effect="non-scaling-stroke" /><path class="i11" d="M981.95 291.99L730.46 134.85A246.2 246.2 0 0 0 469.54 134.85L180.18 315.66A89.34 89.34 0 0 0 138.18 391.42L138.18 808.58A89.34 89.34 0 0 0 180.18 884.34L469.54 1065.15A246.2 246.2 0 0 0 730.46 1065.15L981.95 908.01" stroke-opacity="0.030" vector-effect="non-scaling-stroke" /><path class="i12" d="M1011.78 266.06L741.1 96.92A266.27 266.27 0 0 0 458.9 96.92L145.95 292.47A96.62 96.62 0 0 0 100.53 374.41L100.53 825.59A96.62 96.62 0 0 0 145.95 907.53L458.9 1103.08A266.27 266.27 0 0 0 741.1 1103.08L1011.78 933.94" stroke-opacity="0.026" vector-effect="non-scaling-stroke" /><path class="i13" d="M1042.56 239.31L752.08 57.79A286.98 286.98 0 0 0 447.92 57.79L110.63 268.55A104.14 104.14 0 0 0 61.68 356.87L61.68 843.13A104.14 104.14 0 0 0 110.63 931.45L447.92 1142.21A286.98 286.98 0 0 0 752.08 1142.21L1042.56 960.69" stroke-opacity="0.023" vector-effect="non-scaling-stroke" /><path class="i14" d="M1074.29 211.73L763.39 17.46A308.33 308.33 0 0 0 436.61 17.46L74.23 243.9A111.88 111.88 0 0 0 21.63 338.78L21.63 861.22A111.88 111.88 0 0 0 74.23 956.1L436.61 1182.54A308.33 308.33 0 0 0 763.39 1182.54L1074.29 988.27" stroke-opacity="0.020" vector-effect="non-scaling-stroke" /><path class="i15" d="M1106.96 183.33L775.04 -24.08A330.32 330.32 0 0 0 424.96 -24.08L36.74 218.51A119.86 119.86 0 0 0 -19.61 320.15L-19.61 879.85A119.86 119.86 0 0 0 36.74 981.49L424.96 1224.08A330.32 330.32 0 0 0 775.04 1224.08L1106.96 1016.67" stroke-opacity="0.017" vector-effect="non-scaling-stroke" /><path class="i16" d="M1140.59 154.1L787.03 -66.82A352.94 352.94 0 0 0 412.97 -66.82L-1.84 192.38A128.07 128.07 0 0 0 -62.04 300.99L-62.04 899.01A128.07 128.07 0 0 0 -1.84 1007.62L412.97 1266.82A352.94 352.94 0 0 0 787.03 1266.82L1140.59 1045.9" stroke-opacity="0.015" vector-effect="non-scaling-stroke" /><path class="i17" d="M1175.15 124.06L799.35 -110.77A376.2 376.2 0 0 0 400.65 -110.77L-41.5 165.52A136.51 136.51 0 0 0 -105.67 281.28L-105.67 918.72A136.51 136.51 0 0 0 -41.5 1034.48L400.65 1310.77A376.2 376.2 0 0 0 799.35 1310.77L1175.15 1075.94" stroke-opacity="0.013" vector-effect="non-scaling-stroke" /><path class="i18" d="M1210.67 93.19L812.02 -155.92A400.1 400.1 0 0 0 387.98 -155.92L-82.25 137.92A145.18 145.18 0 0 0 -150.5 261.04L-150.5 938.96A145.18 145.18 0 0 0 -82.25 1062.08L387.98 1355.92A400.1 400.1 0 0 0 812.02 1355.92L1210.67 1106.81" stroke-opacity="0.011" vector-effect="non-scaling-stroke" /><path class="i19" d="M1247.13 61.49L825.02 -202.27A424.63 424.63 0 0 0 374.98 -202.27L-124.09 109.58A154.08 154.08 0 0 0 -196.52 240.25L-196.52 959.75A154.08 154.08 0 0 0 -124.09 1090.42L374.98 1402.27A424.63 424.63 0 0 0 825.02 1402.27L1247.13 1138.51" stroke-opacity="0.010" vector-effect="non-scaling-stroke" /></g>
+            <g class="letter" transform="translate(600 600) scale(4) translate(-33.1545 -32.0)">
+              <path d="M8 43.361L8 20.639A4.866 4.866 0 0 1 10.288 16.512L26.047 6.665C31.733 3.112 34.576 3.112 40.262 6.665L54.308 15.442A2.433 2.433 0 0 1 54.615 19.342L44.225 28.373A1.217 1.217 0 0 1 42.782 28.487L28.846 19.779A36.009 36.009 0 0 0 28.846 44.221L42.782 35.513A1.217 1.217 0 0 1 44.225 35.627L54.615 44.658A2.433 2.433 0 0 1 54.308 48.558L40.262 57.335C34.576 60.888 31.733 60.888 26.047 57.335L10.288 47.488A4.866 4.866 0 0 1 8 43.361Z" stroke-opacity="0.34" stroke-width="1.25" vector-effect="non-scaling-stroke" />
+              <g clip-path="url(#engraved-clip)"><path d="M56.31 19.05L39.2 8.36A11.41 11.41 0 0 0 27.11 8.36L11.35 18.21A2.87 2.87 0 0 0 10 20.64L10 43.36A2.87 2.87 0 0 0 11.35 45.79L27.11 55.64A11.41 11.41 0 0 0 39.2 55.64L56.31 44.95" stroke-opacity="0.300" vector-effect="non-scaling-stroke" /><path d="M54.31 20.16L38.14 10.06A9.41 9.41 0 0 0 28.17 10.06L12.41 19.9A0.87 0.87 0 0 0 12 20.64L12 43.36A0.87 0.87 0 0 0 12.41 44.1L28.17 53.94A9.41 9.41 0 0 0 38.14 53.94L54.31 43.84" stroke-opacity="0.282" vector-effect="non-scaling-stroke" /><path d="M52.31 21.27L37.08 11.75A7.41 7.41 0 0 0 29.23 11.75L14.28 21.09A0.6 0.6 0 0 0 14 21.6L14 42.4A0.6 0.6 0 0 0 14.28 42.91L29.23 52.25A7.41 7.41 0 0 0 37.08 52.25L52.31 42.73" stroke-opacity="0.264" vector-effect="non-scaling-stroke" /><path d="M50.31 22.38L36.02 13.45A5.41 5.41 0 0 0 30.29 13.45L16.28 22.2A0.6 0.6 0 0 0 16 22.71L16 41.29A0.6 0.6 0 0 0 16.28 41.8L30.29 50.55A5.41 5.41 0 0 0 36.02 50.55L50.31 41.62" stroke-opacity="0.246" vector-effect="non-scaling-stroke" /><path d="M48.31 23.48L34.96 15.14A3.41 3.41 0 0 0 31.35 15.14L18.28 23.31A0.6 0.6 0 0 0 18 23.82L18 40.18A0.6 0.6 0 0 0 18.28 40.69L31.35 48.86A3.41 3.41 0 0 0 34.96 48.86L48.31 40.52" stroke-opacity="0.228" vector-effect="non-scaling-stroke" /><path d="M46.31 24.59L33.9 16.84A1.41 1.41 0 0 0 32.41 16.84L20.28 24.42A0.6 0.6 0 0 0 20 24.93L20 39.07A0.6 0.6 0 0 0 20.28 39.58L32.41 47.16A1.41 1.41 0 0 0 33.9 47.16L46.31 39.41" stroke-opacity="0.210" vector-effect="non-scaling-stroke" /><path d="M44.31 25.7L33.47 18.93A0.6 0.6 0 0 0 32.84 18.93L22.28 25.53A0.6 0.6 0 0 0 22 26.03L22 37.97A0.6 0.6 0 0 0 22.28 38.47L32.84 45.07A0.6 0.6 0 0 0 33.47 45.07L44.31 38.3" stroke-opacity="0.192" vector-effect="non-scaling-stroke" /><path d="M42.31 26.81L33.47 21.29A0.6 0.6 0 0 0 32.84 21.29L24.28 26.63A0.6 0.6 0 0 0 24 27.14L24 36.86A0.6 0.6 0 0 0 24.28 37.37L32.84 42.71A0.6 0.6 0 0 0 33.47 42.71L42.31 37.19" stroke-opacity="0.174" vector-effect="non-scaling-stroke" /><path d="M40.31 27.92L33.47 23.65A0.6 0.6 0 0 0 32.84 23.65L26.28 27.74A0.6 0.6 0 0 0 26 28.25L26 35.75A0.6 0.6 0 0 0 26.28 36.26L32.84 40.35A0.6 0.6 0 0 0 33.47 40.35L40.31 36.08" stroke-opacity="0.156" vector-effect="non-scaling-stroke" /></g>
+            </g>
+          </g>
+          <g transform="translate(600 600) scale(4) translate(-33.1545 -32.0)"><path class="engraved-facet" d="M27.994 22.463A36.009 36.009 0 0 0 31.352 49.687A38.304 38.304 0 0 1 16.264 32.541A98.604 98.604 0 0 1 27.994 22.463Z" stroke-width="1" stroke-linejoin="round" vector-effect="non-scaling-stroke" /></g>
+        </svg>
+        <svg class="engraved pulse p0" viewBox="0 0 1200 1200" aria-hidden="true" focusable="false"><path d="M796.79 452.93L664.45 370.23A121.61 121.61 0 0 0 535.55 370.23L392.62 459.54A44.13 44.13 0 0 0 371.88 496.97L371.88 703.03A44.13 44.13 0 0 0 392.62 740.46L535.55 829.77A121.61 121.61 0 0 0 664.45 829.77L796.79 747.07" /></svg>
+        <svg class="engraved pulse p1" viewBox="0 0 1200 1200" aria-hidden="true" focusable="false"><path d="M796.79 452.93L664.45 370.23A121.61 121.61 0 0 0 535.55 370.23L392.62 459.54A44.13 44.13 0 0 0 371.88 496.97L371.88 703.03A44.13 44.13 0 0 0 392.62 740.46L535.55 829.77A121.61 121.61 0 0 0 664.45 829.77L796.79 747.07" /></svg>
+        <svg class="engraved glint" viewBox="0 0 1200 1200" aria-hidden="true" focusable="false"><g transform="translate(600 600) scale(4) translate(-33.1545 -32.0)"><path d="M27.994 22.463A36.009 36.009 0 0 0 31.352 49.687A38.304 38.304 0 0 1 16.264 32.541A98.604 98.604 0 0 1 27.994 22.463Z" /></g></svg>
+      </div>
+        <div class="wrap hero-grid">
+          <div class="hero-copy">
+            <p class="eyebrow rise r0"><span class="rule" aria-hidden="true"></span>Zcash wallet<span class="badges"><span class="badge">Ironwood (NU6.3)</span><span class="badge live">Ready for NU7</span></span></p>
+            <h1><span class="line l0">Private money,</span> <span class="line l1">kept in <em>your</em> browser.</span></h1>
+            <p class="lede rise r3">Celari is an open-source Zcash wallet that runs entirely in your browser. Payments go to the shielded pool by default, your keys are encrypted on your own device, and there is no account to make. No token, no points, no airdrop promises.</p>
+            <div class="actions rise r4">
+              <a class="button primary" href="https://app.celariwallet.com">Open the wallet<svg class="icon go" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12h14M13.5 6.5 19 12l-5.5 5.5" /></svg></a>
+              <a class="button secondary" href="https://github.com/Kubudak90/Zcash-wallet"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m8.5 8-4 4 4 4M15.5 8l4 4-4 4M13.25 5.5l-2.5 13" /></svg>Read the source</a>
             </div>
-            <p class="caution"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" d="M8 1.75 15 14.25H1L8 1.75Z" /><path stroke="currentColor" stroke-width="1.5" stroke-linecap="round" d="M8 6.5v3.5M8 12.1v.1" /></svg><span><span class="visually-hidden">Caution: </span>Early software, not yet independently audited. Use amounts you can afford to lose.</span></p>
+            <p class="caution rise r5"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M10.7 4.75a1.5 1.5 0 0 1 2.6 0l7.1 12.5a1.5 1.5 0 0 1-1.3 2.25H4.9a1.5 1.5 0 0 1-1.3-2.25Z" /><path d="M12 9.75v3.75" /><circle cx="12" cy="16.4" r=".9" fill="currentColor" stroke="none" /></svg><span><span class="visually-hidden">Caution: </span>Early software, not yet independently audited. Use amounts you can afford to lose.</span></p>
           </div>
-          <div class="card" aria-hidden="true">
-            <div class="card-label">Shielded balance</div>
-            <div class="card-figure">•••• <small>ZEC</small></div>
-            <span class="tag">Shielded · Ironwood</span>
-            <div class="card-label addr-label">A new address every time you open Receive</div>
-            <div class="address">u1q8m4w7…h2x93ka9</div>
-            <div class="card-foot"><span>Shielded only</span><span>Older ones keep working</span></div>
+          <div class="hero-visual" aria-hidden="true">
+            <div class="float">
+              <div class="card">
+                <div class="card-top">
+                  <span class="card-label">Total balance</span>
+                  <span class="toggle">Hide balances<span class="switch"><span></span></span></span>
+                </div>
+                <div class="card-figure"><span class="fig"><span class="show">1.75</span><span class="hide">••••</span></span> <small>ZEC</small></div>
+                <div class="bar"><span class="seg-s"></span><span class="seg-t"></span></div>
+                <div class="legend">
+                  <span class="s"><i></i>Shielded</span>
+                  <span class="t"><i></i>Transparent</span>
+                  <span class="done"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m5 12.5 4.25 4.25L19 7" /></svg>All shielded</span>
+                </div>
+                <div class="addr-label">A new address every time you open Receive</div>
+                <div class="address"><span class="a0">u1q8m4w7…h2x93ka9</span><span class="a1">u1zt3kq0…p7vr2mdx</span><span class="a2">u17h6yd9…4cw8nl5u</span></div>
+                <div class="card-foot"><span>Shielded only</span><span>Older ones keep working</span></div>
+              </div>
+            </div>
+            <span class="chip c0"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="5" y="10.5" width="14" height="9.5" rx="2.25" /><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5" /><path d="M12 14.25v2" /></svg>Keys stay on this device</span>
+            <span class="chip c1"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3.75 18.5 6v5.25c0 4.1-2.7 7.3-6.5 8.9-3.8-1.6-6.5-4.8-6.5-8.9V6Z" /><path d="m9.25 11.75 2 2 3.5-3.75" /></svg>Proved in your browser</span>
           </div>
         </div>
       </div>
 
+      <div class="ticker" aria-hidden="true">
+        <ul><li>Shielded by default</li><li>PBKDF2-SHA256 · 600,000 rounds</li><li>AES-256-GCM</li><li>Ironwood (NU6.3)</li><li>Ready for NU7</li><li>PCZT</li><li>WebAssembly</li><li>lightwalletd</li><li>MIT / Apache-2.0</li><li>No token</li><li>No account</li><li>No airdrop</li></ul><ul><li>Shielded by default</li><li>PBKDF2-SHA256 · 600,000 rounds</li><li>AES-256-GCM</li><li>Ironwood (NU6.3)</li><li>Ready for NU7</li><li>PCZT</li><li>WebAssembly</li><li>lightwalletd</li><li>MIT / Apache-2.0</li><li>No token</li><li>No account</li><li>No airdrop</li></ul>
+      </div>
+
+      <section class="stats-band" aria-label="Celari in numbers">
+        <div class="wrap">
+          <dl class="stats">
+          <div class="stat reveal">
+            <dt><span class="count n600" aria-hidden="true">,000</span><span class="visually-hidden">600,000</span></dt>
+            <dd>PBKDF2-SHA256 rounds between your password and your keys</dd>
+          </div>
+          <div class="stat reveal">
+            <dt><span class="count n24" aria-hidden="true"></span><span class="visually-hidden">24</span></dt>
+            <dd>words in your recovery phrase, the only backup</dd>
+          </div>
+          <div class="stat reveal">
+            <dt><span class="count n256" aria-hidden="true"></span><span class="visually-hidden">256</span></dt>
+            <dd>bit AES-GCM on the phrase and the wallet database</dd>
+          </div>
+          <div class="stat reveal">
+            <dt><span class="count n0" aria-hidden="true"></span><span class="visually-hidden">0</span></dt>
+            <dd>scripts on this page: its security policy refuses them</dd>
+          </div>
+          </dl>
+        </div>
+      </section>
+
       <section id="features">
         <div class="wrap">
-          <div class="section-head">
+          <div class="section-head reveal">
+            <p class="eyebrow"><span class="rule" aria-hidden="true"></span>Why Celari</p>
             <h2>Privacy you can check.</h2>
             <p>Every claim on this page is in the source, and the build that reaches your browser is pinned file by file.</p>
           </div>
           <div class="grid">
-        <article class="feature">
-          <span class="num">01</span>
-          <h3>Shielded by default</h3>
-          <p>Receive shows a fresh shielded-only address every time, so payers cannot link their payments through it. Transparent funds are one click from the shielded pool.</p>
-        </article>
-        <article class="feature">
-          <span class="num">02</span>
-          <h3>Keys stay on your device</h3>
-          <p>The recovery phrase and the wallet database are stored only encrypted (PBKDF2-SHA256, 600,000 rounds, and AES-256-GCM). The phrase is decrypted to sign and asked for with your password on every spend.</p>
-        </article>
-        <article class="feature">
-          <span class="num">03</span>
-          <h3>Knows the network rules</h3>
-          <p>Before every spend and again before every broadcast, Celari asks which consensus rules the network runs. Around an upgrade such as NU7 it pauses instead of sending a transaction the network would reject.</p>
-        </article>
-        <article class="feature">
-          <span class="num">04</span>
-          <h3>Honest labels</h3>
-          <p>Each payment says whether it is shielded, partly shielded or public, and why. A payment that crosses from an older pool, and so shows its amount on chain, is never called shielded.</p>
-        </article>
-        <article class="feature">
-          <span class="num">05</span>
-          <h3>Locks itself</h3>
-          <p>An idle wallet, or a tab left in the background for a minute, locks. A copied viewing key or recovery phrase is cleared from the clipboard after a minute, as far as the browser allows.</p>
-        </article>
-        <article class="feature">
-          <span class="num">06</span>
-          <h3>Open and reproducible</h3>
-          <p>MIT or Apache-2.0. The wallet engine is built from source in CI, and the WebAssembly that ships must match a list of SHA-256 hashes kept in the repository.</p>
-        </article>
+          <article class="feature reveal">
+            <div class="feature-top"><span class="feature-icon"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 3.75 18.5 6v5.25c0 4.1-2.7 7.3-6.5 8.9-3.8-1.6-6.5-4.8-6.5-8.9V6Z" /><path d="m9.25 11.75 2 2 3.5-3.75" /></svg></span><span class="num">01</span></div>
+            <h3>Shielded by default</h3>
+            <p>Receive shows a fresh shielded-only address every time, so payers cannot link their payments through it. Transparent funds are one click from the shielded pool.</p>
+          </article>
+          <article class="feature reveal">
+            <div class="feature-top"><span class="feature-icon"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="5" y="10.5" width="14" height="9.5" rx="2.25" /><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5" /><path d="M12 14.25v2" /></svg></span><span class="num">02</span></div>
+            <h3>Keys stay on your device</h3>
+            <p>The recovery phrase and the wallet database are stored only encrypted (PBKDF2-SHA256, 600,000 rounds, and AES-256-GCM). The phrase is decrypted to sign and asked for with your password on every spend.</p>
+          </article>
+          <article class="feature reveal">
+            <div class="feature-top"><span class="feature-icon"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M19.25 12A7.25 7.25 0 0 1 6.4 16.6M4.75 12A7.25 7.25 0 0 1 17.6 7.4" /><path d="M18 3.75v3.9h-3.9M6 20.25v-3.9h3.9" /></svg></span><span class="num">03</span></div>
+            <h3>Knows the network rules</h3>
+            <p>Before every spend and again before every broadcast, Celari asks which consensus rules the network runs. Around an upgrade such as NU7 it pauses instead of sending a transaction the network would reject.</p>
+          </article>
+          <article class="feature reveal">
+            <div class="feature-top"><span class="feature-icon"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.75 12C4.6 8.2 8 6 12 6s7.4 2.2 9.25 6C19.4 15.8 16 18 12 18s-7.4-2.2-9.25-6Z" /><circle cx="12" cy="12" r="2.75" /></svg></span><span class="num">04</span></div>
+            <h3>Honest labels</h3>
+            <p>Each payment says whether it is shielded, partly shielded or public, and why. A payment that crosses from an older pool, and so shows its amount on chain, is never called shielded.</p>
+          </article>
+          <article class="feature reveal">
+            <div class="feature-top"><span class="feature-icon"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" /></svg></span><span class="num">05</span></div>
+            <h3>Locks itself</h3>
+            <p>An idle wallet, or a tab left in the background for a minute, locks. A copied viewing key or recovery phrase is cleared from the clipboard after a minute, as far as the browser allows.</p>
+          </article>
+          <article class="feature reveal">
+            <div class="feature-top"><span class="feature-icon"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m8.5 8-4 4 4 4M15.5 8l4 4-4 4M13.25 5.5l-2.5 13" /></svg></span><span class="num">06</span></div>
+            <h3>Open and reproducible</h3>
+            <p>MIT or Apache-2.0. The wallet engine is built from source in CI, and the WebAssembly that ships must match a list of SHA-256 hashes kept in the repository.</p>
+          </article>
           </div>
         </div>
       </section>
 
       <section id="how">
         <div class="wrap">
-          <div class="section-head">
+          <div class="section-head reveal">
+            <p class="eyebrow"><span class="rule" aria-hidden="true"></span>Under the hood</p>
             <h2>How it works</h2>
             <p>A light client in the browser: blocks are downloaded from a lightwalletd server and scanned on your device, in WebAssembly.</p>
           </div>
+          <figure class="pipe reveal" role="img" aria-label="Blocks travel from a lightwalletd server to your browser, which scans them itself.">
+            <div class="node server" aria-hidden="true"><span class="node-icon"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="4" y="4.5" width="16" height="6" rx="1.75" /><rect x="4" y="13.5" width="16" height="6" rx="1.75" /><path d="M7.75 7.5h.5M7.75 16.5h.5" /></svg></span><strong>lightwalletd</strong><span>Sends compact blocks</span></div>
+            <div class="track" aria-hidden="true"><span class="track-label">Compact blocks</span><span class="blocks"><span class="b0"></span><span class="b1"></span><span class="b2"></span><span class="b3"></span><span class="b4"></span><span class="b5"></span></span></div>
+            <div class="node device" aria-hidden="true"><span class="node-icon"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="5" y="10.5" width="14" height="9.5" rx="2.25" /><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5" /><path d="M12 14.25v2" /></svg><span class="scan"></span></span><strong>Your browser</strong><span>Scans them in WebAssembly</span></div>
+          </figure>
           <div class="split">
-            <div class="panel">
+            <div class="panel reveal">
               <h3>What stays with you</h3>
               <ul>
-            <li>Your shielded balance, and who pays you in the shielded pool.</li>
-            <li>Your recovery phrase and spending keys: they never leave the browser.</li>
-            <li>Your memos: only you and the recipient can read them.</li>
+                <li>Your shielded balance, and who pays you in the shielded pool.</li>
+                <li>Your recovery phrase and spending keys: they never leave the browser.</li>
+                <li>Your memos: only you and the recipient can read them.</li>
               </ul>
             </div>
-            <div class="panel sees">
+            <div class="panel sees reveal">
               <h3>What the server sees</h3>
               <ul>
-            <li>Your IP address, your transparent addresses and the transactions you broadcast.</li>
-            <li>Which transactions are yours, while History fetches them in full (you can turn that off).</li>
-            <li>It decides which blocks Celari sees: use a server you trust, or run your own.</li>
+                <li>Your IP address, your transparent addresses and the transactions you broadcast.</li>
+                <li>Which transactions are yours, while History fetches them in full (you can turn that off).</li>
+                <li>It decides which blocks Celari sees: use a server you trust, or run your own.</li>
               </ul>
             </div>
           </div>
-          <p class="flow"><span>Create</span> <i aria-hidden="true">→</i> <span>Sign</span> <i aria-hidden="true">→</i> <span>Prove</span> <i aria-hidden="true">→</i> <span>Broadcast</span></p>
-          <p class="flow-note">Every payment is a PCZT, proved in your browser.</p>
+          <div class="journey reveal">
+            <h3>The life of a payment</h3>
+            <ol class="steps">
+              <li class="step s0"><span class="step-dot" aria-hidden="true"></span><span class="step-n" aria-hidden="true">01</span><strong>Create</strong><span class="step-sub">A PCZT from your notes</span></li>
+              <li class="step s1"><span class="step-dot" aria-hidden="true"></span><span class="step-n" aria-hidden="true">02</span><strong>Sign</strong><span class="step-sub">With your password</span></li>
+              <li class="step s2"><span class="step-dot" aria-hidden="true"></span><span class="step-n" aria-hidden="true">03</span><strong>Prove</strong><span class="step-sub">In your browser</span></li>
+              <li class="step s3"><span class="step-dot" aria-hidden="true"></span><span class="step-n" aria-hidden="true">04</span><strong>Broadcast</strong><span class="step-sub">Through your server</span></li>
+            </ol>
+            <p class="flow-note">Every payment is a PCZT, proved in your browser.</p>
+          </div>
         </div>
       </section>
 
       <section id="before">
         <div class="wrap">
-          <div class="section-head">
+          <div class="section-head reveal">
+            <p class="eyebrow"><span class="rule" aria-hidden="true"></span>Read this first</p>
             <h2>Before you start</h2>
           </div>
           <div class="notes">
-        <div class="note">
-          <h3>Not audited yet</h3>
-          <p>Celari and the WebZjs engine it is built on have not had an independent security audit. Start with small amounts.</p>
-        </div>
-        <div class="note">
-          <h3>Your recovery phrase is the only backup</h3>
-          <p>Celari keeps the wallet only in this browser, and browsers can delete site data on their own (Safari after 7 days without a visit, unless Celari is on the Home Screen). Write the 24 words down.</p>
-        </div>
-        <div class="note">
-          <h3>Restoring takes time</h3>
-          <p>Restoring a wallet scans the chain from the month you give. From January 2025 it took about 50 minutes when measured; a start in the 2022-2023 spam era can take a day and several GB of memory.</p>
-        </div>
-        <div class="note">
-          <h3>Some payments are not supported yet</h3>
-          <p>TEX addresses (used by some exchanges) need two linked transactions the engine cannot build yet; the form refuses them rather than failing later.</p>
-        </div>
+          <div class="note reveal">
+            <svg class="icon note-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M10.7 4.75a1.5 1.5 0 0 1 2.6 0l7.1 12.5a1.5 1.5 0 0 1-1.3 2.25H4.9a1.5 1.5 0 0 1-1.3-2.25Z" /><path d="M12 9.75v3.75" /><circle cx="12" cy="16.4" r=".9" fill="currentColor" stroke="none" /></svg>
+            <div><h3>Not audited yet</h3>
+            <p>Celari and the WebZjs engine it is built on have not had an independent security audit. Start with small amounts.</p></div>
+          </div>
+          <div class="note reveal">
+            <svg class="icon note-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M10.7 4.75a1.5 1.5 0 0 1 2.6 0l7.1 12.5a1.5 1.5 0 0 1-1.3 2.25H4.9a1.5 1.5 0 0 1-1.3-2.25Z" /><path d="M12 9.75v3.75" /><circle cx="12" cy="16.4" r=".9" fill="currentColor" stroke="none" /></svg>
+            <div><h3>Your recovery phrase is the only backup</h3>
+            <p>Celari keeps the wallet only in this browser, and browsers can delete site data on their own (Safari after 7 days without a visit, unless Celari is on the Home Screen). Write the 24 words down.</p></div>
+          </div>
+          <div class="note reveal">
+            <svg class="icon note-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M10.7 4.75a1.5 1.5 0 0 1 2.6 0l7.1 12.5a1.5 1.5 0 0 1-1.3 2.25H4.9a1.5 1.5 0 0 1-1.3-2.25Z" /><path d="M12 9.75v3.75" /><circle cx="12" cy="16.4" r=".9" fill="currentColor" stroke="none" /></svg>
+            <div><h3>Restoring takes time</h3>
+            <p>Restoring a wallet scans the chain from the month you give. From January 2025 it took about 50 minutes when measured; a start in the 2022-2023 spam era can take a day and several GB of memory.</p></div>
+          </div>
+          <div class="note reveal">
+            <svg class="icon note-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M10.7 4.75a1.5 1.5 0 0 1 2.6 0l7.1 12.5a1.5 1.5 0 0 1-1.3 2.25H4.9a1.5 1.5 0 0 1-1.3-2.25Z" /><path d="M12 9.75v3.75" /><circle cx="12" cy="16.4" r=".9" fill="currentColor" stroke="none" /></svg>
+            <div><h3>Some payments are not supported yet</h3>
+            <p>TEX addresses (used by some exchanges) need two linked transactions the engine cannot build yet; the form refuses them rather than failing later.</p></div>
+          </div>
           </div>
         </div>
       </section>
 
       <section class="closing">
         <div class="wrap">
-          <h2>A Zcash wallet that keeps your business your own.</h2>
-          <p>Create a wallet in a minute, or restore one from its recovery phrase or a viewing key.</p>
-          <div class="actions">
-            <a class="button primary" href="https://app.celariwallet.com">Open the wallet</a>
-            <a class="button secondary" href="https://github.com/Kubudak90/Zcash-wallet">Read the source</a>
+          <div class="closing-panel reveal">
+            <p class="eyebrow"><span class="rule" aria-hidden="true"></span>Ready when you are<span class="rule" aria-hidden="true"></span></p>
+            <h2>A Zcash wallet that keeps your business <em>your own</em>.</h2>
+            <p>Create a wallet in a minute, or restore one from its recovery phrase or a viewing key.</p>
+            <div class="actions">
+              <a class="button primary" href="https://app.celariwallet.com">Open the wallet<svg class="icon go" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12h14M13.5 6.5 19 12l-5.5 5.5" /></svg></a>
+              <a class="button secondary" href="https://github.com/Kubudak90/Zcash-wallet"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m8.5 8-4 4 4 4M15.5 8l4 4-4 4M13.25 5.5l-2.5 13" /></svg>Read the source</a>
+            </div>
           </div>
         </div>
       </section>
@@ -175,6 +259,10 @@
 
     <footer>
       <div class="wrap">
+        <a class="lockup" href="/" aria-label="Celari">
+        <svg class="mark" viewBox="11 6.626 42.242 50.747" aria-hidden="true" focusable="false"><path fill="currentColor" d="M43.471 27.99L31.09 20.253A18.129 18.129 0 0 0 25.23 17.89A81.33 81.33 0 0 0 15.508 16.443L27.354 9.041C32.507 5.821 35.083 5.821 40.236 9.041L52.965 16.995A2.205 2.205 0 0 1 53.243 20.529L44.779 27.887A1.103 1.103 0 0 1 43.471 27.99ZM11 39.995L11 22.137A4.41 4.41 0 0 1 15.818 17.746A80.06 80.06 0 0 1 24.968 19.133A16.859 16.859 0 0 1 30.417 21.33L30.659 21.481L30.236 21.778A91.651 91.651 0 0 0 12.28 38.32A26.205 26.205 0 0 0 11 39.995ZM11 42.295L11.533 41.475A24.935 24.935 0 0 1 13.258 39.131A90.381 90.381 0 0 1 18.259 33.588A35.295 35.295 0 0 0 32.397 48.918A90.817 90.817 0 0 0 42.096 53.797L40.236 54.959C35.083 58.179 32.507 58.179 27.354 54.959L13.073 46.035A4.41 4.41 0 0 1 11 42.295ZM31.424 43.538L43.471 36.01A1.103 1.103 0 0 1 44.779 36.113L53.243 43.471A2.205 2.205 0 0 1 52.965 47.005L43.409 52.976L43 52.802A89.547 89.547 0 0 1 33.75 48.23A31.362 31.362 0 0 1 31.424 43.538Z" /><path class="facet" d="M28.868 24.331A32.632 32.632 0 0 0 31.561 46.913A34.025 34.025 0 0 1 19.213 32.629A90.381 90.381 0 0 1 28.868 24.331Z" /></svg>
+        <svg class="word" viewBox="0 0 359.11 104.29" aria-hidden="true" focusable="false"><path fill="currentColor" d="M50.43 104.29L50.43 104.29Q39.57 104.29 30.36 100.36Q21.14 96.43 14.29 89.36Q7.43 82.29 3.71 72.93Q0 63.57 0 52.86L0 52.86Q0 42.14 3.71 32.79Q7.43 23.43 14.29 16.43Q21.14 9.43 30.36 5.43Q39.57 1.43 50.43 1.43L50.43 1.43Q62.57 1.43 71.43 5.43Q80.29 9.43 87.14 16.29L87.14 16.29L76 27.43Q71.57 22.57 65.21 19.86Q58.86 17.14 50.43 17.14L50.43 17.14Q43 17.14 36.86 19.71Q30.71 22.29 26.21 27.07Q21.71 31.86 19.29 38.43Q16.86 45 16.86 52.86L16.86 52.86Q16.86 60.71 19.29 67.29Q21.71 73.86 26.21 78.64Q30.71 83.43 36.86 86Q43 88.57 50.43 88.57L50.43 88.57Q59.57 88.57 65.93 85.79Q72.29 83 76.71 78.14L76.71 78.14L87.86 89.29Q81 96.29 71.71 100.29Q62.43 104.29 50.43 104.29ZM128 104.29L128 104.29Q117.71 104.29 109.5 99.64Q101.29 95 96.5 86.86Q91.71 78.71 91.71 68.57Q91.71 58.43 96.43 50.36Q101.14 42.29 109.21 37.57Q117.29 32.86 127.14 32.86L127.14 32.86Q136.71 32.86 144.07 37.29Q151.43 41.71 155.64 49.43Q159.86 57.14 159.86 67L159.86 67Q159.86 68.71 159.64 70.5Q159.43 72.29 159 74.43L159 74.43L107.86 74.43Q108.43 77.14 109.71 79.43L109.71 79.43Q112.29 84.29 117 86.93Q121.71 89.57 127.86 89.57L127.86 89.57Q133.14 89.57 137.64 87.71Q142.14 85.86 145.29 82.29L145.29 82.29L155.29 92.43Q150.29 98.29 143.14 101.29Q136 104.29 128 104.29ZM107.86 61.57L107.86 61.57L144.43 61.57Q143.71 58.57 142.57 56.14L142.57 56.14Q140.43 51.86 136.5 49.57Q132.57 47.29 126.86 47.29L126.86 47.29Q120.86 47.29 116.43 49.86Q112 52.43 109.57 57L109.57 57Q108.43 59.14 107.86 61.57ZM187 102.86L171.29 102.86L171.29 0L187 0L187 102.86ZM232 104.29L232 104.29Q222.71 104.29 215.21 99.57Q207.71 94.86 203.36 86.79Q199 78.71 199 68.71L199 68.71Q199 58.57 203.36 50.5Q207.71 42.43 215.21 37.64Q222.71 32.86 232 32.86L232 32.86Q239.86 32.86 246 36.14L246 36.14Q250 38.43 253 41.86L253 41.86L253 34.29L268.71 34.29L268.71 102.86L253 102.86L253 95.43Q250.14 98.71 246 100.86L246 100.86Q239.86 104.29 232 104.29ZM234.57 89.43L234.57 89.43Q243.29 89.43 248.64 83.57Q254 77.71 254 68.57L254 68.57Q254 62.43 251.57 57.71Q249.14 53 244.79 50.36Q240.43 47.71 234.57 47.71L234.57 47.71Q228.86 47.71 224.5 50.36Q220.14 53 217.64 57.71Q215.14 62.43 215.14 68.57Q215.14 74.71 217.64 79.43Q220.14 84.14 224.5 86.79Q228.86 89.43 234.57 89.43ZM300.71 102.86L285 102.86L285 34.29L300.71 34.29L300.71 41.43Q300.86 41.14 301.14 40.86L301.14 40.86Q306.86 32.86 318.57 32.86L318.57 32.86Q323.71 32.86 327.86 34.71Q332 36.57 335.57 40.71L335.57 40.71L325.29 51.29Q323.43 49.29 321.14 48.43Q318.86 47.57 315.86 47.57L315.86 47.57Q309.29 47.57 305 51.71Q300.71 55.86 300.71 64.71L300.71 64.71L300.71 102.86ZM357.86 102.86L342.14 102.86L342.14 34.29L357.86 34.29L357.86 102.86ZM340.89 10.54C340.89 5.51 344.97 1.43 350 1.43C355.03 1.43 359.11 5.51 359.11 10.54C359.11 15.58 355.03 19.66 350 19.66C344.97 19.66 340.89 15.58 340.89 10.54Z" /></svg>
+      </a>
         <p>Celari is open source (MIT or Apache-2.0) and built on ChainSafe’s WebZjs and the Zcash librustzcash crates. Not affiliated with the Electric Coin Company or the Zcash Foundation.</p>
         <nav aria-label="Links"><a href="https://github.com/Kubudak90/Zcash-wallet">Source</a><a href="https://app.celariwallet.com">Wallet</a></nav>
       </div>
