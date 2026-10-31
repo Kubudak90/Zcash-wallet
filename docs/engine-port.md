@@ -15,6 +15,7 @@ from there, marked MEASURED when they were measured and INFERRED when they were
 not. The decision numbers are that log's, so they are not contiguous by topic.
 
 Contents: [Layout](#layout) · [Decisions](#decisions) ·
+[Review round 7](#review-round-7-core-and-engine-before-nu7) ·
 [Deferred: explicit errors and known gaps](#deferred-explicit-errors-and-known-gaps) ·
 [Before real funds depend on it](#before-real-funds-depend-on-it) ·
 [Reproducible vendor/](#reproducible-vendor) · [Tests](#tests) ·
@@ -294,6 +295,55 @@ task on it. MEASURED, engine alone: a 2025-01 restore (784k blocks) peaks at
 821 MiB (2,149 MiB before). After a trap on the sync worker a later `sync()`
 never settles; `CrashWatch` already stops the app then.
 
+## Review round 7: core and engine before NU7
+
+A review of the wallet core and the engine before NU7 (2026-10-30/31): six lens
+reviews (vault, spend flow, platform, engine spend path, sync, build drift), 31
+findings (0 critical, 8 major, 19 minor, 4 polish), and every non-polish finding
+checked by an independent verifier trying to refute it; all 27 held. The findings,
+their reproductions and the verifiers' fixes are in
+[docs/reviews/2026-10-pre-nu7-core-review.md](reviews/2026-10-pre-nu7-core-review.md).
+The verifiers marked five for NU7: PLAT-1, ES-1, ES-2, SYNC-1 and DRIFT-1; all five
+are fixed. Every fix has a regression test that fails without it, except where
+noted.
+
+| Finding | Outcome |
+| --- | --- |
+| VAULT-1 · major: the database key in memory also opened the seed vault | Partly. A version 2 vault seals the secret under its own HKDF key, which the database key cannot stand in for, and this release reads it; it still writes version 1, because the build deployed before it reads only version 1 and a rollback in the weeks around NU7 would then refuse the password. Switch `VAULT_WRITE_VERSION` to 2 once no rollback to a build before this one is planned. |
+| VAULT-2, SPEND-5, PLAT-1 · major (one root cause): pages overwrote each other's saved wallet; a stale tab replaced a stored wallet without the typed-DELETE guard | Fixed. Opening or creating a wallet takes a Web Lock held until the page unloads (`src/lib/tabLock.ts`); `saveWallet` refuses while a wallet is stored; `setDb` and `replaceDb` write only while the stored vault is this page's; `revealSecret` never shows another wallet's phrase. `tests/e2e/tabs.spec.ts`. |
+| VAULT-3 · minor: a soft lock behind a hung pass kept the key in memory for ever | Fixed. The soft lock reloads after 15 minutes at the latest, or once the pass is seen to stall; a wrong password meanwhile does not undo it. `tests/e2e/hangs.spec.ts`. |
+| VAULT-4 · minor: a recovery phrase copied by hand was never cleared from the clipboard | Fixed. The phrase grid is marked like the viewing key; the note shows under what was copied. |
+| VAULT-5 · minor: on touch, Safari and Firefox refused the clearing retries | Fixed: retried on `pointerup` and `click` too. Not tested on a device (Chromium needs no activation). |
+| VAULT-6 · minor: storage is best effort and users were not told | Fixed. `navigator.storage.persist()` is asked for on create and unlock (best effort); create, restore and the README say the browser can delete the wallet and the phrase is the only backup. |
+| SPEND-1 · minor: Shield links every funded transparent address in one transaction | Copy fixed (Shield, README). Shielding one address at a time needs an engine binding: deferred, below. |
+| SPEND-2, ES-3 · minor: every TEX send failed at building, and the hint said to lower the amount | Fixed in the app: the form refuses TEX addresses, also in payment links; the "lower the amount" hint is gone. Paying TEX (a ZIP 320 pair) is deferred, below. |
+| SPEND-3, ES-4 · minor: the fee shown was a fixed estimate; Max failed with three or more notes | Partly. The fee and total read "at least"; when the engine refuses for funds, Send offers the amount that fits (spendable less the fee the engine asked), which the user reviews again. The exact fee before signing and an engine Max are deferred, below. |
+| SPEND-4 · minor: a spend stuck behind a hung pass kept auto-lock off | Fixed in the app: a lock deferred for a spend waits at most 5 minutes (before the broadcast nothing has left the wallet; during it, the stored transaction is saved first), and no pass starts during a spend. |
+| PLAT-2 · minor: the CSP was added by a string replace that could silently miss | Fixed: the build fails when the `<meta charset>` it follows is not there (`vite.security.ts`). |
+| PLAT-3 · minor: no CSP header, so the engine's workers ran without one | Fixed: `public/_headers` and `vite preview` send the same policy plus `frame-ancestors 'none'`; a unit test keeps the two equal, the mainnet smoke test checks both. HSTS waits for the custom domain (every host in use is HSTS-preloaded). The deployment that holds the owner's funds (Vercel) reads `vercel.json` on its own branch, which this round did not touch: the same header there is the owner's call. |
+| PLAT-4 · minor: switching servers took one click and the UI never said what a server can fake | Fixed: Settings, the "server behind" banner and the README say it; a server other than the default is saved after a second confirmation. |
+| PLAT-5 · polish: vite 6.4.4 had an advisory; CI never checked npm | Fixed: vite 6.4.5; CI fails on advisories in shipped packages and warns on dev tools. |
+| ES-1 · major: a stored send whose broadcast failed was never sent again; a canonical crossing stayed locked for weeks | Fixed in the app, no wasm change: after each saved pass the wallet's own unmined sends are sent again, byte for byte (`send_authorized_transactions`), at most every 5 minutes, errors logged only. "May have reached the network" now says not to pay again. The engine-side resend and a retry inside `pczt_send` are deferred, below. |
+| ES-2 · major: a payment funded from Sapling was labelled Shielded | Fixed: Send labels it partly shielded and says why (`src/lib/poolCrossing.ts`, with a deliberately high fee bound); Home has a Sapling notice. Proposing Orchard-receiver payments without Sapling first is deferred, below. |
+| ES-5 · polish: the Orchard notice said the change moves to Ironwood | Fixed: the change stays in Orchard and each later payment crosses again. |
+| SYNC-1 · major: one inflated chain tip from a server stayed the wallet's tip for good | Fixed in the backend: a lower tip, as long as it is not below a scanned block, drops the scan queue above it, so a wallet saved with such a tip heals on its first honest pass. A deviation from zcash_client_sqlite 0.23, which has the same behaviour (`engine/zcash_client_memory/UPSTREAM.md`); worth reporting upstream. The glue companion (refuse to build on a wallet tip far above the network's) and a clock ceiling for the tip are deferred, below. |
+| SYNC-2 · minor: a tip below the birthday of a wallet that scanned nothing panicked | Fixed in the backend: nothing is queued; the next pass tries again. Also in sqlite 0.23. |
+| SYNC-3 · minor: "I don't know" took the first transparent transaction as the birthday | Fixed: "I don't know" scans from Sapling activation (419,200). The default server refused that search anyway (an unbounded range), so it always failed before; `detectBirthday` is gone from the app. |
+| SYNC-4 · minor: a malicious server can crash the engine in a loop (unbounded streams, panicking block accessors) | Deferred, below. Needs a malicious or broken server, which can stop sync anyway; the user gets out by changing the server in Settings. |
+| SYNC-5 · minor: no timeout on any engine request | App parts fixed: every pass is watched for a stall (the reload notice shows for a hung steady-state pass too), the tip read is bounded to 60 s, and SPEND-4's bounded lock deferral. A per-request idle timeout in the engine is deferred, below; a total timeout (the proposed fix) would fail large batches on slow links for ever. |
+| DRIFT-1 · minor: a `vendor/` that failed the hash check, or one left from before a pull, was bundled with no message | Fixed: `vite build` fails unless `vendor/` matches `scripts/webzjs-vendor.sha256` exactly (`CELARI_UNPINNED_ENGINE=1` builds anyway, with a warning, for engine work only). |
+| DRIFT-2 · minor: the clean-tree guard could be hidden by git configuration, ignore files and index flags | Fixed: three checks (status with every untracked file, untracked files with no exclude rules, skip-worktree and assume-unchanged entries); `build = false` in the backend's `Cargo.toml`. Four new guard test cases. |
+| DRIFT-3 · minor: the native test script tested whatever was in `.webzjs/` and `engine/` | Fixed: both modes refuse what the build would refuse, glue mode refuses a `.webzjs/` that is not the tree the build prepared from the committed patches (a stamp), `--dirty` skips both and says so on the result line. |
+| DRIFT-4 · polish: cached tool binaries were trusted by their version string | Fixed: wasm-bindgen, cargo-deny and cargo-about are reused only while their SHA-256, recorded at install time, matches. |
+| DRIFT-5 · polish: the docs said CI had never reproduced the list | Fixed: CI run 40952847695 (push to main at 2acc747) built from source and matched it; see [Reproducible vendor/](#reproducible-vendor). |
+
+The engine changed in this round (SYNC-1, SYNC-2), so `vendor/` and the list did:
+only `webzjs-wallet/webzjs_wallet_bg.wasm` differs (`de38cd03…`, was `c8fa1653…`).
+MEASURED on x86_64 Ubuntu 24.04 with clang-18 `1:18.1.3-1ubuntu1`: the same
+machine's build of the previous commit gave the committed list byte for byte (16
+files) before the change. CI's from-source run (`full_rebuild`) must confirm the
+new list.
+
 ## Deferred: explicit errors and known gaps
 
 None of these is a `todo!()` on a path Celari uses; each returns an error or is
@@ -335,6 +385,31 @@ not reached.
   version-123 wasm-opt from PATH and its output may differ from the list.
 - CI does not run the native test suites (they need the full Rust build and
   ~15 minutes); run `scripts/test-engine-native.sh` before changing the engine.
+- From review round 7, each for after NU7 (an engine change, a new `vendor/` and
+  list, and native tests each):
+  - TEX recipients are refused in the Send form: zcash_client_backend 0.25's
+    `create_pczt_from_proposal` turns only single-step proposals into PCZTs, and a
+    TEX payment is a ZIP 320 two-step proposal (SPEND-2).
+  - The exact fee before signing (a read-only `propose_fee` binding running
+    `propose_transfer` with Celari's change strategy), a check in `signProveSend`
+    that the PCZT's fee is not above the confirmed one, and Max from
+    `propose_send_max_transfer` (SPEND-3, ES-4).
+  - Shielding one transparent address at a time (`pczt_shield` with an address,
+    a `transparent_balances` binding; never a hard refusal without that path)
+    (SPEND-1).
+  - Resending stored unmined transactions inside `sync_pass`, and a retry of
+    `SendTransaction` in `pczt_send` on transport errors (ES-1; the app resends
+    meanwhile).
+  - Orchard-receiver payments proposed from Ironwood and Orchard first, Sapling
+    only after consent (ES-2; the app labels them meanwhile).
+  - A per-request idle timeout in the transport (re-armed on every frame; not
+    tonic-web-wasm-client's total timeout) (SYNC-5).
+  - Bounds on server answers: more messages than blocks asked for, a height over
+    `u32`, a hash that is not 32 bytes, an unbounded `GetTaddressTxids` (SYNC-4).
+  - SYNC-1's glue companion (a send re-syncs when the wallet's tip is far above
+    the network's) and a clock ceiling for the tip (it would refuse honest tips on
+    a device whose clock is behind, and NU7 changes the block time).
+  - Writing version 2 vaults (VAULT-1), once no rollback is planned.
 
 ## Before real funds depend on it
 
@@ -348,7 +423,8 @@ wallets that owned nothing.
      note in the shielded total with its memo after one confirmation, History pool
      `ironwood`), also into a view-only wallet.
    - Send from Ironwood: `pczt_create` -> sign (keys module) -> prove -> `pczt_send`,
-     to a `u1…`, a Sapling `zs1…`, a `t1…` and a TEX address; on an explorer the
+     to a `u1…`, a Sapling `zs1…` and a `t1…` (a TEX address is refused by the form,
+     review round 7); on an explorer the
      transaction is v6 with branch `0x37A5165B` (after NU7: `0x77190AD9`), change in
      Ironwood, fee by ZIP 317. Natively shown with fake notes only.
    - Send from Orchard (existing users' funds): pays through Ironwood with the
@@ -374,8 +450,9 @@ wallets that owned nothing.
    Ironwood, publicly at the turnstile).
 3. **Long restores through the app**: a 2025-01 restore through the app with
    renderer memory sampled (engine alone: 1,034 MiB peak), a spam-era one, a phone.
-4. **CI**: the first from-source CI run must reproduce `scripts/webzjs-vendor.sha256`
-   (a local build is meant to; CI decides).
+4. **CI**: done for the round-6 engine (run 40952847695, push to main at 2acc747,
+   built from source and matched the list). Review round 7 changed the engine: its
+   list needs a from-source run (`full_rebuild`) too.
 
 ## Reproducible vendor/
 
@@ -385,7 +462,8 @@ CI builds from source on pushes to main, weekly and on request, and ships a
 `vendor/` only when it matches; other runs restore a cached one and check it.
 
 What the build pins: the WebZjs commit (fetched by full SHA), the committed
-patches and `engine/` (uncommitted changes stop the build), the lockfile
+patches and `engine/` (uncommitted, untracked or index-hidden files stop the build,
+whatever the git configuration and ignore files say; review round 7, DRIFT-2), the lockfile
 (`--locked`), the Rust toolchain (`nightly-2026-10-28`, from the patched
 `rust-toolchain.toml`), wasm-bindgen 0.2.129 (`cargo install --locked`), wasm-opt
 (binaryen 123, checksums), wasm-pack 0.15.0 (CI: checksum), and the C compiler
@@ -399,7 +477,9 @@ target directory and job count, proxy and certificate variables, `RUST_BACKTRACE
 `CC_wasm32_unknown_unknown` and the trim-paths setting; every other variable
 (`CC`, `CFLAGS`, clang's `CCC_OVERRIDE_OPTIONS` or `CPATH`, ...) is dropped.
 
-What it refuses (`scripts/test-build-webzjs-guards.sh` checks each, 23 cases): a
+What it refuses (`scripts/test-build-webzjs-guards.sh` checks each, 27 cases): files
+in `engine/` or `patches/webzjs` that are not committed (also when hidden by
+`status.showUntrackedFiles`, `info/exclude` or skip-worktree); a
 `RUSTUP_TOOLCHAIN` or rustup override other than the pinned toolchain; `RUSTC`,
 rustc wrappers, extra rustflags, `CARGO_INCREMENTAL` and the other
 `CARGO_BUILD_*`/`CARGO_TARGET_*`/`CARGO_PROFILE_*`/`CARGO_UNSTABLE_*`/`CARGO_ENV_*`
@@ -426,8 +506,8 @@ also agreed). After the build script's `env -i` change and the backend change fo
 the scan queue observer (`queue_rescan`, `prune_scan_queue_below`), three more cold
 builds gave the same list again (one on the previous engine, two on the new one):
 those two methods are dead code in the wasm, and its panic locations name only
-four files of the backend, none of them changed. INFERRED: that CI's own build
-reproduces it (no CI run yet).
+four files of the backend, none of them changed. MEASURED: CI's own build
+reproduced it (run 40952847695, a push to main at 2acc747, built from source).
 
 To change the engine: edit, commit the patch and `engine/` changes, run
 `npm run build:webzjs`, review the reported list difference, commit the new list
@@ -435,13 +515,13 @@ from `.webzjs/target/webzjs-vendor.sha256`, and let CI's from-source run confirm
 
 ## Tests
 
-| Suite | Command | Last result (MEASURED, 2026-10-29) |
+| Suite | Command | Last result (MEASURED; 2026-10-31, review round 7, unless noted) |
 | --- | --- | --- |
-| Backend (`engine/zcash_client_memory`): zcash_client_backend's backend-independent suite, PCZT tests, mainnet Ironwood vectors | `scripts/test-engine-native.sh` | 204 tests: 198 passed, 0 failed, 6 ignored (the ones sqlite ignores); 763 s on 4 cores. Again after the scan queue observer change, with the same sources and lockfile from the engine's working tree: 198 passed, 0 failed, 6 ignored |
-| Glue (`webzjs-wallet`): history, NU7 rules, sync passes, data requests, against a mock lightwalletd | `bash scripts/build-webzjs.sh && scripts/test-engine-native.sh glue` | 68 passed, 0 failed; 338 s |
+| Backend (`engine/zcash_client_memory`): zcash_client_backend's backend-independent suite, PCZT tests, mainnet Ironwood vectors | `scripts/test-engine-native.sh` | 206 tests: 200 passed, 0 failed, 6 ignored (the ones sqlite ignores); 513 s on 4 cores. The two new ones (SYNC-1, SYNC-2) fail on the engine before the fix. 2026-10-29: 198 passed, 0 failed, 6 ignored, confirmed by a reviewer's run on a clean checkout (the script now refuses an uncommitted engine/, DRIFT-3) |
+| Glue (`webzjs-wallet`): history, NU7 rules, sync passes, data requests, against a mock lightwalletd | `bash scripts/build-webzjs.sh && scripts/test-engine-native.sh glue` | 68 passed, 0 failed; 193 s, on the round-7 engine |
 | App unit tests | `npm test` | all passing |
 | App UI tests (fake engine) | `npm run test:e2e` | all passing |
-| Mainnet smoke test (real engine, production build) | `npm run test:e2e:real` | passed in 12.7 s, network supported |
+| Mainnet smoke test (real engine, production build) | `npm run test:e2e:real` | passed in 12.4 s on the round-7 build, network supported, with the CSP as a header (`vite preview`) and checked as both header and `<meta>` |
 | Mainnet restore from 2026-10 (production build, through a proxy; a reviewer's spec outside the repository) | - | 622 s; "blocks left" 49,148 -> 39,148 -> 29,148 -> 19,142 -> 9,142 -> 2,277 -> 1 -> Up to date, one rise of 4 blocks (the chain's growth); before Decision 21 it went back to ~48,800 at the second pass and ended at ~21,100 |
 | Upgrade from main's build to this one, mainnet (outside the repository, a reviewer's script) | - | 18/18 checks: rebuilt once, `db-legacy` kept until the tip, notices (en, tr); labels 49,269 -> 39,269, soft-lock reload, 29,274 at the first paint after the unlock (before the fix for the unlock: 49,174 for a moment), 19,264 -> 9,264 -> 2,278 -> "1 block left" -> up to date at 3,534,987 at 628 s; no count rose |
 | Build guards | `scripts/test-build-webzjs-guards.sh` | 23 of 23 (12 new cases; the 10 new checks failed against the previous script) |

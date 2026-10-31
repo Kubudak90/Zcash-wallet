@@ -1,22 +1,21 @@
-# Pre-NU7 core and engine review — interim findings
+# Pre-NU7 core and engine review — findings
 
-Interim record of the review started on 2026-10-30 (branch `claude/core-engine-review`), saved so that no progress is lost if the session stops. Findings are as reported by each lens reviewer; "Verified" is the independent refuting verifier's verdict where it has finished. Polish items are not verified. Nothing here is fixed yet; fixes and the final decisions go to docs/engine-port.md (review round 7).
+Record of the review started on 2026-10-30 (branch `claude/core-engine-review`). Findings are as reported by each lens reviewer; "Verified" is the independent refuting verifier's verdict. Polish items were not verified. What was fixed, what was deferred and why: docs/engine-port.md, "Review round 7" (the outcome of every finding is there, not here).
 
-Progress: 6/6 lens reviews; 31 findings (0 critical, 8 major, 19 minor, 4 polish); 27/27 non-polish findings verified, 27 confirmed real, 0 refuted.
+Progress: 6/6 lens reviews; 31 findings (0 critical, 8 major, 19 minor, 4 polish); 27/27 non-polish findings verified, 27 confirmed real, 0 refuted. Fixes: all 31 handled (fixed, or partly fixed with the rest deferred to after NU7 for a stated reason), including the five the verifiers marked for NU7 (PLAT-1, ES-1, ES-2, SYNC-1, DRIFT-1).
 
-## State and how to continue (if this session stops)
+## State and how to continue
 
 - `claude/web-wallet-ui` (pushed, CI green on 1762dca): the "Obsidian & Gold" web UI, English first, new logo. Not merged to `main`; the owner decides.
-- `claude/core-engine-review` (this branch, on top of the UI branch): this review. Done so far: six lens reviews (this file) and part of the verification.
-- Remaining, in order:
-  1. Verify each non-polish finding below by trying to refute it.
-  2. Fix the confirmed TypeScript/CI findings, with regression tests, then run typecheck, unit, e2e and build.
-  3. Fix the confirmed engine findings that must land before NU7 (block 3,543,405), only if the change is low-risk.
-     - Engine changes go in `engine/zcash_client_memory` or `patches/webzjs`.
-     - Then run, in order: `scripts/build-webzjs.sh`, regenerate `scripts/webzjs-vendor.sha256`, `scripts/test-engine-native.sh` (both modes), `scripts/audit-engine.sh`, `scripts/gen-licenses.sh --check`, `npm run test:e2e:real`.
-  4. Record every finding as fixed or deferred, and why, in `docs/engine-port.md` (review round 7).
-  5. Have an independent check of the diff done.
-  6. Push the branch, then run `ci.yml` with workflow_dispatch: CI does not run on branch pushes. Use `full_rebuild=true` if `vendor/` changed.
+- `claude/core-engine-review` (this branch, on top of the UI branch): this review and its fixes.
+- Done, in order:
+  1. Verification of every non-polish finding (27/27 real).
+  2. TypeScript and CI fixes, with regression tests; typecheck, unit, e2e and build.
+  3. Engine fixes that must land before NU7 (SYNC-1, SYNC-2, in `engine/zcash_client_memory`), with `scripts/build-webzjs.sh`, a new `scripts/webzjs-vendor.sha256`, `scripts/test-engine-native.sh` (both modes), `scripts/audit-engine.sh`, `scripts/gen-licenses.sh --check` and `npm run test:e2e:real`.
+  4. Every finding recorded as fixed or deferred, and why, in `docs/engine-port.md` (Review round 7).
+- Remaining:
+  5. An independent check of the diff.
+  6. Push the branch, then run `ci.yml` with workflow_dispatch and `full_rebuild=true` (`vendor/` changed; CI does not run on branch pushes), and compare its list with the committed one.
 - Do not touch Vercel, the `vercel-preview` branch or the `celari-preview` project: the owner still has funds in that deployment.
 
 ## Lens: vault
