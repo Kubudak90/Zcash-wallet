@@ -176,22 +176,6 @@ export class WebzjsEngine implements ZcashEngine {
     return webzjsLocalStatus(new Date());
   }
 
-  async detectBirthday(secret: { phrase: string } | { ufvk: string }): Promise<number | null> {
-    let ufvk: UnifiedFullViewingKey;
-    if ('phrase' in secret) {
-      const { usk, fingerprint } = spendingKeys(secret.phrase);
-      fingerprint.free();
-      ufvk = usk.to_unified_full_viewing_key();
-      usk.free();
-    } else {
-      ufvk = new UnifiedFullViewingKey(NETWORK, secret.ufvk);
-    }
-    const taddr = ufvk.get_transparent_address(NETWORK);
-    ufvk.free();
-    if (!taddr) return null;
-    return (await this.chain.detect_birthday_from_transparent_address(taddr)) ?? null;
-  }
-
   async isValidViewingKey(ufvk: string): Promise<boolean> {
     try {
       new UnifiedFullViewingKey(NETWORK, ufvk.trim()).free();

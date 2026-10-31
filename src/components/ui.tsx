@@ -166,9 +166,20 @@ export function Notice({
  * Copies `value`. Every copy goes through `clipboard`, so a pending clear of
  * an earlier copy knows the clipboard now holds something else. `clearAfter`
  * clears the clipboard again a minute later, as far as the browser allows
- * (see lib/clipboard.ts); only the viewing key asks for that.
+ * (see lib/clipboard.ts); only the viewing key asks for that, as `clearSource`.
  */
-export function CopyButton({ value, label, clearAfter = false }: { value: string; label?: string; clearAfter?: boolean }) {
+export function CopyButton({
+  value,
+  label,
+  clearAfter = false,
+  clearSource = '',
+}: {
+  value: string;
+  label?: string;
+  clearAfter?: boolean;
+  /** Names what was copied, so useClipboardClear(clearSource) shows the note in the right place. */
+  clearSource?: string;
+}) {
   const { t } = useI18n();
   const [copied, setCopied] = useState(false);
   useEffect(() => {
@@ -182,7 +193,7 @@ export function CopyButton({ value, label, clearAfter = false }: { value: string
         type="button"
         className="secondary copy-button"
         onClick={() => {
-          void clipboard.copy(value, { clearAfter }).then(
+          void clipboard.copy(value, { clearAfter, source: clearSource }).then(
             () => setCopied(true),
             (e) => console.warn('copy failed', e),
           );
@@ -199,9 +210,36 @@ export function CopyButton({ value, label, clearAfter = false }: { value: string
   );
 }
 
-/** Where the clipboard clear asked for by CopyButton's `clearAfter` stands. */
-export function useClipboardClear(): ClearStatus {
-  return useSyncExternalStore(clipboard.subscribe, clipboard.getStatus);
+/**
+ * Says how far the clipboard clear of a copy of `source` goes, under what was copied. Only a
+ * copy made while this is on screen gets a note, not one from before. Mounted while empty, so
+ * the note is announced when it appears.
+ */
+export function ClipboardClearNote({ source }: { source: string }) {
+  const { t } = useI18n();
+  const status = useClipboardClear(source);
+  const [copiedHere, setCopiedHere] = useState(false);
+  useEffect(() => {
+    if (status === 'pending') setCopiedHere(true);
+  }, [status]);
+  let note = '';
+  if (copiedHere && status === 'pending') note = t('settings.clipboardClear');
+  else if (copiedHere && status === 'cleared') note = t('settings.clipboardCleared');
+  return (
+    <p className="muted small live-slot" role="status" data-testid={`clipboard-note-${source}`}>
+      {note}
+    </p>
+  );
+}
+
+/**
+ * Where the clipboard clear asked for by CopyButton's `clearAfter`, or by a copy by hand of
+ * text marked data-clipboard-clear, stands; with `source`, only a clear for that source counts.
+ */
+export function useClipboardClear(source?: string): ClearStatus {
+  const status = useSyncExternalStore(clipboard.subscribe, clipboard.getStatus);
+  const current = useSyncExternalStore(clipboard.subscribe, clipboard.getSource);
+  return source === undefined || source === current ? status : 'idle';
 }
 
 export function QrCode({ value, label }: { value: string; label: string }) {

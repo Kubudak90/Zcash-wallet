@@ -1,6 +1,6 @@
 import { forwardRef, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 
-import { Notice, Screen } from '../components/ui';
+import { ClipboardClearNote, Notice, Screen } from '../components/ui';
 import { useI18n } from '../i18n';
 import { newWalletBirthday } from '../lib/birthday';
 import { newSeedPhrase, pickVerificationPositions } from '../lib/seed';
@@ -20,6 +20,10 @@ export const SeedGrid = forwardRef<HTMLOListElement, { phrase: string; hidden?: 
       ref={ref}
       className={hidden ? 'seed-grid blurred' : 'seed-grid'}
       data-testid="seed-grid"
+      // A copy of the words by hand is cleared from the clipboard a minute later, like the
+      // viewing key's (lib/clipboard.ts; review round 7, VAULT-4). Copying is not blocked:
+      // some users paste them into a password manager.
+      data-clipboard-clear="seed"
       aria-hidden={hidden}
       // Focusable from code only, once revealed.
       tabIndex={hidden ? undefined : -1}
@@ -62,6 +66,7 @@ export function CreateWallet({ onCancel }: { onCancel: () => void }) {
               <li>{t('create.seedWarn1')}</li>
               <li>{t('create.seedWarn2')}</li>
               <li>{t('create.seedWarn3')}</li>
+              <li>{t('create.seedWarn4')}</li>
             </ul>
           </Notice>
           <div className={revealed ? 'seed-wrap' : 'seed-wrap covered'}>
@@ -73,6 +78,7 @@ export function CreateWallet({ onCancel }: { onCancel: () => void }) {
               </button>
             )}
           </div>
+          <ClipboardClearNote source="seed" />
           <label className="check">
             <input
               type="checkbox"

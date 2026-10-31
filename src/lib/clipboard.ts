@@ -1,4 +1,4 @@
-// Copying, and clearing a copied viewing key from the clipboard again.
+// Copying, and clearing a copied viewing key or recovery phrase from the clipboard again.
 //
 // The clear is best effort, and the UI says so. Browsers let a page write the
 // clipboard only while it has focus (Firefox and Safari only during a click
@@ -14,7 +14,10 @@
 
 export const CLEAR_AFTER_MS = 60_000;
 const KEY = 'celari.clipboardClear';
-/** Marks an element (the viewing key) whose text, copied by hand, is cleared like a Copy button's. */
+/**
+ * Marks an element (the viewing key, the recovery phrase) whose text, copied by hand, is cleared
+ * like a Copy button's. Its value names the source, so a note shows under the one copied.
+ */
 const CLEAR_ATTR = 'data-clipboard-clear';
 
 export type ClearStatus = 'idle' | 'pending' | 'cleared';
@@ -32,6 +35,8 @@ export class ClipboardGuard {
   private timer: ReturnType<typeof setTimeout> | undefined;
   private clearing = false;
   private status: ClearStatus = 'idle';
+  /** What the pending (or last finished) clear is for: the CLEAR_ATTR value or the Copy button's `source`. */
+  private source = '';
   private listeners = new Set<() => void>();
 
   constructor(private readonly env: ClipboardEnv) {
@@ -41,21 +46,26 @@ export class ClipboardGuard {
 
   getStatus = (): ClearStatus => this.status;
 
+  getSource = (): string => this.source;
+
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   };
 
   /** Writes `text`; with `clearAfter` the clipboard is cleared again CLEAR_AFTER_MS later. */
-  async copy(text: string, { clearAfter = false } = {}): Promise<void> {
+  async copy(text: string, { clearAfter = false, source = '' } = {}): Promise<void> {
     await this.env.write(text);
-    if (clearAfter) this.schedule(this.env.now() + CLEAR_AFTER_MS);
+    if (clearAfter) this.schedule(this.env.now() + CLEAR_AFTER_MS, source);
     else this.cancel();
   }
 
-  /** A copy made in the page by hand; `ofCleared` if it copied text marked with CLEAR_ATTR. */
-  copiedInPage(ofCleared: boolean): void {
-    if (ofCleared) this.schedule(this.env.now() + CLEAR_AFTER_MS);
+  /**
+   * A copy made in the page by hand; `ofCleared` if it copied text marked with CLEAR_ATTR,
+   * `source` that attribute's value.
+   */
+  copiedInPage(ofCleared: boolean, source = ''): void {
+    if (ofCleared) this.schedule(this.env.now() + CLEAR_AFTER_MS, source);
     else this.cancel();
   }
 
@@ -79,9 +89,14 @@ export class ClipboardGuard {
     this.setStatus('cleared');
   }
 
-  private schedule(at: number) {
+  private schedule(at: number, source = '') {
     this.deadline = at;
     this.save(at);
+    if (source !== this.source) {
+      this.source = source;
+      // Pending for another source: the notes follow the new one.
+      if (this.status === 'pending') this.listeners.forEach((l) => l());
+    }
     this.setStatus('pending');
     clearTimeout(this.timer);
     this.timer = setTimeout(() => void this.tryClear(), Math.max(0, at - this.env.now()));
@@ -144,10 +159,16 @@ export function watchClipboard(guard: ClipboardGuard = clipboard): () => void {
     const selection = document.getSelection();
     const node = selection && selection.rangeCount > 0 ? selection.getRangeAt(0).commonAncestorContainer : null;
     const el = node instanceof Element ? node : (node?.parentElement ?? null);
-    guard.copiedInPage(el?.closest(`[${CLEAR_ATTR}]`) != null);
+    const marked = el?.closest(`[${CLEAR_ATTR}]`) ?? null;
+    guard.copiedInPage(marked !== null, marked?.getAttribute(CLEAR_ATTR) ?? '');
   };
   window.addEventListener('focus', retry);
+  // pointerdown gives the user activation a write needs only for a mouse. On touch, Firefox and
+  // Safari 27+ give it at pointerup, and Safari 26 and earlier only inside the click's own
+  // handler (review round 7, VAULT-5), so a tap retries on those too.
   window.addEventListener('pointerdown', retry, true);
+  window.addEventListener('pointerup', retry, true);
+  window.addEventListener('click', retry, true);
   window.addEventListener('keydown', onKey, true);
   document.addEventListener('visibilitychange', retry);
   document.addEventListener('copy', onCopy);
@@ -155,6 +176,8 @@ export function watchClipboard(guard: ClipboardGuard = clipboard): () => void {
   return () => {
     window.removeEventListener('focus', retry);
     window.removeEventListener('pointerdown', retry, true);
+    window.removeEventListener('pointerup', retry, true);
+    window.removeEventListener('click', retry, true);
     window.removeEventListener('keydown', onKey, true);
     document.removeEventListener('visibilitychange', retry);
     document.removeEventListener('copy', onCopy);

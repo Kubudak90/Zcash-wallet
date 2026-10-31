@@ -226,8 +226,6 @@ export interface ZcashEngine {
   localNetworkStatus?(): NetworkStatus | null;
   /** Whether the engine sees and spends the NU6.3 Ironwood pool. */
   readonly ironwood: boolean;
-  /** Earliest height a key ever received transparent funds, if it can be found. */
-  detectBirthday(secret: { phrase: string } | { ufvk: string }): Promise<number | null>;
   isValidViewingKey(ufvk: string): Promise<boolean>;
   viewingKey(phrase: string): Promise<string>;
 
