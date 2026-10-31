@@ -13,9 +13,9 @@ Progress: 6/6 lens reviews; 31 findings (0 critical, 8 major, 19 minor, 4 polish
   2. TypeScript and CI fixes, with regression tests; typecheck, unit, e2e and build.
   3. Engine fixes that must land before NU7 (SYNC-1, SYNC-2, in `engine/zcash_client_memory`), with `scripts/build-webzjs.sh`, a new `scripts/webzjs-vendor.sha256`, `scripts/test-engine-native.sh` (both modes), `scripts/audit-engine.sh`, `scripts/gen-licenses.sh --check` and `npm run test:e2e:real`.
   4. Every finding recorded as fixed or deferred, and why, in `docs/engine-port.md` (Review round 7).
-- Remaining:
-  5. An independent check of the diff.
-  6. Push the branch, then run `ci.yml` with workflow_dispatch and `full_rebuild=true` (`vendor/` changed; CI does not run on branch pushes), and compare its list with the committed one.
+  5. An independent review of the diff (f3ed979..d903579): six more findings fixed in 7eb52d8, one left as it is with its reason (docs/engine-port.md).
+  6. Branch pushed; CI run 41206285784 (workflow_dispatch, `full_rebuild=true`, 7eb52d8): all three jobs green; the from-source build matched the committed `scripts/webzjs-vendor.sha256`.
+- Left to the owner: merging `claude/web-wallet-ui` and this branch into `main`; the real-funds checklist in docs/engine-port.md (before and after NU7); the same CSP header in the Vercel deployment's `vercel.json`, if wanted.
 - Do not touch Vercel, the `vercel-preview` branch or the `celari-preview` project: the owner still has funds in that deployment.
 
 ## Lens: vault

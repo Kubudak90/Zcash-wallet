@@ -352,8 +352,10 @@ The engine changed in this round (SYNC-1, SYNC-2), so `vendor/` and the list did
 only `webzjs-wallet/webzjs_wallet_bg.wasm` differs (`de38cd03…`, was `c8fa1653…`).
 MEASURED on x86_64 Ubuntu 24.04 with clang-18 `1:18.1.3-1ubuntu1`: the same
 machine's build of the previous commit gave the committed list byte for byte (16
-files) before the change. CI's from-source run (`full_rebuild`) must confirm the
-new list.
+files) before the change, and two builds of the new engine gave the new list.
+MEASURED in CI: run 41206285784 (`workflow_dispatch`, `full_rebuild`, 7eb52d8)
+built from source, matched the new list, passed the production build and the
+mainnet smoke test; the app job and the engine audit passed too.
 
 ## Deferred: explicit errors and known gaps
 
@@ -461,9 +463,10 @@ wallets that owned nothing.
    Ironwood, publicly at the turnstile).
 3. **Long restores through the app**: a 2025-01 restore through the app with
    renderer memory sampled (engine alone: 1,034 MiB peak), a spam-era one, a phone.
-4. **CI**: done for the round-6 engine (run 40952847695, push to main at 2acc747,
-   built from source and matched the list). Review round 7 changed the engine: its
-   list needs a from-source run (`full_rebuild`) too.
+4. **CI**: done for the round-6 engine (run 40952847695, push to main at 2acc747)
+   and for review round 7's engine (run 41206285784, `full_rebuild` on
+   `claude/core-engine-review` at 7eb52d8): each built from source and matched the
+   list.
 
 ## Reproducible vendor/
 
