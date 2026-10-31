@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Checks that scripts/build-webzjs.sh refuses to build when something outside the
-# committed inputs would change what rustc builds (a toolchain override, a rustc
+# committed inputs would change what rustc builds (uncommitted or hidden files in
+# engine/ or patches/webzjs, a toolchain override, a rustc
 # wrapper, extra rustflags, foreign cargo configuration, C compiler and wasm-bindgen
 # settings), that nothing else from the caller's environment reaches the build, and
 # that WEBZJS_PREPARE_ONLY=1 needs no wasm-pack.
@@ -27,7 +28,13 @@ channel="$(sed -n 's/^+channel *= *"\(.*\)"/\1/p' "$ROOT"/patches/webzjs/0003-*.
 pinned="$(rustc "+$channel" --version)"
 
 tmp="$(mktemp -d)"
+# The clean-tree cases (below) add these and take them away again.
+stray="$ROOT/engine/zcash_client_memory/celari-guard-test.rs"
+exclude="$(git -C "$ROOT" rev-parse --path-format=absolute --git-path info/exclude)"
 cleanup() {
+  rm -f "$stray"
+  [ ! -f "$exclude.celari-guard-test" ] || mv "$exclude.celari-guard-test" "$exclude"
+  git -C "$ROOT" update-index --no-skip-worktree engine/zcash_client_memory/UPSTREAM.md 2>/dev/null || true
   rustup override unset --path "$ROOT/.webzjs/crates/webzjs-wallet" >/dev/null 2>&1 || true
   rm -f "$ROOT/.cargo/config.toml"
   rmdir "$ROOT/.cargo" 2>/dev/null || true
@@ -182,6 +189,21 @@ else
     failures=$((failures + 1))
   fi
 fi
+
+# Files outside what is committed, hidden from a plain `git status` (review round 7,
+# DRIFT-2): cargo builds engine/ through a symlink to the working tree.
+: > "$stray"
+run untracked-engine-file refuse
+run untracked-hidden-by-config refuse GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=status.showUntrackedFiles GIT_CONFIG_VALUE_0=no
+mkdir -p "$(dirname "$exclude")"
+[ ! -f "$exclude" ] || cp "$exclude" "$exclude.celari-guard-test"
+echo 'engine/zcash_client_memory/celari-guard-test.rs' >> "$exclude"
+run untracked-hidden-by-exclude refuse
+if [ -f "$exclude.celari-guard-test" ]; then mv "$exclude.celari-guard-test" "$exclude"; else rm -f "$exclude"; fi
+rm -f "$stray"
+git -C "$ROOT" update-index --skip-worktree engine/zcash_client_memory/UPSTREAM.md
+run skip-worktree refuse
+git -C "$ROOT" update-index --no-skip-worktree engine/zcash_client_memory/UPSTREAM.md
 
 run baseline-again build
 echo "$failures failed"

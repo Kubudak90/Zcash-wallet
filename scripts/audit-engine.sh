@@ -26,10 +26,15 @@ channel="$(sed -n 's/^channel *= *"\(.*\)"/\1/p' "$SRC/rust-toolchain.toml")"
 rustup toolchain install "$channel" --profile minimal
 
 tools="$SRC/target/celari-tools/cargo-deny-$CARGO_DENY_VERSION"
-if [ "$("$tools/bin/cargo-deny" --version 2>/dev/null || true)" != "cargo-deny $CARGO_DENY_VERSION" ]; then
+# A cached copy is reused only while it is the file installed here (its SHA-256, recorded
+# then, checked before it runs): a stale binary printing the right version could report
+# "advisories ok" without checking anything (review round 7, DRIFT-4).
+if ! (cd "$tools" 2>/dev/null && sha256sum --check --status --strict installed.sha256 2>/dev/null) ||
+  [ "$("$tools/bin/cargo-deny" --version 2>/dev/null || true)" != "cargo-deny $CARGO_DENY_VERSION" ]; then
   echo "Installing cargo-deny $CARGO_DENY_VERSION into $tools"
   build="$SRC/target/celari-tools/cargo-deny-build"
   (cd "$SRC" && CARGO_TARGET_DIR="$build" cargo "+$channel" install --quiet --locked --force --root "$tools" cargo-deny --version "$CARGO_DENY_VERSION")
+  (cd "$tools" && sha256sum bin/cargo-deny > installed.sha256)
   rm -rf "$build"
 fi
 echo "$("$tools/bin/cargo-deny" --version), advisory database: $(grep -o 'https://[^"]*' "$CONFIG" | head -n 1)"

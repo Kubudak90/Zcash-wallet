@@ -2,7 +2,14 @@
 # Native (host) tests of the wasm engine, with the dependency versions this
 # repository pins (cargo --locked).
 #
-#   scripts/test-engine-native.sh [backend|glue] [cargo test args...] [-- libtest args]
+#   scripts/test-engine-native.sh [--dirty] [backend|glue] [cargo test args...] [-- libtest args]
+#
+# Both modes test only what ships (review round 7, DRIFT-3): they refuse uncommitted,
+# untracked or index-hidden files in engine/ or patches/webzjs, as scripts/build-webzjs.sh
+# does (glue compiles ../engine too, through .webzjs/celari-engine), and glue mode refuses a
+# .webzjs/ that is not the tree scripts/build-webzjs.sh prepared from the committed patches
+# (edited since, or prepared before the patches changed). --dirty, for work in progress,
+# skips both checks and says so on the result line: those results are not what ships.
 #
 #   backend (default)  engine/zcash_client_memory's own suite: zcash_client_backend's
 #                      backend-independent tests run against it, the PCZT tests, and the
@@ -54,6 +61,11 @@ lock_entries() {
   ' "$1" | tr -d '"' | LC_ALL=C sort -u
 }
 
+dirty_ok=0
+if [ "${1:-}" = --dirty ]; then
+  dirty_ok=1
+  shift
+fi
 mode=backend
 case "${1:-}" in
   backend | glue) mode="$1"; shift ;;
@@ -72,6 +84,23 @@ esac
 
 rustup toolchain install "$channel" --profile minimal >/dev/null
 
+# The build's own check (scripts/build-webzjs.sh): git configuration, ignore files and index
+# flags hide nothing.
+dirty="$(
+  git -C "$ROOT" status --porcelain --untracked-files=all -- patches/webzjs engine
+  git -C "$ROOT" ls-files --others --directory -- patches/webzjs engine | grep -v -E '^engine/(.+/)?target/$' || true
+  git -C "$ROOT" ls-files -v -- patches/webzjs engine | grep -v '^H ' || true
+)"
+dirty_note=""
+if [ "$dirty_ok" = 1 ]; then
+  dirty_note=" (DIRTY: --dirty, uncommitted working tree, not what ships)"
+elif [ -n "$dirty" ]; then
+  echo "error: uncommitted, untracked or index-hidden files in patches/webzjs or engine (the build would refuse them);" \
+    "commit them, or pass --dirty for work in progress:" >&2
+  echo "$dirty" >&2
+  exit 1
+fi
+
 if [ "$mode" = glue ]; then
   [ -f "$ROOT/.webzjs/crates/webzjs-wallet/Cargo.toml" ] || {
     echo "error: no patched WebZjs in .webzjs/; run scripts/build-webzjs.sh first" >&2
@@ -81,8 +110,20 @@ if [ "$mode" = glue ]; then
     echo "error: .webzjs/Cargo.lock is not engine/webzjs.Cargo.lock; run scripts/build-webzjs.sh again" >&2
     exit 1
   }
+  if [ "$dirty_ok" != 1 ]; then
+    stamp="$(cat "$ROOT/.webzjs/target/celari-prepared" 2>/dev/null || true)"
+    stamp_index="$(mktemp -u)"
+    now="$(GIT_INDEX_FILE="$stamp_index" git -C "$ROOT/.webzjs" add -A &&
+      echo "$(GIT_INDEX_FILE="$stamp_index" git -C "$ROOT/.webzjs" write-tree) $(git -C "$ROOT" rev-parse HEAD:patches/webzjs)")"
+    rm -f "$stamp_index"
+    if [ -z "$stamp" ] || [ "$stamp" != "$now" ]; then
+      echo "error: .webzjs/ is not the committed patches (edited after scripts/build-webzjs.sh, or the patches" \
+        "changed since); run scripts/build-webzjs.sh again, or pass --dirty for work in progress" >&2
+      exit 1
+    fi
+  fi
   cd "$ROOT/.webzjs"
-  echo "glue tests: $(rustc --version), target $CARGO_TARGET_DIR"
+  echo "glue tests$dirty_note: $(rustc --version), target $CARGO_TARGET_DIR"
   exec cargo "+$channel" "${profile[@]}" test --locked -p webzjs-wallet --no-default-features --lib "$@"
 fi
 
@@ -116,5 +157,5 @@ fi
 echo "$(wc -l <<<"$compiled") crates compiled, all at the shipped version and checksum except the test-only ${test_only%, }"
 
 cd "$ENGINE"
-echo "backend tests (features: $features): $(rustc "+$channel" --version), target $CARGO_TARGET_DIR"
+echo "backend tests$dirty_note (features: $features): $(rustc "+$channel" --version), target $CARGO_TARGET_DIR"
 exec cargo "+$channel" "${profile[@]}" test --locked --lib --features "$features" "$@"
