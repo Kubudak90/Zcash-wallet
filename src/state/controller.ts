@@ -71,6 +71,23 @@ const HISTORY_LIMIT = 100;
  * WebZjs hands one out only between sync passes, and a catch-up pass lasts minutes.
  */
 const RECEIVE_WAIT_MS = 1_500;
+/**
+ * A soft lock reloads after this long at the latest, even while its pass has not ended: a
+ * download the server holds open never ends on its own, and the lock screen must not keep the
+ * key in memory for ever (review round 7, VAULT-3). At most the unsaved part of one pass is lost.
+ */
+const SOFT_LOCK_MAX_MS = 15 * 60_000;
+/**
+ * A lock asked for during a spend waits for the spend at most this long (review round 7,
+ * SPEND-4): a spend held up by a pass or a request that never ends must not keep the wallet
+ * unlocked for ever. Before 'broadcasting' nothing has left the wallet, so the reload loses
+ * nothing; during it the stored transaction is saved first (see spendLockExpired).
+ */
+const SPEND_LOCK_MAX_MS = 5 * 60_000;
+/** How long spendLockExpired waits for the save of a transaction that is being broadcast. */
+const SPEND_LOCK_SAVE_MS = 30_000;
+/** How long the sync loop waits for the network tip before and after a pass. */
+const TIP_TIMEOUT_MS = 60_000;
 
 /** The shielded address one opening of the Receive screen shows. */
 export interface ReceiveAddress {
@@ -142,8 +159,14 @@ export class WalletController {
   private listeners = new Set<() => void>();
   private syncTimer: ReturnType<typeof setTimeout> | null = null;
   private lockAfterSpend = false;
+  /** The stage of the running spend; null before its first stage and when none runs. */
+  private spendStage: SendStage | null = null;
+  /** Bounds a lock deferred for a spend (SPEND_LOCK_MAX_MS). */
+  private spendLockTimer: ReturnType<typeof setTimeout> | null = null;
   /** Soft-locked: the page reloads once the running pass is saved (see lock()). */
   private lockAfterPass = false;
+  /** Bounds a soft lock (SOFT_LOCK_MAX_MS). */
+  private softLockTimer: ReturnType<typeof setTimeout> | null = null;
   /** A password is being checked during a soft lock; the reload waits for it. */
   private unlocking = false;
   private syncing = false;
@@ -380,6 +403,8 @@ export class WalletController {
       this.unlocking = false;
     }
     this.lockAfterPass = false;
+    if (this.softLockTimer) clearTimeout(this.softLockTimer);
+    this.softLockTimer = null;
     this.set({ phase: 'ready', softLocked: false });
     // A pass that ended during the attempt did not schedule the next one.
     if (!this.syncing) this.kickSync();
@@ -544,9 +569,11 @@ export class WalletController {
   }
 
   lock(): void {
-    // Reloading now would kill a payment half-way through; lock once it settles.
+    // Reloading now would kill a payment half-way through; lock once it settles,
+    // or after SPEND_LOCK_MAX_MS if it does not.
     if (this.state.spending) {
       this.lockAfterSpend = true;
+      this.spendLockTimer ??= setTimeout(() => void this.spendLockExpired(), SPEND_LOCK_MAX_MS);
       return;
     }
     this.lockAfterSpend = false;
@@ -554,13 +581,46 @@ export class WalletController {
     // saved, so reloading now would throw away a restore that may have run
     // for hours. Soft lock instead: the lock screen shows at once (nothing
     // else is rendered, revealSecret refuses, so no spend can start), the
-    // pass goes on, and the page reloads as soon as the pass is saved.
-    // Unlocking meanwhile cancels the reload.
+    // pass goes on, and the page reloads as soon as the pass is saved, when
+    // it stalls, or after SOFT_LOCK_MAX_MS. Unlocking meanwhile cancels the reload.
     if (this.syncing && this.state.sync.catchUp) {
       this.lockAfterPass = true;
       this.set({ phase: 'locked', softLocked: true });
+      this.softLockTimer ??= setTimeout(() => this.softLockExpired(), SOFT_LOCK_MAX_MS);
       return;
     }
+    this.reloadLocked();
+  }
+
+  /** The soft lock's time is up (SOFT_LOCK_MAX_MS): the pass is given up and the page reloads. */
+  private softLockExpired(): void {
+    this.softLockTimer = null;
+    if (!this.lockAfterPass) return;
+    // A password check under way decides first. If it fails while the pass still hangs,
+    // unlockSoft does not reload (the pass would), so this tries again.
+    if (this.unlocking) {
+      this.softLockTimer = setTimeout(() => this.softLockExpired(), 1_000);
+      return;
+    }
+    this.reloadLocked();
+  }
+
+  /**
+   * A lock deferred for a spend waited SPEND_LOCK_MAX_MS: the spend hangs. Before 'broadcasting'
+   * nothing has been stored or sent, so the page reloads at once. During it, WebZjs has stored
+   * the transaction and it may be out, so it is saved first (the save is bounded too: it waits
+   * for the database like everything else).
+   */
+  private async spendLockExpired(): Promise<void> {
+    this.spendLockTimer = null;
+    if (!this.state.spending || !this.lockAfterSpend) return;
+    if (this.spendStage === 'broadcasting') {
+      await Promise.race([this.persist().catch(() => false), sleep(SPEND_LOCK_SAVE_MS)]);
+      // Settled meanwhile: the spend's own end locks.
+      if (!this.state.spending) return;
+    }
+    console.warn(`a spend did not settle within ${SPEND_LOCK_MAX_MS / 60_000} minutes at '${this.spendStage}'; locking`);
+    window.removeEventListener('beforeunload', confirmLeave);
     this.reloadLocked();
   }
 
@@ -621,6 +681,14 @@ export class WalletController {
 
   private async syncLoop(): Promise<void> {
     if (this.state.phase !== 'ready' || this.syncing || this.stopped) return;
+    // No pass starts during a spend (review round 7, SPEND-4): it would hold the database
+    // between the spend storing its transaction, the broadcast and the save after it, and
+    // a pass that hangs would hold the spend up with it. The spend's end starts the next one.
+    if (this.state.spending) {
+      if (this.syncTimer) clearTimeout(this.syncTimer);
+      this.syncTimer = setTimeout(() => void this.syncLoop(), SYNC_RETRY_MS);
+      return;
+    }
     this.syncing = true;
     void this.checkNetwork();
     const tipBefore = await this.readTip();
@@ -631,9 +699,10 @@ export class WalletController {
     // Engines that can report progress mid-pass move the bar; WebZjs answers
     // only when the pass ends, so at most one summary call waits at a time.
     const poll = setInterval(() => void this.refreshSummary(), PROGRESS_POLL_MS);
-    // WebZjs's pass counters answer at once, so its bar moves too. Only a
-    // catch-up pass shows a bar, so steady-state passes are not watched.
-    const pass = this.eng.syncProgress && this.state.sync.catchUp ? this.watchPass() : null;
+    // WebZjs's pass counters answer at once, so its bar moves too. Only a catch-up pass
+    // shows a bar, but every pass is watched for a stall (review round 7, SYNC-5): a
+    // steady-state pass the server holds up would otherwise freeze the balance unseen.
+    const pass = this.eng.syncProgress ? this.watchPass() : null;
     const scannedBefore = this.state.summary?.scannedHeight;
     let delay = SYNC_INTERVAL_MS;
     try {
@@ -702,8 +771,14 @@ export class WalletController {
    */
   private async readTip(): Promise<number | null> {
     try {
+      // Bounded (the engine's requests have no timeout): a tip request the server holds open
+      // would otherwise keep the loop from ever starting the pass that flags the stall.
+      const height = await Promise.race([
+        this.eng.latestHeight(),
+        sleep(TIP_TIMEOUT_MS).then(() => Promise.reject(new Error('no answer from the server for the chain tip'))),
+      ]);
       // Servers behind one lightwalletd URL can be a block apart; never step back.
-      return Math.max(await this.eng.latestHeight(), this.state.sync.networkTip ?? 0);
+      return Math.max(height, this.state.sync.networkTip ?? 0);
     } catch {
       return null;
     }
@@ -736,13 +811,14 @@ export class WalletController {
   /**
    * Polls the engine's counters for the pass that is starting, until stop().
    * A reading from after the pass ended (running: false) is ignored, so the
-   * bar only moves on counts of the running pass.
+   * bar only moves on counts of the running pass. The counts are shown only
+   * for a catch-up pass; a stall is flagged for every pass.
    */
   private watchPass(): { stop(): void } {
     let stopped = false;
     let inFlight = false;
-    // When the pass's counters last moved: a catch-up pass whose counters stand still for
-    // STALL_MS is flagged as stalled (SyncInfo.stalled), so the app can say so.
+    // When the pass's counters last moved: a pass whose counters stand still for STALL_MS
+    // is flagged as stalled (SyncInfo.stalled), so the app can say so.
     let last = '';
     let movedAt = Date.now();
     const read = async () => {
@@ -764,7 +840,14 @@ export class WalletController {
           movedAt = now;
         }
         const stalled = now - movedAt >= STALL_MS;
-        this.setSync({ progress: { visited: p.visited, scanned: p.scanned }, stalled, ...(queue && { queue }) });
+        // Soft-locked behind a pass that stalled: it may never end, and the lock screen must
+        // not keep the key in memory meanwhile (VAULT-3). Its unsaved part is given up.
+        if (stalled && this.lockAfterPass && !this.unlocking) {
+          this.reloadLocked();
+          return;
+        }
+        const progress = this.state.sync.catchUp ? { visited: p.visited, scanned: p.scanned } : null;
+        this.setSync({ progress, stalled, ...(queue && { queue }) });
       } catch (e) {
         console.warn('sync progress failed', e);
       } finally {
@@ -919,6 +1002,7 @@ export class WalletController {
   ): Promise<void> {
     if (this.state.spending) throw new Error('another payment is still in progress');
     this.set({ spending: true });
+    this.spendStage = null;
     window.addEventListener('beforeunload', confirmLeave);
     let broadcasting = false;
     try {
@@ -927,6 +1011,7 @@ export class WalletController {
         await this.requireSupportedNetwork();
         await run(
           (s) => {
+            this.spendStage = s;
             if (s === 'broadcasting') broadcasting = true;
             onStage(s);
           },
@@ -945,15 +1030,19 @@ export class WalletController {
       if (failure) throw failure.cause;
     } finally {
       window.removeEventListener('beforeunload', confirmLeave);
+      if (this.spendLockTimer) clearTimeout(this.spendLockTimer);
+      this.spendLockTimer = null;
+      this.spendStage = null;
       this.set({ spending: false });
+      // No pass ran during the spend (syncLoop): the next one starts now.
       if (this.lockAfterSpend) this.lock();
+      else this.kickSync();
     }
   }
 
   private async afterSpend() {
     await this.refresh();
     await this.persist();
-    this.kickSync();
   }
 
   private requireAccount(): number {
