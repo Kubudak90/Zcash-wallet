@@ -4,19 +4,12 @@ Record of the review started on 2026-10-30 (branch `claude/core-engine-review`).
 
 Progress: 6/6 lens reviews; 31 findings (0 critical, 8 major, 19 minor, 4 polish); 27/27 non-polish findings verified, 27 confirmed real, 0 refuted. Fixes: all 31 handled (fixed, or partly fixed with the rest deferred to after NU7 for a stated reason), including the five the verifiers marked for NU7 (PLAT-1, ES-1, ES-2, SYNC-1, DRIFT-1).
 
-## State and how to continue
+## State
 
-- `claude/web-wallet-ui` (pushed, CI green on 1762dca): the "Obsidian & Gold" web UI, English first, new logo. Not merged to `main`; the owner decides.
-- `claude/core-engine-review` (this branch, on top of the UI branch): this review and its fixes.
-- Done, in order:
-  1. Verification of every non-polish finding (27/27 real).
-  2. TypeScript and CI fixes, with regression tests; typecheck, unit, e2e and build.
-  3. Engine fixes that must land before NU7 (SYNC-1, SYNC-2, in `engine/zcash_client_memory`), with `scripts/build-webzjs.sh`, a new `scripts/webzjs-vendor.sha256`, `scripts/test-engine-native.sh` (both modes), `scripts/audit-engine.sh`, `scripts/gen-licenses.sh --check` and `npm run test:e2e:real`.
-  4. Every finding recorded as fixed or deferred, and why, in `docs/engine-port.md` (Review round 7).
-  5. An independent review of the diff (f3ed979..d903579): six more findings fixed in 7eb52d8, one left as it is with its reason (docs/engine-port.md).
-  6. Branch pushed; CI run 41206285784 (workflow_dispatch, `full_rebuild=true`, 7eb52d8): all three jobs green; the from-source build matched the committed `scripts/webzjs-vendor.sha256`.
-- Left to the owner: merging `claude/web-wallet-ui` and this branch into `main`; the real-funds checklist in docs/engine-port.md (before and after NU7); the same CSP header in the Vercel deployment's `vercel.json`, if wanted.
-- Do not touch Vercel, the `vercel-preview` branch or the `celari-preview` project: the owner still has funds in that deployment.
+- The review, its fixes and the "Obsidian & Gold" web UI it was made on are merged into `main` (2026-10-31), and their branches are deleted; `main` is the repository's only branch.
+- Done: verification of every non-polish finding (27/27 real); TypeScript, CI and engine fixes with regression tests; a new `scripts/webzjs-vendor.sha256` for the changed engine, reproduced by CI from source (run 41206285784); every finding recorded as fixed or deferred, and why, in `docs/engine-port.md` (Review round 7); an independent review of the diff, whose six findings were fixed.
+- Released on 2026-10-31: the wallet at https://app.celariwallet.com (CI's from-source build of `main`, deploy/README.md), a new landing page at https://celariwallet.com (`landing/`).
+- Left to the owner: the real-funds checklist in docs/engine-port.md (before and after NU7); restoring the wallets of the earlier preview deployment on the new address.
 
 ## Lens: vault
 

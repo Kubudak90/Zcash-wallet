@@ -15,12 +15,21 @@ of a from-source run on `main`, which CI builds only after `vendor/` matched
    files are not in that commit's hash list, then commits the dist with
    `deploy/vercel.json` and a README to the branch `deploy/app`.
 4. `git push origin deploy/app`, then deploy that commit of `deploy/app` to
-   production in the Vercel project of app.celariwallet.com.
+   production in the Vercel project `celari-app` (app.celariwallet.com).
+5. Once it is live and checked (headers, the wasm hashes it serves, `npm run
+   test:e2e:real` against it), delete the branch: `git push origin --delete
+   deploy/app` and `git branch -D deploy/app`. Vercel keeps every deployment it
+   built, so rollbacks do not need it, and the repository keeps `main` as its
+   only branch.
 
 `vercel.json` sends COOP/COEP (WebZjs needs a cross-origin isolated page), the
 same CSP as `public/_headers` with `frame-ancestors 'none'`
 (tests/unit/vite-security.test.ts keeps them equal), HSTS, and caches the
 content-hashed `assets/` for a year.
+
+The landing page (`celari-site`, root `landing/`) is deployed the same way, from a
+commit of `main`, with no build; neither Vercel project is linked to Git, so a
+push deploys nothing by itself.
 
 A wallet lives in the browser storage of its origin. Wallets made on an earlier
 address (such as the celari-preview deployment) do not move to

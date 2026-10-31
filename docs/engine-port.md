@@ -320,7 +320,7 @@ noted.
 | SPEND-3, ES-4 · minor: the fee shown was a fixed estimate; Max failed with three or more notes | Partly. The fee and total read "at least"; when the engine refuses for funds, Send offers the amount that fits (spendable less the fee the engine asked), which the user reviews again. The exact fee before signing and an engine Max are deferred, below. |
 | SPEND-4 · minor: a spend stuck behind a hung pass kept auto-lock off | Fixed in the app: a lock deferred for a spend waits at most 5 minutes (before the broadcast nothing has left the wallet; during it, the stored transaction is saved first), and no pass starts during a spend. |
 | PLAT-2 · minor: the CSP was added by a string replace that could silently miss | Fixed: the build fails when the `<meta charset>` it follows is not there (`vite.security.ts`). |
-| PLAT-3 · minor: no CSP header, so the engine's workers ran without one | Fixed: `public/_headers` and `vite preview` send the same policy plus `frame-ancestors 'none'`; a unit test keeps the two equal, the mainnet smoke test checks both. HSTS waits for the custom domain (every host in use is HSTS-preloaded). The deployment that holds the owner's funds (Vercel) reads `vercel.json` on its own branch, which this round did not touch: the same header there is the owner's call. |
+| PLAT-3 · minor: no CSP header, so the engine's workers ran without one | Fixed: `public/_headers` and `vite preview` send the same policy plus `frame-ancestors 'none'`; a unit test keeps the two equal, the mainnet smoke test checks both. Since the release on app.celariwallet.com (2026-10-31) the wallet's Vercel deployment sends the same policy and HSTS (`max-age=63072000`, no `preload` yet) from `deploy/vercel.json`, and the landing page on celariwallet.com sends HSTS too. |
 | PLAT-4 · minor: switching servers took one click and the UI never said what a server can fake | Fixed: Settings, the "server behind" banner and the README say it; a server other than the default is saved after a second confirmation. |
 | PLAT-5 · polish: vite 6.4.4 had an advisory; CI never checked npm | Fixed: vite 6.4.5; CI fails on advisories in shipped packages and warns on dev tools. |
 | ES-1 · major: a stored send whose broadcast failed was never sent again; a canonical crossing stayed locked for weeks | Fixed in the app, no wasm change: after each saved pass the wallet's own unmined sends are sent again, byte for byte (`send_authorized_transactions`), at most every 5 minutes, errors logged only. "May have reached the network" now says not to pay again. The engine-side resend and a retry inside `pczt_send` are deferred, below. |
@@ -464,9 +464,8 @@ wallets that owned nothing.
 3. **Long restores through the app**: a 2025-01 restore through the app with
    renderer memory sampled (engine alone: 1,034 MiB peak), a spam-era one, a phone.
 4. **CI**: done for the round-6 engine (run 40952847695, push to main at 2acc747)
-   and for review round 7's engine (run 41206285784, `full_rebuild` on
-   `claude/core-engine-review` at 7eb52d8): each built from source and matched the
-   list.
+   and for review round 7's engine (run 41206285784, `full_rebuild` at 7eb52d8,
+   and every push to main since): each built from source and matched the list.
 
 ## Reproducible vendor/
 
