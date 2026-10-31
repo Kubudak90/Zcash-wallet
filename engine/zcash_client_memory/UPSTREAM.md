@@ -30,6 +30,13 @@ WebZjs uses.
   its own note commitment tree and nullifier set).
 - `Cargo.toml` names its dependencies directly: the crate is a path dependency
   of the WebZjs workspace, not a member of it.
+- Two deliberate departures from zcash_client_sqlite 0.23's `update_chain_tip`
+  (review round 7, SYNC-1 and SYNC-2; both worth reporting upstream, which has
+  the same code): a tip below the wallet's chain tip, but not below a scanned
+  block, drops the scan queue above it, so one inflated `GetLatestBlock` answer
+  no longer stays the wallet's tip for good; and a tip below the birthday of a
+  wallet that has scanned nothing queues nothing instead of panicking in
+  `ScanRange::from_parts`. `Cargo.toml` sets `build = false` (DRIFT-2).
 - Code adapted from upstream zcash_client_backend or zcash_client_sqlite
   (MIT OR Apache-2.0, Electric Coin Company) says so in a comment naming the
   source file and version.

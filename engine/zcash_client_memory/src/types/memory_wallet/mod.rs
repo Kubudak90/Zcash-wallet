@@ -385,4 +385,61 @@ mod tests {
         assert!(copy.scan_queue_observer.0.is_none());
         assert_eq!(copy.scan_queue_size(), last);
     }
+
+    /// A wallet with an account born at `birthday`, nothing scanned yet.
+    fn new_wallet(birthday: u32) -> MemoryWalletDb<Network> {
+        let mut db = MemoryWalletDb::new(Network::MainNetwork, 100);
+        let birthday = AccountBirthday::from_parts(
+            ChainState::empty(BlockHeight::from_u32(birthday - 1), BlockHash([0; 32])),
+            None,
+        );
+        db.create_account("a", &SecretVec::new(vec![7; 32]), &birthday, None).unwrap();
+        db
+    }
+
+    /// Review round 7, SYNC-2: a tip below the birthday of a wallet that has scanned nothing
+    /// (a server behind the one the birthday came from) leaves the queue as it is instead of
+    /// panicking, and a later tip queues from the birthday as usual.
+    #[test]
+    fn a_tip_below_the_birthday_queues_nothing() {
+        let h = BlockHeight::from_u32;
+        let b = 3_535_990;
+        let mut db = new_wallet(b);
+        let before = db.scan_queue_size();
+        for lag in [2, 3, 50] {
+            db.update_chain_tip(h(b - lag)).unwrap();
+            assert_eq!(db.scan_queue_size(), before, "tip {lag} below the birthday");
+        }
+        db.update_chain_tip(h(b + 10)).unwrap();
+        assert_eq!(db.scan_queue_size(), ScanQueueSize { unscanned_blocks: 11, chain_tip: Some(h(b + 10)) });
+        let suggested: Vec<_> = db.suggest_scan_ranges().unwrap().into_iter().map(|r| r.block_range().clone()).collect();
+        assert_eq!(suggested, vec![h(b)..h(b + 11)]);
+    }
+
+    /// Review round 7, SYNC-1: one inflated tip (a server that lies or is broken) no longer
+    /// stays the wallet's chain tip: the next lower tip, as long as it is not below a scanned
+    /// block, drops the queue above it, also in a wallet saved and reopened with the inflated tip.
+    #[test]
+    fn an_inflated_tip_is_dropped_by_the_next_lower_one() {
+        let h = BlockHeight::from_u32;
+        let b = 3_535_990;
+        let mut db = new_wallet(b);
+        db.update_chain_tip(h(499_000_000)).unwrap();
+        assert_eq!(db.chain_tip_height(), Some(h(499_000_000)));
+
+        let mut bytes = vec![];
+        db.encode(&mut bytes).unwrap();
+        let mut db = MemoryWalletDb::decode_new(&bytes, Network::MainNetwork, 100).unwrap();
+        assert_eq!(db.chain_tip_height(), Some(h(499_000_000)), "saved with the inflated tip");
+
+        db.update_chain_tip(h(b + 20)).unwrap();
+        assert_eq!(db.chain_tip_height(), Some(h(b + 20)));
+        assert_eq!(db.scan_queue_size(), ScanQueueSize { unscanned_blocks: 21, chain_tip: Some(h(b + 20)) });
+        let suggested: Vec<_> = db.suggest_scan_ranges().unwrap().into_iter().map(|r| r.block_range().clone()).collect();
+        assert_eq!(suggested, vec![h(b)..h(b + 21)]);
+        // Servers behind one URL can be a block apart: a tip one lower and one higher again.
+        db.update_chain_tip(h(b + 19)).unwrap();
+        db.update_chain_tip(h(b + 21)).unwrap();
+        assert_eq!(db.scan_queue_size(), ScanQueueSize { unscanned_blocks: 22, chain_tip: Some(h(b + 21)) });
+    }
 }

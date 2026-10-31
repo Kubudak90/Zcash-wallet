@@ -363,6 +363,24 @@ impl<P: consensus::Parameters> MemoryWalletDb<P> {
 
         let chain_end = new_tip + 1;
 
+        // Celari (review round 7, SYNC-2): a server behind the one the birthday came from, before
+        // any block is scanned. The tip is below the birthday, so there is nothing to queue, and
+        // `ScanRange::from_parts(birthday..chain_end)` below would panic (a trap in the wasm).
+        // The next pass tries again with a newer tip. zcash_client_sqlite 0.23 has the same panic.
+        if max_scanned.is_none() && wallet_birthday.is_some_and(|b| b > chain_end) {
+            return Ok(());
+        }
+
+        // Celari (review round 7, SYNC-1): the tip went down, but not below any scanned block
+        // (max_scanned <= new_tip), so nothing above new_tip is scanned. Drop the queue above it;
+        // otherwise one inflated GetLatestBlock answer stays the wallet's chain tip for good (the
+        // queue only ever grew, as in zcash_client_sqlite 0.23), every later pass asks for blocks
+        // the chain does not have, and the notes of the last shards stay unspendable. With this,
+        // a wallet saved with such a tip heals on its first pass against an honest server.
+        if self.chain_tip_height().is_some_and(|t| t > new_tip) {
+            self.scan_queue.trim_to(new_tip);
+        }
+
         // The least of the pools' last subtree end heights, so that the last incomplete
         // shard of every pool (Ironwood included) is covered.
         let min_shard_tip = Self::shielded_pools()

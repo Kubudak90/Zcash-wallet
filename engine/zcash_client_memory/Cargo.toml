@@ -6,6 +6,10 @@ version = "0.0.0"
 license = "MIT OR Apache-2.0"
 edition = "2021"
 publish = false
+# No build script, and none picked up by accident (review round 7, DRIFT-2): cargo would
+# otherwise run any build.rs left in this directory, and engine/ reaches the WebZjs build
+# through a symlink to the working tree.
+build = false
 
 # This crate is not a member of the WebZjs workspace (it lives next to it, in
 # Celari's engine/ directory), so every dependency is spelled out here instead
