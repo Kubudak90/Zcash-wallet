@@ -12,5 +12,5 @@ ab01d522953252ac38bfebedf17a2049db7aca39804b860e11ecc8b67156235b  ./webzjs-walle
 8734a73a2e907697cafea5b69ab331c494de999f19497aeed5b5dca4cb36fa81  ./webzjs-wallet/snippets/wasm_thread-8ee53d0673203880/src/wasm32/js/web_worker_module.bundler.js
 7069b5d2682f9d46dc65c408b496916248f5c405722e181b723d51d57eafee5a  ./webzjs-wallet/webzjs_wallet.d.ts
 cd55a4f115c99d5488341af412da17b1db124789f9c17305e7c6a88d4c4d473c  ./webzjs-wallet/webzjs_wallet.js
-c8fa165364448c4f9502d88ea577badeb8a3c1b69c2bb8b229712b9db95f82cf  ./webzjs-wallet/webzjs_wallet_bg.wasm
+de38cd03add21d1f68825a55010edc7740ad48c855edff018041f2a734edddf3  ./webzjs-wallet/webzjs_wallet_bg.wasm
 0819abf83da8848c94f8b799cbeb0d67359d93d69239e9d26bc11f70922f080e  ./webzjs-wallet/webzjs_wallet_bg.wasm.d.ts
