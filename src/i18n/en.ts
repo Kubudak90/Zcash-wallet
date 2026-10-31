@@ -147,7 +147,7 @@ export const en = {
     'The Zcash network has moved to rules this version of Celari does not support yet: {upgrade}. Sending and shielding are disabled until the update, because the network would reject anything this version builds. Your keys and funds are safe.',
   'network.unreachable': 'Celari could not check the network version. Sending and shielding stay disabled until it can.',
   'network.serverBehind':
-    'The server Celari uses is behind the Zcash network. Choose another server in Settings. Sending and shielding stay disabled until then.',
+    'The server Celari uses is behind the Zcash network. Choose another server you trust in Settings. Sending and shielding stay disabled until then.',
   'network.upcoming':
     'At block {height} the network switches to {upgrade}, which this version of Celari does not support. From then on, sending and shielding stop until Celari is updated.',
 
@@ -376,7 +376,9 @@ export const en = {
   'settings.language': 'Language',
   'settings.server': 'Server (lightwalletd gRPC-web proxy)',
   'settings.serverHelp':
-    'The server can see your IP address, your transparent addresses (checked on every sync) and the transactions you broadcast. Unless you turn off “Fetch full transactions for History” under Privacy, Celari also asks it for your own transactions in full (for memos, and for fees and recipients after a restore), so it can tell which transactions are yours. Either way it asks about each payment you sent until it is confirmed. It cannot see your shielded balance or who sends you shielded payments. You can run your own.',
+    'The server can see your IP address, your transparent addresses (checked on every sync) and the transactions you broadcast. Unless you turn off “Fetch full transactions for History” under Privacy, Celari also asks it for your own transactions in full (for memos, and for fees and recipients after a restore), so it can tell which transactions are yours. Either way it asks about each payment you sent until it is confirmed. It cannot see your shielded balance or who sends you shielded payments. You can run your own. The server also decides which blocks Celari sees: a dishonest server can show payments that never happened, hide real ones, or not pass on what you send. Use only a server you trust, and check a large incoming payment on another server or a block explorer before you rely on it.',
+  'settings.serverTrust':
+    'Celari believes what this server says about the chain: a dishonest server can show payments that never happened, hide real ones, or not pass on what you send. Save it only if you trust it, and check a large incoming payment on another server or a block explorer before you rely on it.',
   'settings.serverShort': 'Server',
   'settings.serverSave': 'Save and restart',
   'settings.serverReset': 'Reset to default',

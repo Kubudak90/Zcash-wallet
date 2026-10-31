@@ -1,7 +1,11 @@
 # Netlify / Cloudflare Pages: WebZjs needs a cross-origin isolated page.
+# The CSP is the one vite.security.ts adds as a <meta>, plus frame-ancestors (HEADER_CSP;
+# tests/unit/vite-security.test.ts keeps them equal). As a header it also covers the engine's
+# workers, which take their policy from their own response, not from the page.
 /*
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Embedder-Policy: require-corp
   Referrer-Policy: no-referrer
   X-Content-Type-Options: nosniff
   X-Frame-Options: DENY
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; connect-src 'self' https:; img-src 'self' data:; style-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'

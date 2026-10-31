@@ -110,6 +110,17 @@ test('settings: reveal recovery phrase and viewing key, then wipe', async ({ pag
   await expect(server).toHaveAccessibleDescription(/valid address starting with https/);
   await page.getByRole('button', { name: 'Reset to default' }).click();
   await expect(server).toHaveAttribute('aria-invalid', 'false');
+  // What a server can fake, in the help and before another server than the default is saved
+  // (review round 7, PLAT-4): the first "Save and restart" only says so.
+  await expect(server).toHaveAccessibleDescription(/a dishonest server can show payments that never happened/);
+  await server.fill('https://other.example');
+  await page.getByRole('button', { name: 'Save and restart' }).click();
+  const trust = page.locator('.notice', { has: page.getByTestId('server-trust') });
+  await expect(trust).toContainText('Celari believes what this server says about the chain');
+  await trust.getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.getByTestId('server-trust')).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
+  await page.getByRole('button', { name: 'Reset to default' }).click();
   await page.getByLabel('Auto-lock').selectOption('30');
   await expect(page.getByLabel('Auto-lock')).toHaveValue('30');
 

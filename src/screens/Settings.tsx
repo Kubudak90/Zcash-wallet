@@ -264,6 +264,9 @@ export function Settings() {
   const { settings, meta } = useWallet();
   const [server, setServer] = useState(settings.serverUrl);
   const serverValid = isHttpsUrl(server);
+  /** A server other than the default was saved once: its trust note waits for a second "Save and restart". */
+  const [serverConfirm, setServerConfirm] = useState(false);
+  const saveServer = () => void controller.saveSettings({ ...settings, serverUrl: server.trim() }, { restart: true });
   const serverId = useId();
   const serverHelpId = useId();
   const serverErrorId = useId();
@@ -420,22 +423,48 @@ export function Settings() {
                   aria-labelledby={serverId}
                   aria-describedby={serverValid ? serverHelpId : `${serverErrorId} ${serverHelpId}`}
                   aria-invalid={!serverValid}
-                  onChange={(e) => setServer(e.target.value)}
+                  onChange={(e) => {
+                    setServer(e.target.value);
+                    setServerConfirm(false);
+                  }}
                 />
-                <button type="button" className="secondary quiet" onClick={() => setServer(DEFAULT_SERVER)}>
+                <button
+                  type="button"
+                  className="secondary quiet"
+                  onClick={() => {
+                    setServer(DEFAULT_SERVER);
+                    setServerConfirm(false);
+                  }}
+                >
                   {t('settings.serverReset')}
                 </button>
                 <button
                   type="button"
                   className="secondary"
-                  disabled={!serverValid || server === settings.serverUrl}
-                  onClick={() =>
-                    void controller.saveSettings({ ...settings, serverUrl: server.trim() }, { restart: true })
-                  }
+                  disabled={!serverValid || server === settings.serverUrl || serverConfirm}
+                  onClick={() => {
+                    // The server decides what Celari believes about the chain (review round 7,
+                    // PLAT-4): another one than the default is saved only after saying so.
+                    if (server.trim() !== DEFAULT_SERVER) setServerConfirm(true);
+                    else saveServer();
+                  }}
                 >
                   {t('settings.serverSave')}
                 </button>
               </div>
+              {serverConfirm && (
+                <Notice tone="warn">
+                  <p data-testid="server-trust">{t('settings.serverTrust')}</p>
+                  <div className="row">
+                    <button type="button" className="secondary" onClick={() => setServerConfirm(false)}>
+                      {t('common.cancel')}
+                    </button>
+                    <button type="button" className="primary" onClick={saveServer}>
+                      {t('settings.serverSave')}
+                    </button>
+                  </div>
+                </Notice>
+              )}
               {!serverValid && (
                 <p id={serverErrorId} className="field-error">
                   {t('settings.serverInvalid')}

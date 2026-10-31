@@ -38,7 +38,13 @@ test('real engine: create a wallet, sync from the tip, lock and unlock', async (
     expect(state, `sync state after ${timeoutMs / 1000}s`).toBe('idle');
   }
 
-  await page.goto('/');
+  const response = await page.goto('/');
+  // The production build carries the CSP as a <meta> (vite.security.ts fails the build
+  // otherwise) and `vite preview` sends it as a header too, as public/_headers does, so the
+  // engine's workers run under it (review round 7, PLAT-2 and PLAT-3).
+  const meta = await page.locator('meta[http-equiv="Content-Security-Policy"]').getAttribute('content');
+  expect(meta).toContain("default-src 'self'");
+  expect(response?.headers()['content-security-policy']).toBe(`${meta}; frame-ancestors 'none'`);
   // Reaching the welcome screen means wasm, the thread pool and the
   // lightwalletd connection all initialised.
   await page.getByRole('button', { name: 'Create a new wallet' }).click({ timeout: 120_000 });
