@@ -88,6 +88,10 @@ const SPEND_LOCK_MAX_MS = 5 * 60_000;
 const SPEND_LOCK_SAVE_MS = 30_000;
 /** How long the sync loop waits for the network tip before and after a pass. */
 const TIP_TIMEOUT_MS = 60_000;
+/** How often a send the wallet stored but the chain has not mined yet is sent again (rebroadcastPending). */
+const REBROADCAST_MS = 5 * 60_000;
+/** How long one resend may take before the loop stops waiting for it (the engine's requests have no timeout). */
+const REBROADCAST_TIMEOUT_MS = 60_000;
 
 /** The shielded address one opening of the Receive screen shows. */
 export interface ReceiveAddress {
@@ -198,6 +202,8 @@ export class WalletController {
   private shownAddress: string | null = null;
   /** One answer per opening of Receive (React may run its effect twice for the same one). */
   private receiveVisits = new WeakMap<object, Promise<ReceiveAddress>>();
+  /** When each unmined send was last sent to the network, by txid (rebroadcastPending). */
+  private sentAt = new Map<string, number>();
   private state: WalletState;
 
   constructor(settings: Settings) {
@@ -734,6 +740,8 @@ export class WalletController {
       if (tip !== null) this.setSync({ networkTip: tip });
       await this.refresh();
       const saved = await this.persist();
+      // Not awaited: resends of unmined sends, between passes, never while one runs.
+      if (saved) void this.rebroadcastPending();
       // After an upgrade's rebuild: the old database goes once a pass that reached the
       // network's tip is saved (the tip read after the pass, so a server that does not
       // answer never counts as reached).
@@ -1039,7 +1047,7 @@ export class WalletController {
       // show it and the saved wallet keep it, before a deferred lock reloads;
       // a failed refresh must not read as a failed send.
       if (!failure || broadcasting) {
-        await this.afterSpend().catch((e) => console.warn('refresh after spend failed', e));
+        await this.afterSpend(!failure).catch((e) => console.warn('refresh after spend failed', e));
       }
       if (failure) throw failure.cause;
     } finally {
@@ -1054,9 +1062,52 @@ export class WalletController {
     }
   }
 
-  private async afterSpend() {
+  private async afterSpend(broadcast: boolean) {
     await this.refresh();
     await this.persist();
+    // Just sent: the next resend of these waits REBROADCAST_MS. A send whose broadcast failed
+    // is not marked, so the first pass after it sends it again.
+    if (broadcast) this.markSent();
+  }
+
+  /** Records the wallet's unmined sends as just sent (see rebroadcastPending). */
+  private markSent(): void {
+    const now = Date.now();
+    for (const tx of this.state.history) {
+      if (tx.status === 'pending' && tx.valueZats < 0n && !this.sentAt.has(tx.txid)) this.sentAt.set(tx.txid, now);
+    }
+  }
+
+  /**
+   * Sends the wallet's own unmined transactions (sends and shieldings: pending, value below 0)
+   * to the network again, each at most every REBROADCAST_MS (review round 7, ES-1). WebZjs
+   * stores a spend before its one broadcast and never sends it again, so after a failed
+   * broadcast, or a node or mempool that dropped it, its notes stayed spent until it expired:
+   * 40 blocks for most sends, weeks for a ZIP 318 canonical crossing from Orchard. Errors (the
+   * node has it already, or can no longer take it) are logged only. Runs after a pass is saved,
+   * never during one; each resend is bounded, as the engine's requests have no timeout.
+   */
+  private async rebroadcastPending(): Promise<void> {
+    const eng = this.engine;
+    if (!eng?.rebroadcast || this.stopped) return;
+    const now = Date.now();
+    const pending = this.state.history.filter((tx) => tx.status === 'pending' && tx.valueZats < 0n);
+    // Mined or expired ones are forgotten.
+    const live = new Set(pending.map((tx) => tx.txid));
+    for (const txid of [...this.sentAt.keys()]) if (!live.has(txid)) this.sentAt.delete(txid);
+    for (const tx of pending) {
+      if (now - (this.sentAt.get(tx.txid) ?? 0) < REBROADCAST_MS) continue;
+      this.sentAt.set(tx.txid, now);
+      try {
+        await Promise.race([
+          eng.rebroadcast(tx.txid),
+          sleep(REBROADCAST_TIMEOUT_MS).then(() => Promise.reject(new Error('no answer from the server'))),
+        ]);
+        console.info(`sent ${tx.txid} again`);
+      } catch (e) {
+        console.info(`sending ${tx.txid} again: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
   }
 
   private requireAccount(): number {

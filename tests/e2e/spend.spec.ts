@@ -31,6 +31,7 @@ type Knobs = {
   failPass?: boolean;
   engineFee?: number;
   refuseSpend?: 'UpgradePending' | 'PcztWrongBranch' | 'PcztExpired';
+  rebroadcasts?: string[];
 };
 
 /** Changes the fake engine's knobs (src/engine/fake.ts) on the running page. */
@@ -155,6 +156,13 @@ test('a balance that does not cover the real fee is explained in ZEC, without th
   await expect(page.getByText(/InsufficientFunds|Zatoshis/)).toHaveCount(0);
   await expect(sendButton(page)).toBeVisible();
 
+  // The amount that fits, offered, never sent without a new review (review round 7, SPEND-3):
+  // the spendable 1.25 less the 0.0002 fee the engine asked for.
+  await page.getByRole('button', { name: 'Send 1.2498 ZEC instead' }).click();
+  await expect(page.getByLabel('Amount (ZEC)')).toHaveValue('1.2498');
+  await expect(page.getByLabel('Recipient address')).toHaveValue(UA);
+  await page.getByRole('button', { name: 'Review' }).click();
+  await expect(page.getByTestId('confirm-amount')).toHaveText('1.2498 ZEC');
   await page.getByRole('button', { name: /Back/ }).click();
   await nav(page, 'Settings');
   await page.getByRole('button', { name: 'Türkçe' }).click();
@@ -421,15 +429,13 @@ test('the form only previews a payment; the confirm step replaces it and shows t
   await page.getByLabel('Amount (ZEC)').fill('0.1');
   await expect(page.getByLabel('Recipient address')).toHaveAccessibleDescription(/Transparent · public/);
   await expect(preview).toContainText('Public payment: the amount and the recipient will be visible on chain.');
-  // ZIP 317 asks more for a transparent output, and more again for TEX: the estimate says so.
-  await expect(preview.locator('.preview-total dd')).toHaveText('~0.10015 ZEC');
-  await page.getByLabel('Recipient address').fill(TEX);
-  await expect(preview.locator('.preview-total dd')).toHaveText('~0.1002 ZEC');
+  // ZIP 317 asks more for a transparent output, and the fee is a lower bound: more notes cost more.
+  await expect(preview.locator('.preview-total dd')).toHaveText('at least 0.10015 ZEC');
   await page.getByLabel('Recipient address').fill(UA);
   await page.getByLabel('Amount (ZEC)').fill('0.25');
   await expect(preview).toContainText('Unified · shielded');
   await expect(preview).toContainText('Shielded payment');
-  await expect(preview.locator('.preview-total dd')).toHaveText('~0.2501 ZEC');
+  await expect(preview.locator('.preview-total dd')).toHaveText('at least 0.2501 ZEC');
   await expect(page.getByLabel('Enter your password to confirm')).toHaveCount(0);
 
   // Armed, nothing about the payment can be edited any more: the form is gone.
@@ -438,7 +444,7 @@ test('the form only previews a payment; the confirm step replaces it and shows t
   await expect(page.getByLabel('Recipient address')).toHaveCount(0);
   await expect(page.getByLabel('Amount (ZEC)')).toHaveCount(0);
   await expect(page.getByText('Nothing is sent until you confirm with your password.')).toBeVisible();
-  await expect(page.locator('.summary-total dd')).toHaveText('~0.2501 ZEC');
+  await expect(page.locator('.summary-total dd')).toHaveText('at least 0.2501 ZEC');
 
   // The whole address on request, in groups of four to read; its text is the address itself.
   const full = page.locator('.summary .address-groups');
@@ -592,4 +598,54 @@ test('the amount checked before signing stays on one line, and the preview insid
     expect(await lines('[data-testid="confirm-amount"]'), `confirm amount at ${width}px`).toEqual([1, 1]);
   }
   await expect(page.getByTestId('confirm-amount')).toHaveText('0.12345678 ZEC');
+});
+
+test('a TEX address is refused on the form, before anything is built (review round 7, SPEND-2)', async ({ page }) => {
+  await createWallet(page);
+  await nav(page, 'Send');
+  await page.getByLabel('Recipient address').fill(TEX);
+  await page.getByLabel('Amount (ZEC)').fill('0.1');
+  // Said as soon as the address is there, and again on Review, which goes no further.
+  await expect(page.getByLabel('Recipient address')).toHaveAccessibleDescription(/cannot pay TEX addresses yet/);
+  await page.getByRole('button', { name: 'Review' }).click();
+  await expect(page.locator('.field-error')).toHaveText(/cannot pay TEX addresses yet.*Nothing is sent/);
+  await expect(page.getByRole('heading', { name: 'Confirm sending' })).toHaveCount(0);
+  // A payment link to a TEX address too.
+  await page.getByLabel('Recipient address').fill(`zcash:${TEX}?amount=0.1`);
+  await page.getByRole('button', { name: 'Review' }).click();
+  await expect(page.getByRole('heading', { name: 'Confirm sending' })).toHaveCount(0);
+});
+
+test('a send whose broadcast failed is sent again after the next pass, then every 5 minutes (review round 7, ES-1)', async ({
+  page,
+}) => {
+  await page.clock.install();
+  await createWallet(page);
+  const rebroadcasts = () =>
+    page.evaluate(() => (globalThis as { __fakeEngine?: Knobs }).__fakeEngine?.rebroadcasts ?? []);
+
+  // A send that went out: not sent again at once.
+  await nav(page, 'Send');
+  await review(page, UA, '0.1');
+  await sendButton(page).click();
+  await expect(page.getByRole('heading', { name: '0.10 ZEC sent' })).toBeVisible({ timeout: 10_000 });
+  await page.getByRole('button', { name: 'New payment' }).click();
+
+  // One whose broadcast failed: the wallet stored it, and the pass after the spend sends it again.
+  await page.getByLabel('Recipient address').fill(UA);
+  await page.getByLabel('Amount (ZEC)').fill('0.0666');
+  await page.getByRole('button', { name: 'Review' }).click();
+  await page.getByLabel('Enter your password to confirm').fill(PASSWORD);
+  await sendButton(page).click();
+  await expect(page.getByText('Celari sends it again every few minutes until it is mined, so do not pay again')).toBeVisible({
+    timeout: 10_000,
+  });
+  await expect.poll(rebroadcasts).toHaveLength(1);
+
+  // Five minutes on, both unmined sends go again, once each.
+  for (let i = 0; i < 6; i++) await page.clock.fastForward(60_000);
+  await expect.poll(rebroadcasts).toHaveLength(3);
+  const sent = await rebroadcasts();
+  expect(new Set(sent).size).toBe(2);
+  expect(sent.every((txid) => /^[0-9a-f]{64}$/.test(txid))).toBe(true);
 });

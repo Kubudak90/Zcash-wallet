@@ -19,12 +19,14 @@ import {
   parsePaymentInput,
   shortAddress,
   unifiedReceivers,
+  unpayableReason,
   type AddressCheck,
   type AddressKind,
   type PaymentRequest,
 } from '../lib/address';
 import { memoBytes, memoProblem } from '../lib/memo';
 import { olderPoolSpent } from '../lib/poolCrossing';
+import { fittingAmount } from '../lib/spendRefusal';
 import { spendingDisabled } from '../lib/network';
 import { AmountError, formatZec, formatZecInput, parseZec } from '../lib/zec';
 import { useController, useWallet } from '../state/wallet';
@@ -89,13 +91,15 @@ interface Funds {
 }
 
 /**
- * The fee shown beside a payment, by recipient: ZIP 317 asks more for a
- * transparent output (3 logical actions) and more again for TEX (measured
- * 20,000 zats, tests/unit/spend-refusal.test.ts). Display only: the balance
- * check and Max keep the typical fee, and the engine computes the real one.
+ * The least fee a payment can cost, by recipient: ZIP 317 asks more for a transparent output
+ * (3 logical actions). It is a lower bound, and shown as one: the engine pays 5,000 zats more
+ * for every further note spent or created, and Celari's change strategy splits large change
+ * into up to 4 notes (review round 7, SPEND-3 and ES-4: 20,000 to 35,000 zats measured for
+ * ordinary sends). The balance check and Max keep the typical fee; a payment the real fee does
+ * not fit is refused by the engine, and Send offers the amount that fits (fittingAmount).
  */
 function feeFloor(kind: AddressKind | undefined): bigint {
-  return kind === 'tex' ? 20_000n : kind === 'transparent' ? 15_000n : TYPICAL_FEE_ZATS;
+  return kind === 'transparent' ? 15_000n : TYPICAL_FEE_ZATS;
 }
 
 /** The outcome line under the preview, for what is known of the recipient. */
@@ -259,8 +263,9 @@ export function Send({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
   function review(e: FormEvent) {
     e.preventDefault();
     const check = checkAddress(to);
+    const unpayable = unpayableReason(check);
     const nextToError: MessageKey | null =
-      linkProblem(parsePaymentInput(to)) ?? (check.ok ? null : `send.err.address.${check.reason}`);
+      linkProblem(parsePaymentInput(to)) ?? (unpayable === null ? null : `send.err.address.${unpayable}`);
 
     let zats: bigint | null = null;
     let nextAmountError: MessageKey | null = null;
@@ -284,7 +289,7 @@ export function Send({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
     const problem = sendMemo === undefined ? null : memoProblem(sendMemo);
     const nextMemoError: MessageKey | null = problem && `send.err.memo.${problem}`;
 
-    if (check.ok && nextToError === null && zats !== null && nextMemoError === null) {
+    if (check.ok && check.kind !== 'tex' && nextToError === null && zats !== null && nextMemoError === null) {
       setToError(null);
       setAmountError(null);
       setMemoError(null);
@@ -362,14 +367,34 @@ export function Send({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
           <div className="card spend-summary">
             <DraftSummary draft={draft} hero />
             {draft.kind === 'transparent' && <Notice tone="warn">{t('send.transparentWarn')}</Notice>}
-            {draft.kind === 'tex' && <Notice tone="warn">{t('send.texWarn')}</Notice>}
           </div>
           <div className="card confirm-panel">
             <SpendConfirm
               submitLabel={t('send.sendNow')}
               submitIcon="send"
               disabledText={t('send.disabledOutdated')}
-              failureHint={t('send.failedHint')}
+              refusalAction={(refusal) => {
+                const fit = fittingAmount(refusal, draft.zats);
+                if (fit === null) return null;
+                // Back to the form with that amount: it is reviewed and confirmed again, never changed silently.
+                return (
+                  <div className="stack">
+                    <p>{t('send.fitNote')}</p>
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() => {
+                        setAmount(formatZecInput(fit, lang));
+                        setAmountError(null);
+                        setLinkFill((f) => f && { ...f, amount: false });
+                        setStep('form');
+                      }}
+                    >
+                      {t('send.sendFit', { amount: fmt(fit) })}
+                    </button>
+                  </div>
+                );
+              }}
               note={
                 <>
                   <Icon name="lock" />
@@ -413,7 +438,9 @@ export function Send({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
 
   const toDescribedBy = toError
     ? toErrorId
-    : [recipient && toKindId, addressCheck?.ok && addressCheck.kind === 'transparent' && toWarnId].filter(Boolean).join(' ');
+    : [recipient && toKindId, addressCheck?.ok && (addressCheck.kind === 'transparent' || addressCheck.kind === 'tex') && toWarnId]
+        .filter(Boolean)
+        .join(' ');
   const amountDescribedBy = [amountError && amountErrorId, typedZats !== null && amountEchoId, feeId]
     .filter(Boolean)
     .join(' ');
@@ -457,6 +484,11 @@ export function Send({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
             {!toError && addressCheck?.ok && addressCheck.kind === 'transparent' && (
               <p id={toWarnId} className="field-warn">
                 {t('send.transparentWarn')}
+              </p>
+            )}
+            {!toError && addressCheck?.ok && addressCheck.kind === 'tex' && (
+              <p id={toWarnId} className="field-warn">
+                {t('send.err.address.texUnsupported')}
               </p>
             )}
           </div>
@@ -595,11 +627,11 @@ export function Send({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
             )}
             <div>
               <dt>{t('send.confirmFee')}</dt>
-              <dd>~{fmt(fee)} ZEC</dd>
+              <dd>{t('send.atLeast', { amount: fmt(fee) })}</dd>
             </div>
             <div className="preview-total">
               <dt>{t('send.total')}</dt>
-              <dd>{typedZats === null ? '—' : `~${fmt(typedZats + fee)} ZEC`}</dd>
+              <dd>{typedZats === null ? '—' : t('send.atLeast', { amount: fmt(typedZats + fee) })}</dd>
             </div>
           </dl>
           <p className={`preview-privacy kind-${recipient?.privacy ?? 'unknown'}`}>
@@ -618,8 +650,8 @@ export function Send({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
 
 /**
  * A spend's details. `hero` on the confirm step: the amount large, with the
- * payment's privacy beside it, and the estimated total; the result screen
- * lists the same as rows, without a total summed from an estimate.
+ * payment's privacy beside it, and the least total; the result screen
+ * lists the same as rows, without a total summed from a lower bound.
  */
 function DraftSummary({ draft, hero = false }: { draft: Draft; hero?: boolean }) {
   const { t, lang } = useI18n();
@@ -682,12 +714,12 @@ function DraftSummary({ draft, hero = false }: { draft: Draft; hero?: boolean })
       )}
       <div>
         <dt>{t('send.confirmFee')}</dt>
-        <dd>~{fmt(fee)} ZEC</dd>
+        <dd>{t('send.atLeast', { amount: fmt(fee) })}</dd>
       </div>
       {hero && (
         <div className="summary-total">
           <dt>{t('send.total')}</dt>
-          <dd>~{fmt(draft.zats + fee)} ZEC</dd>
+          <dd>{t('send.atLeast', { amount: fmt(draft.zats + fee) })}</dd>
         </div>
       )}
     </dl>

@@ -43,6 +43,17 @@ function transparentVersion(address: string): number[] | null {
 
 const sameVersion = (a: number[], b: number[]) => a[0] === b[0] && a[1] === b[1];
 
+/**
+ * Why Celari cannot pay this address, or null if it can. A TEX address is valid, but paying it
+ * takes a ZIP 320 pair of transactions, and the engine turns only single-step proposals into
+ * PCZTs (zcash_client_backend 0.25 create_pczt_from_proposal): every such send would fail at
+ * building (review round 7, SPEND-2 and ES-3).
+ */
+export function unpayableReason(check: AddressCheck): 'empty' | 'testnet' | 'invalid' | 'texUnsupported' | null {
+  if (!check.ok) return check.reason;
+  return check.kind === 'tex' ? 'texUnsupported' : null;
+}
+
 export function checkAddress(raw: string): AddressCheck {
   const address = raw.trim();
   if (address === '') return { ok: false, reason: 'empty' };
