@@ -14,7 +14,7 @@ const pill = (page: Page) => page.getByTestId('sync-status');
 const NU7_NOTICE =
   'At block 3,543,405 the network switches to NU7, which this version of Celari does not support. From then on, sending and shielding stop until Celari is updated.';
 const SERVER_BEHIND =
-  'The server Celari uses is behind the Zcash network. Choose another server in Settings. Sending and shielding stay disabled until then.';
+  'The server Celari uses is behind the Zcash network. Choose another server you trust in Settings. Sending and shielding stay disabled until then.';
 
 /** Waits until the fake engine has answered another network check (one comes with every sync pass). */
 async function nextNetworkCheck(page: Page) {
@@ -188,7 +188,7 @@ test('a server behind the network keeps spending off and points to another serve
   await nav(page, 'Settings');
   await page.getByRole('button', { name: 'Türkçe' }).click();
   await expect(banner(page)).toHaveText(
-    'Celari’nin kullandığı sunucu Zcash ağının gerisinde. Ayarlar’dan başka bir sunucu seç. O zamana kadar gönderme ve gizliye aktarma kapalı kalır.',
+    'Celari’nin kullandığı sunucu Zcash ağının gerisinde. Ayarlar’dan güvendiğin başka bir sunucu seç. O zamana kadar gönderme ve gizliye aktarma kapalı kalır.',
   );
 });
 

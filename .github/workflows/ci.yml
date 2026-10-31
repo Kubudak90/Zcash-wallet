@@ -34,6 +34,13 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # npm advisories (review round 7, PLAT-5), like cargo-deny for the engine below: the
+      # packages that ship to the browser fail the job on any advisory; the dev tools (vite,
+      # vitest, playwright) only warn, as their advisories do not reach the bundle.
+      - name: npm advisories (shipped packages)
+        run: npm audit --omit=dev --audit-level=low
+      - name: npm advisories (dev tools, warning only)
+        run: npm audit --audit-level=low || echo "::warning title=npm audit::a dev dependency has an advisory; see the log"
       - run: npm run typecheck
       - run: npm test
       - run: npx playwright install --with-deps chromium

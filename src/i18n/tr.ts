@@ -148,7 +148,7 @@ export const tr: Record<MessageKey, string> = {
     'Zcash ağı, Celari’nin bu sürümünün henüz desteklemediği kurallara geçti: {upgrade}. Güncelleme gelene kadar gönderme ve gizliye aktarma kapalı, çünkü bu sürümün hazırladığı her işlemi ağ reddeder. Anahtarların ve paran güvende.',
   'network.unreachable': 'Celari ağ sürümünü doğrulayamadı. Doğrulayana kadar gönderme ve gizliye aktarma kapalı kalır.',
   'network.serverBehind':
-    'Celari’nin kullandığı sunucu Zcash ağının gerisinde. Ayarlar’dan başka bir sunucu seç. O zamana kadar gönderme ve gizliye aktarma kapalı kalır.',
+    'Celari’nin kullandığı sunucu Zcash ağının gerisinde. Ayarlar’dan güvendiğin başka bir sunucu seç. O zamana kadar gönderme ve gizliye aktarma kapalı kalır.',
   'network.upcoming':
     '{height}. blokta ağ {upgrade} kurallarına geçiyor; Celari’nin bu sürümü bunu desteklemiyor. O andan itibaren Celari güncellenene kadar gönderme ve gizliye aktarma kapanır.',
 
@@ -377,7 +377,9 @@ export const tr: Record<MessageKey, string> = {
   'settings.language': 'Dil',
   'settings.server': 'Sunucu (lightwalletd gRPC-web proxy)',
   'settings.serverHelp':
-    'Sunucu IP adresini, şeffaf adreslerini (her eşitlemede sorulur) ve gönderdiğin işlemleri görebilir. Gizlilik altındaki “Geçmiş için işlemlerin tamamını getir” kapalı değilse Celari kendi işlemlerinin tamamını da ondan ister (notlar için, geri yüklemeden sonra ücret ve alıcılar için); bu yüzden sunucu hangi işlemlerin senin olduğunu anlayabilir. Her iki durumda da gönderdiğin her ödemeyi onaylanana kadar ona sorar. Gizli bakiyeni ve sana gizli ödeme yapanları göremez. Kendi sunucunu da çalıştırabilirsin.',
+    'Sunucu IP adresini, şeffaf adreslerini (her eşitlemede sorulur) ve gönderdiğin işlemleri görebilir. Gizlilik altındaki “Geçmiş için işlemlerin tamamını getir” kapalı değilse Celari kendi işlemlerinin tamamını da ondan ister (notlar için, geri yüklemeden sonra ücret ve alıcılar için); bu yüzden sunucu hangi işlemlerin senin olduğunu anlayabilir. Her iki durumda da gönderdiğin her ödemeyi onaylanana kadar ona sorar. Gizli bakiyeni ve sana gizli ödeme yapanları göremez. Kendi sunucunu da çalıştırabilirsin. Sunucu ayrıca Celari’nin hangi blokları gördüğüne de karar verir: dürüst olmayan bir sunucu hiç olmamış ödemeleri gösterebilir, gerçek ödemeleri gizleyebilir ya da gönderdiklerini iletmeyebilir. Yalnızca güvendiğin bir sunucu kullan ve büyük bir gelen ödemeye güvenmeden önce onu başka bir sunucuda ya da bir blok gezgininde kontrol et.',
+  'settings.serverTrust':
+    'Celari bu sunucunun zincir hakkında söylediklerine inanır: dürüst olmayan bir sunucu hiç olmamış ödemeleri gösterebilir, gerçek ödemeleri gizleyebilir ya da gönderdiklerini iletmeyebilir. Yalnızca güveniyorsan kaydet ve büyük bir gelen ödemeye güvenmeden önce onu başka bir sunucuda ya da bir blok gezgininde kontrol et.',
   'settings.serverShort': 'Sunucu',
   'settings.serverSave': 'Kaydet ve yeniden başlat',
   'settings.serverReset': 'Varsayılana dön',
