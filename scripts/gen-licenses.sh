@@ -27,11 +27,14 @@ channel="$(sed -n 's/^channel *= *"\(.*\)"/\1/p' "$SRC/rust-toolchain.toml")"
 rustup toolchain install "$channel" --profile minimal
 
 tools="$SRC/target/celari-tools/cargo-about-$CARGO_ABOUT_VERSION"
-if [ "$("$tools/bin/cargo-about" --version 2>/dev/null || true)" != "cargo-about $CARGO_ABOUT_VERSION" ]; then
+# Reused only while it is the file installed here (SHA-256 recorded then; review round 7, DRIFT-4).
+if ! (cd "$tools" 2>/dev/null && sha256sum --check --status --strict installed.sha256 2>/dev/null) ||
+  [ "$("$tools/bin/cargo-about" --version 2>/dev/null || true)" != "cargo-about $CARGO_ABOUT_VERSION" ]; then
   echo "Installing cargo-about $CARGO_ABOUT_VERSION into $tools"
   build="$SRC/target/celari-tools/cargo-about-build"
   (cd "$SRC" && CARGO_TARGET_DIR="$build" cargo "+$channel" install --quiet --locked --force --features cli \
     --root "$tools" cargo-about --version "$CARGO_ABOUT_VERSION")
+  (cd "$tools" && sha256sum bin/cargo-about > installed.sha256)
   rm -rf "$build"
 fi
 

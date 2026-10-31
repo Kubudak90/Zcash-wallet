@@ -108,10 +108,21 @@ if [ "${#refused[@]}" -gt 0 ]; then
 fi
 
 # Only files committed to this repository count: an uncommitted or edited patch,
-# engine source or lockfile stops the build rather than slipping into vendor/.
-if [ -n "$(git -C "$ROOT" status --porcelain -- patches/webzjs engine)" ]; then
-  echo "error: patches/webzjs or engine has uncommitted changes:" >&2
-  git -C "$ROOT" status --short -- patches/webzjs engine >&2
+# engine source or lockfile stops the build rather than slipping into vendor/ (cargo
+# builds engine/ through a symlink to this working tree). Three checks, so that the
+# user's git configuration, ignore files and index flags cannot hide anything (review
+# round 7, DRIFT-2): status with every untracked file whatever status.showUntrackedFiles
+# says; untracked files with no exclude rules at all (info/exclude, core.excludesFile
+# and an untracked .gitignore hide nothing), except engine/**/target/ from a manual
+# `cargo test`; and tracked files marked skip-worktree or assume-unchanged.
+dirty="$(
+  git -C "$ROOT" status --porcelain --untracked-files=all -- patches/webzjs engine
+  git -C "$ROOT" ls-files --others --directory -- patches/webzjs engine | grep -v -E '^engine/(.+/)?target/$' || true
+  git -C "$ROOT" ls-files -v -- patches/webzjs engine | grep -v '^H ' || true
+)"
+if [ -n "$dirty" ]; then
+  echo "error: patches/webzjs or engine has uncommitted, untracked or index-hidden files:" >&2
+  echo "$dirty" >&2
   exit 1
 fi
 [ -f "$LOCKFILE" ] || { echo "error: $LOCKFILE not found" >&2; exit 1; }
@@ -144,6 +155,18 @@ done
 # Cargo.lock hunk that counts). --locked below fails if it does not match the
 # manifests.
 cp "$LOCKFILE" "$SRC/Cargo.lock"
+# A stamp of the tree just prepared, for `scripts/test-engine-native.sh glue`, which refuses
+# to test a .webzjs/ edited since, or prepared from other patches (review round 7, DRIFT-3):
+# the tree id of every file in it (through a temporary index; the celari-engine symlink is
+# a link, engine/ itself is checked as committed above) and the committed patches' tree id.
+# target/ is ignored by WebZjs, so the stamp survives `git clean` and is not in the tree.
+mkdir -p "$SRC/target"
+stamp_index="$SRC/target/celari-prepared.index"
+rm -f "$stamp_index"
+GIT_INDEX_FILE="$stamp_index" git -C "$SRC" add -A
+echo "$(GIT_INDEX_FILE="$stamp_index" git -C "$SRC" write-tree) $(git -C "$ROOT" rev-parse HEAD:patches/webzjs)" \
+  > "$SRC/target/celari-prepared"
+rm -f "$stamp_index"
 if [ "${WEBZJS_PREPARE_ONLY:-}" = 1 ]; then
   echo "Prepared $SRC (WebZjs, patches, lockfile); nothing built (WEBZJS_PREPARE_ONLY=1)"
   exit 0
@@ -239,9 +262,14 @@ if [ -n "${WEBZJS_WASM_BINDGEN_VERSION:-}" ] && [ "$bindgen" != "$WEBZJS_WASM_BI
   exit 1
 fi
 tools="$SRC/target/celari-tools/wasm-bindgen-$bindgen"
-if [ "$("$tools/bin/wasm-bindgen" --version 2>/dev/null || true)" != "wasm-bindgen $bindgen" ]; then
+# A cached copy is reused only while it is the file this script installed: its SHA-256 is
+# recorded at install time and checked before it runs, as wasm-opt's is below, so a stale
+# or altered binary that prints the right version is not trusted (review round 7, DRIFT-4).
+if ! (cd "$tools" 2>/dev/null && sha256sum --check --status --strict installed.sha256 2>/dev/null) ||
+  [ "$("$tools/bin/wasm-bindgen" --version 2>/dev/null || true)" != "wasm-bindgen $bindgen" ]; then
   echo "Installing wasm-bindgen-cli $bindgen into $tools"
   (cd "$SRC" && in_build_env cargo install --quiet --locked --force --root "$tools" wasm-bindgen-cli --version "$bindgen")
+  (cd "$tools" && sha256sum bin/wasm-bindgen > installed.sha256)
 fi
 export PATH="$tools/bin:$PATH"
 [ "$(wasm-bindgen --version)" = "wasm-bindgen $bindgen" ] || { echo "error: wasm-bindgen $bindgen not on PATH" >&2; exit 1; }
