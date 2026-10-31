@@ -5,7 +5,7 @@
 
 import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
-import { join, relative, sep } from 'node:path';
+import { join } from 'node:path';
 
 import type { Plugin } from 'vite';
 
@@ -58,10 +58,14 @@ export function cspPlugin(): Plugin {
  * Regular files only, named './<path>', sorted by their bytes.
  */
 export function vendorList(dir: string): string {
-  const files = readdirSync(dir, { recursive: true, withFileTypes: true })
-    .filter((d) => d.isFile())
-    .map((d) => `./${relative(dir, join(d.parentPath, d.name)).split(sep).join('/')}`)
-    .sort((a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b)));
+  // Walked by hand: Dirent.parentPath of a recursive readdir needs Node 20.12 or later.
+  const walk = (sub: string): string[] =>
+    readdirSync(join(dir, sub), { withFileTypes: true }).flatMap((d) => {
+      const path = sub ? `${sub}/${d.name}` : d.name;
+      if (d.isDirectory()) return walk(path);
+      return d.isFile() ? [`./${path}`] : [];
+    });
+  const files = walk('').sort((a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b)));
   return files
     .map((f) => `${createHash('sha256').update(readFileSync(join(dir, f))).digest('hex')}  ${f}\n`)
     .join('');

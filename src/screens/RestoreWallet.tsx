@@ -257,7 +257,7 @@ export function RestoreWallet({ onCancel }: { onCancel: () => void }) {
               {t('restore.birthdayHeight', { height: birthday.toLocaleString(lang === 'tr' ? 'tr-TR' : 'en-US') })}
             </Notice>
             <p className="muted small" data-testid="storage-note">
-              {t('restore.storageNote')}
+              {t(secret?.kind === 'ufvk' ? 'restore.storageNoteView' : 'restore.storageNote')}
             </p>
           </>
         )

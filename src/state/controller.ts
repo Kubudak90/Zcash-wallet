@@ -1025,6 +1025,8 @@ export class WalletController {
     if (this.state.spending) throw new Error('another payment is still in progress');
     this.set({ spending: true });
     this.spendStage = null;
+    // The unmined sends from before this one: only a send this spend adds counts as just sent.
+    const pendingBefore = new Set(this.pendingSends().map((tx) => tx.txid));
     window.addEventListener('beforeunload', confirmLeave);
     let broadcasting = false;
     try {
@@ -1047,7 +1049,7 @@ export class WalletController {
       // show it and the saved wallet keep it, before a deferred lock reloads;
       // a failed refresh must not read as a failed send.
       if (!failure || broadcasting) {
-        await this.afterSpend(!failure).catch((e) => console.warn('refresh after spend failed', e));
+        await this.afterSpend(failure ? null : pendingBefore).catch((e) => console.warn('refresh after spend failed', e));
       }
       if (failure) throw failure.cause;
     } finally {
@@ -1062,20 +1064,23 @@ export class WalletController {
     }
   }
 
-  private async afterSpend(broadcast: boolean) {
+  /**
+   * `sentBefore`: after a broadcast that succeeded, the unmined sends from before the spend; the
+   * new one is recorded as just sent, so its first resend waits REBROADCAST_MS. A send whose
+   * broadcast failed (null) is not, so the first pass after it sends it again; nor is an
+   * earlier one still waiting for its resend.
+   */
+  private async afterSpend(sentBefore: Set<string> | null) {
     await this.refresh();
     await this.persist();
-    // Just sent: the next resend of these waits REBROADCAST_MS. A send whose broadcast failed
-    // is not marked, so the first pass after it sends it again.
-    if (broadcast) this.markSent();
+    if (!sentBefore) return;
+    const now = Date.now();
+    for (const tx of this.pendingSends()) if (!sentBefore.has(tx.txid)) this.sentAt.set(tx.txid, now);
   }
 
-  /** Records the wallet's unmined sends as just sent (see rebroadcastPending). */
-  private markSent(): void {
-    const now = Date.now();
-    for (const tx of this.state.history) {
-      if (tx.status === 'pending' && tx.valueZats < 0n && !this.sentAt.has(tx.txid)) this.sentAt.set(tx.txid, now);
-    }
+  /** The wallet's own unmined transactions in History: sends and shieldings (value below 0). */
+  private pendingSends() {
+    return this.state.history.filter((tx) => tx.status === 'pending' && tx.valueZats < 0n);
   }
 
   /**
@@ -1091,7 +1096,7 @@ export class WalletController {
     const eng = this.engine;
     if (!eng?.rebroadcast || this.stopped) return;
     const now = Date.now();
-    const pending = this.state.history.filter((tx) => tx.status === 'pending' && tx.valueZats < 0n);
+    const pending = this.pendingSends();
     // Mined or expired ones are forgotten.
     const live = new Set(pending.map((tx) => tx.txid));
     for (const txid of [...this.sentAt.keys()]) if (!live.has(txid)) this.sentAt.delete(txid);

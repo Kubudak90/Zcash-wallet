@@ -90,7 +90,9 @@ export const en = {
     'Celari will scan from Sapling activation in October 2018, so no payment is missed. The first scan can take a day and needs several GB of memory, and it pauses whenever the wallet locks.',
   'restore.birthdayHeight': 'Sync will start at block {height}.',
   'restore.storageNote':
-    'Celari keeps this wallet only in this browser, and the browser can delete it on its own: Safari after 7 days of use without opening Celari (unless Celari is added to the Home Screen), any browser when the disk is full or when site data is cleared. Keep your recovery phrase (or viewing key): it is then the only way back.',
+    'Celari keeps this wallet only in this browser, and the browser can delete it on its own: Safari after 7 days of use without opening Celari (unless Celari is added to the Home Screen), any browser when the disk is full or when site data is cleared. Keep your recovery phrase: it is then the only way back.',
+  'restore.storageNoteView':
+    'Celari keeps this wallet only in this browser, and the browser can delete it on its own: Safari after 7 days of use without opening Celari (unless Celari is added to the Home Screen), any browser when the disk is full or when site data is cleared. Keep your viewing key: it is then the only way to add the wallet again.',
   'restore.historyEnhancementHelp':
     'On: once restored, Celari asks the server for each of your past transactions in full (memos, recipients and fees), so the server learns which transactions are yours. Off: History shows no memos and past payments by their net amount only. You can change this later under Settings > Privacy.',
 
