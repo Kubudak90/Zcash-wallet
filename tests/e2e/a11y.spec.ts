@@ -490,7 +490,9 @@ for (const colorScheme of ['light', 'dark'] as const) {
 }
 
 test.describe('forced colours', () => {
-  test.use({ forcedColors: 'active' });
+  // Reduced motion: the switch's colours are read before and after a click, and a
+  // transition still running would give a colour in between (a flaky CI failure).
+  test.use({ forcedColors: 'active', reducedMotion: 'reduce' });
 
   test('the privacy switch and the selected language still show their state', async ({ page }) => {
     await createWallet(page);
