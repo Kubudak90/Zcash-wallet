@@ -12,7 +12,11 @@ to the wallet's keys).
   `src/components/Brand.tsx`.
 - `vercel.json` is the Vercel project's configuration (project root
   `landing/`, no build, output `public/`): a CSP that allows no scripts and
-  nothing from another origin, HSTS, and no framing.
+  nothing from another origin, HSTS, no framing, and a permanent redirect from
+  www.celariwallet.com to celariwallet.com.
+- Deploying: the Vercel project `celari-site` (root `landing/`, output
+  `public/`, not linked to Git) deploys a commit of `main` on request, like the
+  wallet's `celari-app` deploys `deploy/app` (deploy/README.md).
 
 The facts on the page come from the repository's README and
 docs/engine-port.md; when those change, change the page with them.
