@@ -385,6 +385,15 @@ browser tests were run against the code before the fixes: all failed there.
 The reports' own files (a patch with a bilingual README, evidence, reproduction
 scripts) are not in the repository.
 
+MEASURED: CI run 41230085446 (push to main at ca6b086) built WebZjs from source,
+matched the list (the engine did not change in this round), and passed the tests,
+the production build, the mainnet smoke test and the engine audit. Its
+`celari-dist` was released on app.celariwallet.com the same day (Vercel deployment
+`dpl_CaoZpQ11akFZMnBwdw1o9ReKNBkA`, from `deploy/app` 3fd1ef4): the live
+`index.html` is byte for byte the artifact's, the two wasm files have the listed
+hashes, the headers are there, and the mainnet smoke test passed against the live
+address.
+
 ## Deferred: explicit errors and known gaps
 
 None of these is a `todo!()` on a path Celari uses; each returns an error or is
