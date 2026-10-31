@@ -45,6 +45,8 @@ export const tr: Record<MessageKey, string> = {
   'create.seedWarn1': 'Kimseyle paylaşma. Celari dahil hiç kimse bu kelimeleri senden istemez.',
   'create.seedWarn2': 'Ekran görüntüsü alma, buluta veya mesajlara kaydetme.',
   'create.seedWarn3': 'Kelimeleri kaybedersen paran kurtarılamaz.',
+  'create.seedWarn4':
+    'Celari bu cüzdanı yalnızca bu tarayıcıda tutar ve tarayıcı onu kendiliğinden silebilir: Safari, Celari açılmadan geçen 7 günlük kullanımdan sonra (Celari Ana Ekran’a eklenmediyse), her tarayıcı da disk dolduğunda ya da site verileri temizlendiğinde. O zaman paranı geri almanın tek yolu bu kelimelerdir.',
   'create.reveal': 'Kelimeleri göster',
   'create.wroteDown': 'Kelimeleri sırasıyla kağıda yazdım',
   'create.verifyTitle': 'Yedeğini doğrula',
@@ -86,9 +88,10 @@ export const tr: Record<MessageKey, string> = {
     '{month} ile başlamak yaklaşık {blocks} blok taramak demek. İlk tarama saatler sürebilir (2022’den ya da 2023 başından yaklaşık bir gün) ve birkaç GB bellek ister; cüzdan her kilitlendiğinde de duraklar. Cüzdanın daha sonraki bir aydan önce kullanılmadığından eminsen, emin olduğun en son ayı seç.',
   'restore.birthdayUnknown': 'Bilmiyorum',
   'restore.birthdayUnknownHelp':
-    'Önce şeffaf adresindeki ilk işlemi arayacağız. Bulamazsak Sapling’in başladığı 2018’den itibaren tararız; bu saatler sürebilir.',
-  'restore.birthdayDetecting': 'İlk işlem aranıyor…',
+    'Celari Ekim 2018’deki Sapling başlangıcından itibaren tarar, böylece hiçbir ödeme kaçmaz. İlk tarama bir gün sürebilir, birkaç GB bellek ister ve cüzdan her kilitlendiğinde duraklar.',
   'restore.birthdayHeight': 'Eşitleme {height}. bloktan başlayacak.',
+  'restore.storageNote':
+    'Celari bu cüzdanı yalnızca bu tarayıcıda tutar ve tarayıcı onu kendiliğinden silebilir: Safari, Celari açılmadan geçen 7 günlük kullanımdan sonra (Celari Ana Ekran’a eklenmediyse), her tarayıcı da disk dolduğunda ya da site verileri temizlendiğinde. Kurtarma kelimelerini (ya da görüntüleme anahtarını) sakla: o zaman geri dönmenin tek yolu onlardır.',
   'restore.historyEnhancementHelp':
     'Açıkken geri yüklemeden sonra Celari geçmiş işlemlerinin her birini sunucudan tam olarak ister (notlar, alıcılar ve ücretler); sunucu böylece hangi işlemlerin senin olduğunu öğrenir. Kapalıyken Geçmiş’te notlar görünmez ve geçmiş ödemeler yalnızca net tutarlarıyla görünür. Bunu daha sonra Ayarlar > Gizlilik’ten değiştirebilirsin.',
 

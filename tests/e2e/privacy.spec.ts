@@ -177,6 +177,51 @@ test.describe('a copied viewing key', () => {
   });
 });
 
+test.describe('a recovery phrase copied by hand (review round 7, VAULT-4)', () => {
+  test.use({ permissions: ['clipboard-read', 'clipboard-write'] });
+
+  const clipboardText = (page: Page) => page.evaluate(() => navigator.clipboard.readText());
+
+  test('is cleared from the clipboard a minute later while creating the wallet', async ({ page }) => {
+    await page.clock.install();
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Create a new wallet' }).click();
+    await page.getByRole('button', { name: 'Reveal words' }).click();
+    const grid = page.getByTestId('seed-grid');
+    await grid.selectText();
+    await page.keyboard.press('ControlOrMeta+C');
+    const words = await page.locator('[data-testid="seed-grid"] .seed-word').allTextContents();
+    const copied = await clipboardText(page);
+    for (const w of words) expect(copied).toContain(w);
+    await expect(page.getByTestId('clipboard-note-seed')).toHaveText(/clear the clipboard/);
+    await page.clock.fastForward(CLEAR_AFTER_MS + 1_000);
+    await expect.poll(() => clipboardText(page)).toBe('');
+    await expect(page.getByTestId('clipboard-note-seed')).toHaveText('Clipboard cleared.');
+  });
+
+  test('in Settings, and the note shows under the phrase, not under the viewing key', async ({ page }) => {
+    await page.clock.install();
+    await createWallet(page);
+    await nav(page, 'Settings');
+    await page.getByRole('button', { name: 'Show viewing key' }).click();
+    await page.getByLabel('Password').fill(PASSWORD);
+    await page.getByRole('button', { name: 'Reveal' }).click();
+    await page.getByRole('button', { name: 'Copy' }).click();
+    await expect(page.getByTestId('clipboard-note-viewing-key')).toHaveText(/clear the clipboard/);
+
+    await page.getByRole('button', { name: 'Show recovery phrase' }).click();
+    await page.getByLabel('Password').fill(PASSWORD);
+    await page.getByRole('button', { name: 'Reveal' }).click();
+    await page.getByTestId('seed-grid').selectText();
+    await page.keyboard.press('ControlOrMeta+C');
+    expect(await clipboardText(page)).toMatch(/[a-z]+/);
+    await expect(page.getByTestId('clipboard-note-seed')).toHaveText(/clear the clipboard/);
+    await expect(page.getByTestId('clipboard-note-viewing-key')).toHaveText('');
+    await page.clock.fastForward(CLEAR_AFTER_MS + 1_000);
+    await expect.poll(() => clipboardText(page)).toBe('');
+  });
+});
+
 test('the eye is named in Turkish too', async ({ page }) => {
   await createWallet(page);
   await nav(page, 'Settings');

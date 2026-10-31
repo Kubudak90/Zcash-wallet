@@ -141,4 +141,21 @@ describe('ClipboardGuard', () => {
     expect(after.clipboard).toBe('');
     expect(after.store.size).toBe(0);
   });
+
+  it('names what the pending clear is for, and tells its listeners when that changes (VAULT-4)', async () => {
+    const env = fakeEnv();
+    const guard = new ClipboardGuard(env);
+    let told = 0;
+    guard.subscribe(() => told++);
+    await guard.copy(KEY, { clearAfter: true, source: 'viewing-key' });
+    expect([guard.getStatus(), guard.getSource()]).toEqual(['pending', 'viewing-key']);
+    const before = told;
+    // The phrase copied by hand while the key's clear is pending: still pending, for the phrase.
+    guard.copiedInPage(true, 'seed');
+    expect([guard.getStatus(), guard.getSource()]).toEqual(['pending', 'seed']);
+    expect(told).toBeGreaterThan(before);
+    await vi.advanceTimersByTimeAsync(CLEAR_AFTER_MS);
+    expect(env.clipboard).toBe('');
+    expect([guard.getStatus(), guard.getSource()]).toEqual(['cleared', 'seed']);
+  });
 });

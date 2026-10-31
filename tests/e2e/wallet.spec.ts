@@ -1,4 +1,6 @@
 import { bech32m } from '@scure/base';
+import { generateMnemonic } from '@scure/bip39';
+import { wordlist } from '@scure/bip39/wordlists/english';
 import { expect, test } from '@playwright/test';
 
 import { PASSWORD, UA, createWallet, nav } from './helpers';
@@ -190,6 +192,8 @@ test('restore view-only wallet from a viewing key', async ({ page }) => {
   await page.getByLabel('Month').fill('2025-03');
   await page.getByRole('button', { name: 'Continue' }).click();
   await expect(page.getByText(/Sync will start at block/)).toBeVisible();
+  // The browser can delete the wallet on its own (review round 7, VAULT-6): said before it is created.
+  await expect(page.getByTestId('storage-note')).toContainText('the browser can delete it on its own');
 
   await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
   await page.getByLabel('Password (again)').fill(PASSWORD);
@@ -212,4 +216,15 @@ test('Turkish interface', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Yeni cüzdan oluştur' })).toBeVisible();
   await expect(page.getByText('Açık kaynak · Token yok · Airdrop vaadi yok')).toBeVisible();
   await expect(page.locator('html')).toHaveAttribute('lang', 'tr');
+});
+
+test('"I don’t know" the month means a full scan from Sapling activation (review round 7, SYNC-3)', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Restore an existing wallet' }).click();
+  await page.getByRole('textbox').fill(generateMnemonic(wordlist, 256));
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await page.getByLabel('I don’t know').check();
+  await expect(page.getByText(/scan from Sapling activation in October 2018, so no payment is missed/)).toBeVisible();
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await expect(page.getByText('Sync will start at block 419,200.')).toBeVisible();
 });

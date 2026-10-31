@@ -300,10 +300,6 @@ export class FakeEngine implements ZcashEngine {
     return status;
   }
 
-  async detectBirthday(): Promise<number | null> {
-    return null;
-  }
-
   async isValidViewingKey(ufvk: string): Promise<boolean> {
     const decoded = bech32m.decodeUnsafe(ufvk.trim(), false);
     return decoded?.prefix === 'uview';

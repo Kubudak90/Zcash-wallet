@@ -102,10 +102,10 @@ export function RestoreWallet({ onCancel }: { onCancel: () => void }) {
     try {
       let height: number;
       if (unknown) {
-        const detected = await controller.detectBirthday(
-          secret.kind === 'seed' ? { phrase: secret.phrase } : { ufvk: secret.ufvk },
-        );
-        height = detected ?? SAPLING_ACTIVATION_HEIGHT;
+        // A full scan (review round 7, SYNC-3). The height of the first transaction on the
+        // transparent address is no birthday: shielded payments received before it would never
+        // be found, and the default server refuses that search anyway.
+        height = SAPLING_ACTIVATION_HEIGHT;
       } else {
         if (!parsedMonth) return;
         height = estimateBirthday(new Date(`${parsedMonth}-01T00:00:00Z`), await controller.latestHeight());
@@ -236,7 +236,7 @@ export function RestoreWallet({ onCancel }: { onCancel: () => void }) {
             <button type="submit" className="primary" disabled={busy || (!unknown && !parsedMonth)}>
               {busy ? (
                 <>
-                  <Spinner /> {unknown ? t('restore.birthdayDetecting') : t('common.continue')}
+                  <Spinner /> {t('common.continue')}
                 </>
               ) : (
                 t('common.continue')
@@ -252,9 +252,14 @@ export function RestoreWallet({ onCancel }: { onCancel: () => void }) {
     <PasswordSetup
       note={
         birthday !== null && (
-          <Notice tone="info">
-            {t('restore.birthdayHeight', { height: birthday.toLocaleString(lang === 'tr' ? 'tr-TR' : 'en-US') })}
-          </Notice>
+          <>
+            <Notice tone="info">
+              {t('restore.birthdayHeight', { height: birthday.toLocaleString(lang === 'tr' ? 'tr-TR' : 'en-US') })}
+            </Notice>
+            <p className="muted small" data-testid="storage-note">
+              {t('restore.storageNote')}
+            </p>
+          </>
         )
       }
       onBack={() => setStep('birthday')}

@@ -139,6 +139,22 @@ export class NetworkNotSupportedError extends Error {
   }
 }
 
+/**
+ * Asks the browser to keep this site's storage (the vault and the wallet database) out of
+ * eviction under storage pressure (review round 7, VAULT-6). Best effort: browsers decide by
+ * their own rules (Safari mostly grants it to Home Screen apps, Firefox asks the user), and
+ * nothing waits for it or fails with it. The create and restore screens say the browser can
+ * still delete the data, and that the recovery phrase is then the only backup.
+ */
+async function requestPersistence(): Promise<void> {
+  try {
+    const s = (navigator as Partial<Navigator>).storage;
+    if (s?.persisted && !(await s.persisted())) await s.persist?.();
+  } catch {
+    // Not offered, or refused: nothing changes.
+  }
+}
+
 /** Asks before the tab is closed or reloaded while a spend is running. */
 function confirmLeave(e: BeforeUnloadEvent) {
   e.preventDefault();
@@ -253,10 +269,6 @@ export class WalletController {
     return this.eng.latestHeight();
   }
 
-  detectBirthday(secret: { phrase: string } | { ufvk: string }): Promise<number | null> {
-    return this.eng.detectBirthday(secret);
-  }
-
   isValidViewingKey(ufvk: string): Promise<boolean> {
     return this.eng.isValidViewingKey(ufvk);
   }
@@ -286,6 +298,7 @@ export class WalletController {
       };
       const db = await encryptDb(key, await this.eng.exportDb());
       await storage.saveWallet(record, meta, db);
+      void requestPersistence();
     } catch (e) {
       this.releaseTabLock();
       throw e;
@@ -324,6 +337,7 @@ export class WalletController {
 
     this.key = key;
     this.vaultSalt = record.kdf.salt;
+    void requestPersistence();
     await this.enterReady();
   }
 
