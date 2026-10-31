@@ -289,7 +289,7 @@ export function Send({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
     const problem = sendMemo === undefined ? null : memoProblem(sendMemo);
     const nextMemoError: MessageKey | null = problem && `send.err.memo.${problem}`;
 
-    if (check.ok && check.kind !== 'tex' && nextToError === null && zats !== null && nextMemoError === null) {
+    if (check.ok && nextToError === null && zats !== null && nextMemoError === null) {
       setToError(null);
       setAmountError(null);
       setMemoError(null);
@@ -375,7 +375,8 @@ export function Send({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
               disabledText={t('send.disabledOutdated')}
               refusalAction={(refusal) => {
                 const fit = fittingAmount(refusal, draft.zats);
-                if (fit === null) return null;
+                // An amount a payment link asked for is the recipient's: never offer to pay less.
+                if (fit === null || linkFill?.amount) return null;
                 // Back to the form with that amount: it is reviewed and confirmed again, never changed silently.
                 return (
                   <div className="stack">

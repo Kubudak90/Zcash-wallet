@@ -31,9 +31,19 @@ tmp="$(mktemp -d)"
 # The clean-tree cases (below) add these and take them away again.
 stray="$ROOT/engine/zcash_client_memory/celari-guard-test.rs"
 exclude="$(git -C "$ROOT" rev-parse --path-format=absolute --git-path info/exclude)"
+# Where info/exclude was before the exclude case: a copy, or "absent" (the case created it).
+exclude_was=""
+restore_exclude() {
+  case "$exclude_was" in
+    "") ;;
+    absent) rm -f "$exclude" ;;
+    *) mv "$exclude_was" "$exclude" ;;
+  esac
+  exclude_was=""
+}
 cleanup() {
   rm -f "$stray"
-  [ ! -f "$exclude.celari-guard-test" ] || mv "$exclude.celari-guard-test" "$exclude"
+  restore_exclude
   git -C "$ROOT" update-index --no-skip-worktree engine/zcash_client_memory/UPSTREAM.md 2>/dev/null || true
   rustup override unset --path "$ROOT/.webzjs/crates/webzjs-wallet" >/dev/null 2>&1 || true
   rm -f "$ROOT/.cargo/config.toml"
@@ -196,10 +206,15 @@ fi
 run untracked-engine-file refuse
 run untracked-hidden-by-config refuse GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=status.showUntrackedFiles GIT_CONFIG_VALUE_0=no
 mkdir -p "$(dirname "$exclude")"
-[ ! -f "$exclude" ] || cp "$exclude" "$exclude.celari-guard-test"
+if [ -f "$exclude" ]; then
+  exclude_was="$tmp/info-exclude"
+  cp "$exclude" "$exclude_was"
+else
+  exclude_was=absent
+fi
 echo 'engine/zcash_client_memory/celari-guard-test.rs' >> "$exclude"
 run untracked-hidden-by-exclude refuse
-if [ -f "$exclude.celari-guard-test" ]; then mv "$exclude.celari-guard-test" "$exclude"; else rm -f "$exclude"; fi
+restore_exclude
 rm -f "$stray"
 git -C "$ROOT" update-index --skip-worktree engine/zcash_client_memory/UPSTREAM.md
 run skip-worktree refuse

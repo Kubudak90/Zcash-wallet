@@ -91,7 +91,9 @@ export const tr: Record<MessageKey, string> = {
     'Celari Ekim 2018’deki Sapling başlangıcından itibaren tarar, böylece hiçbir ödeme kaçmaz. İlk tarama bir gün sürebilir, birkaç GB bellek ister ve cüzdan her kilitlendiğinde duraklar.',
   'restore.birthdayHeight': 'Eşitleme {height}. bloktan başlayacak.',
   'restore.storageNote':
-    'Celari bu cüzdanı yalnızca bu tarayıcıda tutar ve tarayıcı onu kendiliğinden silebilir: Safari, Celari açılmadan geçen 7 günlük kullanımdan sonra (Celari Ana Ekran’a eklenmediyse), her tarayıcı da disk dolduğunda ya da site verileri temizlendiğinde. Kurtarma kelimelerini (ya da görüntüleme anahtarını) sakla: o zaman geri dönmenin tek yolu onlardır.',
+    'Celari bu cüzdanı yalnızca bu tarayıcıda tutar ve tarayıcı onu kendiliğinden silebilir: Safari, Celari açılmadan geçen 7 günlük kullanımdan sonra (Celari Ana Ekran’a eklenmediyse), her tarayıcı da disk dolduğunda ya da site verileri temizlendiğinde. Kurtarma kelimelerini sakla: o zaman geri dönmenin tek yolu onlardır.',
+  'restore.storageNoteView':
+    'Celari bu cüzdanı yalnızca bu tarayıcıda tutar ve tarayıcı onu kendiliğinden silebilir: Safari, Celari açılmadan geçen 7 günlük kullanımdan sonra (Celari Ana Ekran’a eklenmediyse), her tarayıcı da disk dolduğunda ya da site verileri temizlendiğinde. Görüntüleme anahtarını sakla: cüzdanı yeniden eklemenin tek yolu odur.',
   'restore.historyEnhancementHelp':
     'Açıkken geri yüklemeden sonra Celari geçmiş işlemlerinin her birini sunucudan tam olarak ister (notlar, alıcılar ve ücretler); sunucu böylece hangi işlemlerin senin olduğunu öğrenir. Kapalıyken Geçmiş’te notlar görünmez ve geçmiş ödemeler yalnızca net tutarlarıyla görünür. Bunu daha sonra Ayarlar > Gizlilik’ten değiştirebilirsin.',
 

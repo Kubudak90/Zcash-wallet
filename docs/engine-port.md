@@ -337,6 +337,17 @@ noted.
 | DRIFT-4 · polish: cached tool binaries were trusted by their version string | Fixed: wasm-bindgen, cargo-deny and cargo-about are reused only while their SHA-256, recorded at install time, matches. |
 | DRIFT-5 · polish: the docs said CI had never reproduced the list | Fixed: CI run 40952847695 (push to main at 2acc747) built from source and matched it; see [Reproducible vendor/](#reproducible-vendor). |
 
+An independent review of this round's diff (f3ed979..d903579) found six more
+things, fixed in a follow-up commit: Shield still showed its fee as an estimate; a
+successful send marked an earlier failed one as just resent; the "Send … instead"
+offer appeared for an amount a payment link asked for (never offered now);
+`vendorList` needed Node 20.12; the guard test could leave a line in
+`info/exclude`; the restore screen's storage note named the recovery phrase for a
+view-only wallet. One it raised is left as it is: a pass whose counters stand
+still for 10 minutes while it serves history requests counts as stalled (the
+notice, or a soft lock's reload, which gives up at most that pass's unsaved part);
+catch-up passes behaved so before this round.
+
 The engine changed in this round (SYNC-1, SYNC-2), so `vendor/` and the list did:
 only `webzjs-wallet/webzjs_wallet_bg.wasm` differs (`de38cd03…`, was `c8fa1653…`).
 MEASURED on x86_64 Ubuntu 24.04 with clang-18 `1:18.1.3-1ubuntu1`: the same
@@ -519,12 +530,11 @@ from `.webzjs/target/webzjs-vendor.sha256`, and let CI's from-source run confirm
 | --- | --- | --- |
 | Backend (`engine/zcash_client_memory`): zcash_client_backend's backend-independent suite, PCZT tests, mainnet Ironwood vectors | `scripts/test-engine-native.sh` | 206 tests: 200 passed, 0 failed, 6 ignored (the ones sqlite ignores); 513 s on 4 cores. The two new ones (SYNC-1, SYNC-2) fail on the engine before the fix. 2026-10-29: 198 passed, 0 failed, 6 ignored, confirmed by a reviewer's run on a clean checkout (the script now refuses an uncommitted engine/, DRIFT-3) |
 | Glue (`webzjs-wallet`): history, NU7 rules, sync passes, data requests, against a mock lightwalletd | `bash scripts/build-webzjs.sh && scripts/test-engine-native.sh glue` | 68 passed, 0 failed; 193 s, on the round-7 engine |
-| App unit tests | `npm test` | all passing |
-| App UI tests (fake engine) | `npm run test:e2e` | all passing |
+| App UI tests (fake engine) | `npm run test:e2e` | 120 passed, 0 failed (5.5 min); unit tests (`npm test`): 269 passed |
 | Mainnet smoke test (real engine, production build) | `npm run test:e2e:real` | passed in 12.4 s on the round-7 build, network supported, with the CSP as a header (`vite preview`) and checked as both header and `<meta>` |
 | Mainnet restore from 2026-10 (production build, through a proxy; a reviewer's spec outside the repository) | - | 622 s; "blocks left" 49,148 -> 39,148 -> 29,148 -> 19,142 -> 9,142 -> 2,277 -> 1 -> Up to date, one rise of 4 blocks (the chain's growth); before Decision 21 it went back to ~48,800 at the second pass and ended at ~21,100 |
 | Upgrade from main's build to this one, mainnet (outside the repository, a reviewer's script) | - | 18/18 checks: rebuilt once, `db-legacy` kept until the tip, notices (en, tr); labels 49,269 -> 39,269, soft-lock reload, 29,274 at the first paint after the unlock (before the fix for the unlock: 49,174 for a moment), 19,264 -> 9,264 -> 2,278 -> "1 block left" -> up to date at 3,534,987 at 628 s; no count rose |
-| Build guards | `scripts/test-build-webzjs-guards.sh` | 23 of 23 (12 new cases; the 10 new checks failed against the previous script) |
+| Build guards | `scripts/test-build-webzjs-guards.sh` | 27 of 27 (4 new clean-tree cases, DRIFT-2). 2026-10-29: 23 of 23 |
 
 The backend's lockfile (`engine/zcash_client_memory/Cargo.lock`) is the shipped
 lockfile pruned to the crate; the script checks that every crate the tests compile

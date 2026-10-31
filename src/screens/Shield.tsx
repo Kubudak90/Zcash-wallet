@@ -41,7 +41,8 @@ function ShieldRows({ ironwood, fee }: { ironwood: boolean; fee: string }) {
       </div>
       <div>
         <dt>{t('shield.fee')}</dt>
-        <dd>~{fee} ZEC</dd>
+        {/* A lower bound, as on Send: ZIP 317 adds 5,000 zats for each further input (review round 7, ES-4). */}
+        <dd>{t('send.atLeast', { amount: fee })}</dd>
       </div>
     </>
   );
