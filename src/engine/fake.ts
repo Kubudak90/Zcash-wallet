@@ -120,11 +120,13 @@ export interface FakeKnobs {
   /** open() of a stored database throws this, like a corrupted database or a wasm trap while decoding it. */
   openFails?: string;
   /**
-   * Payments of 0.1 ZEC to these addresses arrive in the next pass. Each is the account's if it
-   * is its full unified address, its transparent one or any shielded address it handed out
-   * (they all keep working); others are someone else's and are ignored.
+   * Payments (0.1 ZEC, or `incomingZats`) to these addresses arrive in the next pass. Each is the
+   * account's if it is its full unified address, its transparent one or any shielded address it
+   * handed out (they all keep working); others are someone else's and are ignored.
    */
   incoming?: string[];
+  /** The value of each `incoming` payment, in zatoshis (default 0.1 ZEC). */
+  incomingZats?: number;
   /**
    * The engine's WebAssembly traps during the next pass, as the WebZjs build before round 5 did
    * once a spam-era batch filled its memory: the pass never ends on its own, and the trap reaches
@@ -536,11 +538,12 @@ export class FakeEngine implements ZcashEngine {
       );
       if (!a) continue;
       const pool = to.startsWith('t1') ? 'transparent' : this.ironwood ? 'ironwood' : 'orchard';
-      a.balances[pool] = (BigInt(a.balances[pool]) + 10_000_000n).toString();
+      const value = BigInt(k.incomingZats ?? 10_000_000);
+      a.balances[pool] = (BigInt(a.balances[pool]) + value).toString();
       a.history.unshift({
         txid: hex(hash(a.keyHash + 'rx' + to + Date.now())),
         type: 'received',
-        valueZats: '10000000',
+        valueZats: value.toString(),
         feeZats: null,
         height: tip,
         confirmations: 1,

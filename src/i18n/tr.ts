@@ -171,7 +171,8 @@ export const tr: Record<MessageKey, string> = {
   'home.shieldText':
     '{amount} ZEC herkesin görebildiği şeffaf adreste duruyor. Gizliye aktararak gelecekteki işlemlerini koruyabilirsin.',
   'home.shieldButton': 'Gizliye aktar',
-  'home.shieldBelowThreshold': 'Gizliye aktarmak için en az {amount} ZEC gerekir.',
+  'home.shieldBelowThreshold':
+    '{amount} ZEC herkesin görebildiği şeffaf adreste duruyor. Gizliye aktarmak için orada en az {min} ZEC olmalı (ağın alt sınırı ve ücret); biraz daha gelince bu ekranda Gizliye aktar düğmesi çıkar.',
   'home.outdatedBalance': 'Yeni Ironwood havuzu üzerinden sana gönderilen ödemeler henüz bu bakiyede yok.',
   'home.orchardNote':
     'Gizli bakiyenin {amount} ZEC’lik kısmı Orchard havuzunda ve her zamanki gibi harcanabilir. Ondan yapılan bir ödeme yeni gizli havuz Ironwood’a geçer ve geçen tutar zincirde görünür (ZIP 318 turnike kuralı). Para üstü Orchard’da kalır, bu yüzden ondan yapılan her yeni ödeme yeniden geçer. Celari henüz Ironwood’a gizli ve kademeli bir taşıma sunmuyor.',
@@ -208,7 +209,7 @@ export const tr: Record<MessageKey, string> = {
   'receive.about': 'Bu adresler hakkında',
   'receive.transparent': 'Şeffaf adres',
   'receive.transparentHelp':
-    'Sadece birleşik adresi desteklemeyen borsalar için. Bu adrese gelen para herkese açıktır; geldikten sonra gizliye aktar.',
+    'Sadece birleşik adresi desteklemeyen borsalar için. Bu adrese gelen para herkese açıktır. Ödeme bir bloğa girince, genelde birkaç dakika içinde Bakiye’de görünür; oradan gizliye aktar (en az {min} ZEC).',
   'receive.showTransparent': 'Şeffaf adresi göster',
   'receive.showUnified': 'Gizli adrese dön',
   'receive.noTransparent': 'Bu anahtarın şeffaf adresi yok.',
@@ -336,9 +337,9 @@ export const tr: Record<MessageKey, string> = {
 
   'shield.title': 'Gizliye aktar',
   'shield.intro':
-    '{amount} ZEC şeffaf bakiyen gizli bakiyene, Ironwood havuzuna aktarılacak. Ağ ücreti bu tutardan düşülür. Tutar ve şeffaf adresin zincirde görünür. Şeffaf paran birden fazla adresteyse (örneğin başka bir cüzdanın kelimelerini geri yükledikten sonra), hepsi tek işlemde aktarılır ve bu, o adreslerin aynı cüzdana ait olduğunu herkese gösterir.',
+    'Şeffaf bakiyenin tamamı, {amount} ZEC, gizli bakiyene, Ironwood havuzuna aktarılacak. Ağ ücreti bu tutardan düşülür. Tutar ve şeffaf adresin zincirde görünür. Şeffaf paran birden fazla adresteyse (örneğin başka bir cüzdanın kelimelerini geri yükledikten sonra), hepsi tek işlemde aktarılır ve bu, o adreslerin aynı cüzdana ait olduğunu herkese gösterir.',
   'shield.introOrchard':
-    '{amount} ZEC şeffaf bakiyen gizli Orchard bakiyene aktarılacak. Ağ ücreti bu tutardan düşülür. Tutar ve şeffaf adresin zincirde görünür. Şeffaf paran birden fazla adresteyse (örneğin başka bir cüzdanın kelimelerini geri yükledikten sonra), hepsi tek işlemde aktarılır ve bu, o adreslerin aynı cüzdana ait olduğunu herkese gösterir.',
+    'Şeffaf bakiyenin tamamı, {amount} ZEC, gizli Orchard bakiyene aktarılacak. Ağ ücreti bu tutardan düşülür. Tutar ve şeffaf adresin zincirde görünür. Şeffaf paran birden fazla adresteyse (örneğin başka bir cüzdanın kelimelerini geri yükledikten sonra), hepsi tek işlemde aktarılır ve bu, o adreslerin aynı cüzdana ait olduğunu herkese gösterir.',
   'shield.confirm': 'Aktar',
   'shield.success': 'Onaylanınca gizli bakiyende görünecek.',
   'shield.sentTitle': '{amount} ZEC gizliye aktarılıyor',

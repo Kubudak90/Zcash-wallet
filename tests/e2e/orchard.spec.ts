@@ -26,7 +26,7 @@ test('Orchard funds: an accurate note while there are any, the shield goes to Ir
 
   await page.getByRole('button', { name: 'Shield funds' }).click();
   await expect(
-    page.getByText('0.50 ZEC of transparent funds will move to your shielded balance, into the Ironwood pool.'),
+    page.getByText('All of your transparent funds, 0.50 ZEC, will move to your shielded balance, into the Ironwood pool.'),
   ).toBeVisible();
   await page.getByRole('button', { name: /Back/ }).click();
 

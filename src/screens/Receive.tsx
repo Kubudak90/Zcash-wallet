@@ -3,12 +3,16 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { GroupedAddress } from '../components/GroupedAddress';
 import { Icon } from '../components/icons';
 import { CopyButton, Notice, QrCode, Screen, Spinner } from '../components/ui';
+import { SHIELD_MIN_ZATS } from '../engine';
 import { useI18n } from '../i18n';
+import { formatZec } from '../lib/zec';
 import type { ReceiveAddress } from '../state/controller';
 import { useController, useWallet } from '../state/wallet';
 
 export function Receive() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
+  // Where a transparent payment shows up, and the least Balance can shield.
+  const transparentHelp = t('receive.transparentHelp', { min: formatZec(SHIELD_MIN_ZATS, { locale: lang }) });
   const controller = useController();
   const { addresses, ironwood } = useWallet();
   // Since NU6.3, shielded payments from up-to-date wallets land in Ironwood: an engine without it cannot see them.
@@ -121,7 +125,7 @@ export function Receive() {
             ) : (
               <p className="muted">{t('receive.noTransparent')}</p>
             )}
-            {transparent && <Notice tone="warn">{t('receive.transparentHelp')}</Notice>}
+            {transparent && <Notice tone="warn">{transparentHelp}</Notice>}
           </div>
         </section>
 
@@ -142,7 +146,7 @@ export function Receive() {
                 <Icon name="eye" className="about-icon public" />
                 {t('receive.transparent')}
               </h2>
-              <p>{t('receive.transparentHelp')}</p>
+              <p>{transparentHelp}</p>
               {toggle}
             </div>
           )}

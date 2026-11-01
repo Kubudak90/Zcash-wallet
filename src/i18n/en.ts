@@ -170,7 +170,8 @@ export const en = {
   'home.shieldText':
     '{amount} ZEC sits on a public transparent address. Shield it to protect your future transactions.',
   'home.shieldButton': 'Shield funds',
-  'home.shieldBelowThreshold': 'At least {amount} ZEC is needed to shield.',
+  'home.shieldBelowThreshold':
+    '{amount} ZEC sits on a public transparent address. Shielding needs at least {min} ZEC there (the network’s minimum and the fee); once more arrives, Shield funds appears on this screen.',
   'home.outdatedBalance': 'Payments sent to you through the new Ironwood pool are not in this balance yet.',
   'home.orchardNote':
     '{amount} ZEC of your shielded balance is in the Orchard pool and can be spent as usual. A payment from it crosses into Ironwood, the new shielded pool, and the amount that crosses is visible on chain (the ZIP 318 turnstile). The change stays in Orchard, so each later payment from it crosses again. Celari does not offer a private, gradual migration to Ironwood yet.',
@@ -207,7 +208,7 @@ export const en = {
   'receive.about': 'About these addresses',
   'receive.transparent': 'Transparent address',
   'receive.transparentHelp':
-    'Only for exchanges that do not support unified addresses. Funds sent here are public; shield them once they arrive.',
+    'Only for exchanges that do not support unified addresses. Funds sent here are public. A payment shows on Balance once it is in a block, usually within a few minutes; shield it from there (at least {min} ZEC).',
   'receive.showTransparent': 'Show transparent address',
   'receive.showUnified': 'Back to shielded address',
   'receive.noTransparent': 'This key has no transparent address.',
@@ -335,9 +336,9 @@ export const en = {
 
   'shield.title': 'Shield funds',
   'shield.intro':
-    '{amount} ZEC of transparent funds will move to your shielded balance, into the Ironwood pool. The network fee is deducted. The amount and your transparent address are visible on chain. If your transparent funds are on more than one address (for example after restoring a phrase from another wallet), they move in one transaction, which shows publicly that those addresses belong to the same wallet.',
+    'All of your transparent funds, {amount} ZEC, will move to your shielded balance, into the Ironwood pool. The network fee is deducted. The amount and your transparent address are visible on chain. If your transparent funds are on more than one address (for example after restoring a phrase from another wallet), they move in one transaction, which shows publicly that those addresses belong to the same wallet.',
   'shield.introOrchard':
-    '{amount} ZEC of transparent funds will move to your shielded Orchard balance. The network fee is deducted. The amount and your transparent address are visible on chain. If your transparent funds are on more than one address (for example after restoring a phrase from another wallet), they move in one transaction, which shows publicly that those addresses belong to the same wallet.',
+    'All of your transparent funds, {amount} ZEC, will move to your shielded Orchard balance. The network fee is deducted. The amount and your transparent address are visible on chain. If your transparent funds are on more than one address (for example after restoring a phrase from another wallet), they move in one transaction, which shows publicly that those addresses belong to the same wallet.',
   'shield.confirm': 'Shield',
   'shield.success': 'It will appear in your shielded balance once confirmed.',
   'shield.sentTitle': '{amount} ZEC is being shielded',

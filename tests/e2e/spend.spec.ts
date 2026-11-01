@@ -33,6 +33,8 @@ type Knobs = {
   refuseSpend?: 'UpgradePending' | 'PcztWrongBranch' | 'PcztExpired';
   rebroadcasts?: string[];
   afterSpend?: { holdPass?: boolean; summaryFails?: boolean };
+  incoming?: string[];
+  incomingZats?: number;
 };
 
 /** Changes the fake engine's knobs (src/engine/fake.ts) on the running page. */
@@ -506,6 +508,39 @@ test('Send explains that transparent funds must be shielded first', async ({ pag
   await page.getByRole('button', { name: 'Close' }).click();
   await expect(page.getByRole('heading', { name: 'Send ZEC' })).toBeVisible();
   await expect(sendTab).toHaveAttribute('aria-current', 'page');
+});
+
+test('below the shielding minimum, Balance says what is needed; the button comes once it is there', async ({ page }) => {
+  // Two payments, each found by the next pass (every 30 s).
+  test.slow();
+  await createWallet(page);
+  const actions = page.locator('.hero-actions');
+  await actions.getByRole('button', { name: 'Shield funds' }).click();
+  await page.getByLabel('Enter your password to confirm').fill(PASSWORD);
+  await page.getByRole('button', { name: 'Shield', exact: true }).click();
+  await expect(page.getByRole('heading', { name: '0.50 ZEC is being shielded' })).toBeVisible({ timeout: 10_000 });
+  await page.getByRole('button', { name: 'Close' }).click();
+
+  // Receive says when a transparent payment shows, and what Balance can shield.
+  await nav(page, 'Receive');
+  await page.getByRole('button', { name: 'Show transparent address' }).click();
+  await expect(page.locator('.receive-card .notice')).toContainText(
+    'A payment shows on Balance once it is in a block, usually within a few minutes; shield it from there (at least 0.0011 ZEC).',
+  );
+  const t1 = (await page.getByTestId('receive-address').textContent())!;
+
+  await setKnobs(page, { incoming: [t1], incomingZats: 50_000 });
+  await nav(page, 'Balance');
+  const note = page.locator('.shield-note');
+  await expect(note).toContainText(
+    '0.0005 ZEC sits on a public transparent address. Shielding needs at least 0.0011 ZEC there',
+    { timeout: 45_000 },
+  );
+  await expect(actions.getByRole('button', { name: 'Shield funds' })).toHaveCount(0);
+
+  await setKnobs(page, { incoming: [t1], incomingZats: 100_000 });
+  await expect(note).toContainText('0.0015 ZEC sits on a public transparent address. Shield it', { timeout: 45_000 });
+  await expect(actions.getByRole('button', { name: 'Shield funds' })).toBeVisible();
 });
 
 test('Turkish amount entry uses a decimal comma', async ({ page }) => {

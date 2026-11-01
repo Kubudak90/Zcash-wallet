@@ -306,3 +306,5 @@ export const grandTotal = (b: Balances) => shieldedTotal(b) + b.transparent + b.
 export const SHIELDING_THRESHOLD_ZATS = 100_000n;
 /** ZIP-317 fee for the common two-action transaction; the real fee can be higher. */
 export const TYPICAL_FEE_ZATS = 10_000n;
+/** The least transparent balance Celari offers to shield: the engine's threshold and the fee. */
+export const SHIELD_MIN_ZATS = SHIELDING_THRESHOLD_ZATS + TYPICAL_FEE_ZATS;

@@ -3,7 +3,7 @@ import { useEffect, useId, useRef, type CSSProperties } from 'react';
 import { Icon } from '../components/icons';
 import { TxRow, useFractionWidth } from '../components/TxRow';
 import { AmountParts, Notice, useHideBalances } from '../components/ui';
-import { SHIELDING_THRESHOLD_ZATS, TYPICAL_FEE_ZATS, grandTotal, shieldedTotal, type Balances } from '../engine';
+import { SHIELD_MIN_ZATS, grandTotal, shieldedTotal, type Balances } from '../engine';
 import { useI18n } from '../i18n';
 import { spendingDisabled } from '../lib/network';
 import { syncLabel } from '../lib/syncView';
@@ -79,7 +79,7 @@ export function Home({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
 
   const b = summary?.balances;
   const viewOnly = meta?.kind === 'view';
-  const shieldable = b ? b.transparent >= SHIELDING_THRESHOLD_ZATS + TYPICAL_FEE_ZATS : false;
+  const shieldable = b ? b.transparent >= SHIELD_MIN_ZATS : false;
   const transparentPrompt = !!b && b.transparent > 0n && !viewOnly;
   // The one way into Shield from here; where it cannot go, the prompt says why instead.
   const canShield = transparentPrompt && !spendingDisabled(network) && shieldable;
@@ -249,16 +249,15 @@ export function Home({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
           <div className="dashboard-note shield-note">
             <Notice tone="warn">
               <strong>{t('home.shieldTitle')}</strong>
-              <p>{t('home.shieldText', { amount: balances.fmt(b.transparent) })}</p>
-              {spendingDisabled(network) ? (
+              {/* Below the minimum there is no Shield button: the text itself says why, and when it appears. */}
+              <p>
+                {shieldable
+                  ? t('home.shieldText', { amount: balances.fmt(b.transparent) })
+                  : // The minimum is a fixed network amount, not one of the wallet's: shown when balances are hidden.
+                    t('home.shieldBelowThreshold', { amount: balances.fmt(b.transparent), min: fmt(SHIELD_MIN_ZATS) })}
+              </p>
+              {spendingDisabled(network) && (
                 <p className="small">{disabledMessage(network, t('shield.disabledOutdated'), t)}</p>
-              ) : (
-                !shieldable && (
-                  // A fixed network minimum, not one of the wallet's amounts.
-                  <p className="small">
-                    {t('home.shieldBelowThreshold', { amount: fmt(SHIELDING_THRESHOLD_ZATS + TYPICAL_FEE_ZATS) })}
-                  </p>
-                )
               )}
             </Notice>
           </div>

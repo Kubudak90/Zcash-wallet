@@ -6,7 +6,7 @@ import { Icon } from '../components/icons';
 import { Notice, Screen, useHideBalances } from '../components/ui';
 import {
   MEMO_MAX_BYTES,
-  SHIELDING_THRESHOLD_ZATS,
+  SHIELD_MIN_ZATS,
   TYPICAL_FEE_ZATS,
   shieldedTotal,
   type Balances,
@@ -207,7 +207,7 @@ export function Send({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
 
   const available = summary ? shieldedTotal(summary.balances) : 0n;
   const transparent = summary?.balances.transparent ?? 0n;
-  const shieldable = transparent >= SHIELDING_THRESHOLD_ZATS + TYPICAL_FEE_ZATS;
+  const shieldable = transparent >= SHIELD_MIN_ZATS;
   const max = available > TYPICAL_FEE_ZATS ? available - TYPICAL_FEE_ZATS : 0n;
   const addressCheck = to.trim() ? checkAddress(to) : null;
   // null until the recipient is a valid address.

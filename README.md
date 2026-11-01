@@ -23,7 +23,7 @@ No token, no points, no airdrop promises. Just a private ZEC wallet that works.
 ## Features
 
 - **Private by default:** Receive shows a new shielded-only unified address every time it opens; if the sender's wallet supports it, the payment goes to a shielded pool, today Ironwood. Earlier addresses keep working; the transparent address is kept apart.
-- **One-click shielding:** a transparent (t-address) balance is pointed out and moved into the shielded balance, in Ironwood.
+- **One-click shielding:** a transparent (t-address) balance is pointed out and moved into the shielded balance, in Ironwood: all of it, in one transaction, from 0.0011 ZEC (the engine's 0.001 ZEC minimum and the fee). Below that, Balance says how much is needed. A transparent payment shows once it is in a block (the light client does not watch the mempool).
 - **Network version guard:** Celari asks the server which consensus rules the network runs (lightwalletd `GetLightdInfo`) at start-up and on every sync, again before every spend and once more right before the broadcast. If the engine does not support those rules, or no answer comes, sending and shielding are switched off and the screen says why; an announced upgrade the engine will not support is shown in advance.
 - **Care at an upgrade boundary:** the engine builds no transaction for an upgrade's activation block or the 10 blocks before it, and if the network has moved to new rules it refuses a transaction built under the old ones before storing anything.
 - **Keys never leave the browser:** the recovery phrase and the wallet database are stored only encrypted (PBKDF2-SHA256, 600,000 rounds, and AES-256-GCM).
