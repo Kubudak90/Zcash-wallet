@@ -22,7 +22,13 @@ import type {
   SyncProgress,
   ZcashEngine,
 } from './types';
-import { MEMO_MAX_BYTES, NewerDatabaseFormatError, OldDatabaseFormatError, TYPICAL_FEE_ZATS } from './types';
+import {
+  MEMO_MAX_BYTES,
+  NewerDatabaseFormatError,
+  OldDatabaseFormatError,
+  SHIELD_FEE_MIN_ZATS,
+  TYPICAL_FEE_ZATS,
+} from './types';
 
 // A mainnet height under NU6.3 (Ironwood) rules, before NU7 (3,543,405).
 const TIP = 3_533_800;
@@ -708,13 +714,13 @@ export class FakeEngine implements ZcashEngine {
     const transparent = BigInt(a.balances.transparent);
     const store = () => {
       a.balances.transparent = '0';
-      a.balances.pending = (transparent - TYPICAL_FEE_ZATS).toString();
+      a.balances.pending = (transparent - SHIELD_FEE_MIN_ZATS).toString();
       a.history.unshift({
         txid: hex(hash(a.keyHash + 'shield' + Date.now())),
         type: 'shielded',
         // As WebZjs's history gives it: what arrived in the shielded pool, above 0 (review round 8, F-02).
-        valueZats: (transparent - TYPICAL_FEE_ZATS).toString(),
-        feeZats: TYPICAL_FEE_ZATS.toString(),
+        valueZats: (transparent - SHIELD_FEE_MIN_ZATS).toString(),
+        feeZats: SHIELD_FEE_MIN_ZATS.toString(),
         height: null,
         confirmations: 0,
         status: 'pending',

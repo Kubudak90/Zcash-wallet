@@ -6,6 +6,7 @@ import { Icon } from '../components/icons';
 import { Notice, Screen, useHideBalances } from '../components/ui';
 import {
   MEMO_MAX_BYTES,
+  SHIELD_FEE_MIN_ZATS,
   SHIELD_MIN_ZATS,
   TYPICAL_FEE_ZATS,
   shieldedTotal,
@@ -273,7 +274,7 @@ export function Send({ onNavigate }: { onNavigate: (tab: Tab) => void }) {
       zats = parseZec(amount);
       if (zats + TYPICAL_FEE_ZATS > available) {
         // Shielding first costs one more fee before the funds become spendable.
-        const afterShielding = shieldable ? available + transparent - TYPICAL_FEE_ZATS : available;
+        const afterShielding = shieldable ? available + transparent - SHIELD_FEE_MIN_ZATS : available;
         nextAmountError =
           zats + TYPICAL_FEE_ZATS <= afterShielding
             ? 'send.err.amount.insufficientShieldFirst'

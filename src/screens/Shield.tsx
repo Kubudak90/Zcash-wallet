@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 
 import { Icon } from '../components/icons';
 import { Screen } from '../components/ui';
-import { TYPICAL_FEE_ZATS } from '../engine';
+import { SHIELD_FEE_MIN_ZATS } from '../engine';
 import { useI18n } from '../i18n';
 import { spendingDisabled } from '../lib/network';
 import { formatZec } from '../lib/zec';
@@ -41,7 +41,7 @@ function ShieldRows({ ironwood, fee }: { ironwood: boolean; fee: string }) {
       </div>
       <div>
         <dt>{t('shield.fee')}</dt>
-        {/* A lower bound, as on Send: ZIP 317 adds 5,000 zats for each further input (review round 7, ES-4). */}
+        {/* A lower bound, as on Send: one input; ZIP 317 adds 5,000 zats for each further one (review round 7, ES-4). */}
         <dd>{t('send.atLeast', { amount: fee })}</dd>
       </div>
     </>
@@ -82,7 +82,7 @@ export function Shield({ onNavigate, onClose }: { onNavigate: (tab: Tab) => void
           </div>
           <UnsavedSpendNotice />
           <dl className="summary">
-            <ShieldRows ironwood={ironwood} fee={fmt(TYPICAL_FEE_ZATS)} />
+            <ShieldRows ironwood={ironwood} fee={fmt(SHIELD_FEE_MIN_ZATS)} />
           </dl>
           <div className="row spend-done-actions">
             <button type="button" className="secondary" onClick={() => onNavigate('history')}>
@@ -114,7 +114,7 @@ export function Shield({ onNavigate, onClose }: { onNavigate: (tab: Tab) => void
                 {t(ironwood ? 'shield.intro' : 'shield.introOrchard', { amount })}
               </p>
               <dl className="summary">
-                <ShieldRows ironwood={ironwood} fee={fmt(TYPICAL_FEE_ZATS)} />
+                <ShieldRows ironwood={ironwood} fee={fmt(SHIELD_FEE_MIN_ZATS)} />
               </dl>
             </div>
           )}

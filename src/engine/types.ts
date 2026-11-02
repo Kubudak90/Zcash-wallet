@@ -306,5 +306,15 @@ export const grandTotal = (b: Balances) => shieldedTotal(b) + b.transparent + b.
 export const SHIELDING_THRESHOLD_ZATS = 100_000n;
 /** ZIP-317 fee for the common two-action transaction; the real fee can be higher. */
 export const TYPICAL_FEE_ZATS = 10_000n;
-/** The least transparent balance Celari offers to shield: the engine's threshold and the fee. */
-export const SHIELD_MIN_ZATS = SHIELDING_THRESHOLD_ZATS + TYPICAL_FEE_ZATS;
+/**
+ * The least transparent balance Celari offers to shield: WebZjs's threshold, which it compares
+ * with the inputs and pays the fee from. Before, Celari asked for the fee on top (0.0011 ZEC), and
+ * a balance of exactly 0.001 ZEC, which the engine shields, showed no Shield button.
+ */
+export const SHIELD_MIN_ZATS = SHIELDING_THRESHOLD_ZATS;
+/**
+ * The least fee a shielding costs (ZIP 317): one transparent input and the Ironwood bundle's two
+ * actions, 3 logical actions; 5,000 zats more for each further input. On mainnet (1 November
+ * 2026) two inputs cost 20,000 zats.
+ */
+export const SHIELD_FEE_MIN_ZATS = 15_000n;

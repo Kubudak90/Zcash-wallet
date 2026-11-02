@@ -467,24 +467,43 @@ not reached.
 
 ## Before real funds depend on it
 
-Nothing below has been done with real funds; every mainnet run used throwaway
-wallets that owned nothing.
+Done with small real amounts on mainnet, before NU7, with the production build:
+in October a send from Ironwood to a `t1…` (block 3,535,070, change in
+Ironwood), and on 1 November 2026 these, between two Celari wallets (A and B),
+each checked on an explorer: v6, branch `0x37A5165B`, mined under NU6.3.
+
+| Block | Transaction | What it shows |
+| --- | --- | --- |
+| 3,537,815 | `18ae63acfe548870ab1f4b1c44159e4b5a9e3afb85db8f707cc1df84ab82c4e4` | A receives into Ironwood (one action, 556,945 zats) from another wallet paying from two transparent inputs. |
+| 3,537,819 | `e0a67db678ae769f8ae1499fe3d24314cd0ca5bc7c9f0f09bbe70e1a77f97703` | A pays B, Ironwood to Ironwood: two actions, no transparent part, fee 10,000. |
+| 3,538,099 | `d135ebf604d617e537fd71b5949c382e6e930d862ef1bdfb289b3c7e9ff4cd5f` | B pays 100,000 to A's `t1…` from Ironwood, change in Ironwood, fee 15,000. |
+| 3,538,109 | `014d55bad1320cc67a2c882cbcdf669c2e63a5e949ddf86f929cd21193b9ceed` | B pays 70,000 to the same `t1…`, fee 15,000. |
+| 3,538,114 | `be6e221f2f8ba27a318016b04a2313083d88ae057cef033292b9c590552ba907` | A shields both outputs (170,000) into Ironwood: 150,000 arrive, fee 20,000 (ZIP 317: two inputs and two actions). |
+
+A balance of exactly 100,000 zats (after the first payment) showed no Shield
+button: the app asked for the threshold plus the fee, though `pczt_shield` takes
+the threshold from the inputs and pays the fee from them. The app now offers it
+from the threshold, and shows the shielding fee as at least 15,000.
+
+Everything else below has not been done with real funds.
 
 1. **Real-funds tests on mainnet, small amounts, before NU7 (3,543,405) and again
    after it**, with the production build and the seed also restored in a second
    NU6.3-aware wallet for cross-checks:
    - Receive into Ironwood (a payment to Celari's `u1…` from an NU6.3 wallet: the
      note in the shielded total with its memo after one confirmation, History pool
-     `ironwood`), also into a view-only wallet.
+     `ironwood`), also into a view-only wallet. Done without a memo and without a
+     view-only wallet.
    - Send from Ironwood: `pczt_create` -> sign (keys module) -> prove -> `pczt_send`,
      to a `u1…`, a Sapling `zs1…` and a `t1…` (a TEX address is refused by the form,
      review round 7); on an explorer the
      transaction is v6 with branch `0x37A5165B` (after NU7: `0x77190AD9`), change in
-     Ironwood, fee by ZIP 317. Natively shown with fake notes only.
+     Ironwood, fee by ZIP 317. Done to a `u1…` and a `t1…` before NU7; not to a
+     `zs1…`, not after NU7.
    - Send from Orchard (existing users' funds): pays through Ironwood with the
      ZIP 318 canonical crossing; never seen on mainnet from this engine.
-   - Shield transparent funds into Ironwood; a Sapling spend; proving time and
-     memory in the browser for an Ironwood + Orchard spend.
+   - Shield transparent funds into Ironwood (done, two inputs); a Sapling spend;
+     proving time and memory in the browser for an Ironwood + Orchard spend.
    - Around NU7: a send in the last 10 blocks before 3,543,405 and in the
      activation block is refused (`UpgradePending`, the app's pause message); a
      transaction built before activation and sent after it is refused before

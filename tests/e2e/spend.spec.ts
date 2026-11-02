@@ -525,7 +525,7 @@ test('below the shielding minimum, Balance says what is needed; the button comes
   await nav(page, 'Receive');
   await page.getByRole('button', { name: 'Show transparent address' }).click();
   await expect(page.locator('.receive-card .notice')).toContainText(
-    'A payment shows on Balance once it is in a block, usually within a few minutes; shield it from there (at least 0.0011 ZEC).',
+    'A payment shows on Balance once it is in a block, usually within a few minutes; shield it from there (at least 0.001 ZEC).',
   );
   const t1 = (await page.getByTestId('receive-address').textContent())!;
 
@@ -533,13 +533,14 @@ test('below the shielding minimum, Balance says what is needed; the button comes
   await nav(page, 'Balance');
   const note = page.locator('.shield-note');
   await expect(note).toContainText(
-    '0.0005 ZEC sits on a public transparent address. Shielding needs at least 0.0011 ZEC there',
+    '0.0005 ZEC sits on a public transparent address. Shielding needs at least 0.001 ZEC there',
     { timeout: 45_000 },
   );
   await expect(actions.getByRole('button', { name: 'Shield funds' })).toHaveCount(0);
 
-  await setKnobs(page, { incoming: [t1], incomingZats: 100_000 });
-  await expect(note).toContainText('0.0015 ZEC sits on a public transparent address. Shield it', { timeout: 45_000 });
+  // Exactly the minimum, which the engine shields (it pays the fee from it).
+  await setKnobs(page, { incoming: [t1], incomingZats: 50_000 });
+  await expect(note).toContainText('0.001 ZEC sits on a public transparent address. Shield it', { timeout: 45_000 });
   await expect(actions.getByRole('button', { name: 'Shield funds' })).toBeVisible();
 });
 

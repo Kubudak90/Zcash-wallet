@@ -171,7 +171,7 @@ export const en = {
     '{amount} ZEC sits on a public transparent address. Shield it to protect your future transactions.',
   'home.shieldButton': 'Shield funds',
   'home.shieldBelowThreshold':
-    '{amount} ZEC sits on a public transparent address. Shielding needs at least {min} ZEC there (the network’s minimum and the fee); once more arrives, Shield funds appears on this screen.',
+    '{amount} ZEC sits on a public transparent address. Shielding needs at least {min} ZEC there (the wallet’s minimum; the fee comes out of it); once more arrives, Shield funds appears on this screen.',
   'home.outdatedBalance': 'Payments sent to you through the new Ironwood pool are not in this balance yet.',
   'home.orchardNote':
     '{amount} ZEC of your shielded balance is in the Orchard pool and can be spent as usual. A payment from it crosses into Ironwood, the new shielded pool, and the amount that crosses is visible on chain (the ZIP 318 turnstile). The change stays in Orchard, so each later payment from it crosses again. Celari does not offer a private, gradual migration to Ironwood yet.',

@@ -172,7 +172,7 @@ export const tr: Record<MessageKey, string> = {
     '{amount} ZEC herkesin görebildiği şeffaf adreste duruyor. Gizliye aktararak gelecekteki işlemlerini koruyabilirsin.',
   'home.shieldButton': 'Gizliye aktar',
   'home.shieldBelowThreshold':
-    '{amount} ZEC herkesin görebildiği şeffaf adreste duruyor. Gizliye aktarmak için orada en az {min} ZEC olmalı (ağın alt sınırı ve ücret); biraz daha gelince bu ekranda Gizliye aktar düğmesi çıkar.',
+    '{amount} ZEC herkesin görebildiği şeffaf adreste duruyor. Gizliye aktarmak için orada en az {min} ZEC olmalı (cüzdanın alt sınırı; ücret bu tutardan düşülür); biraz daha gelince bu ekranda Gizliye aktar düğmesi çıkar.',
   'home.outdatedBalance': 'Yeni Ironwood havuzu üzerinden sana gönderilen ödemeler henüz bu bakiyede yok.',
   'home.orchardNote':
     'Gizli bakiyenin {amount} ZEC’lik kısmı Orchard havuzunda ve her zamanki gibi harcanabilir. Ondan yapılan bir ödeme yeni gizli havuz Ironwood’a geçer ve geçen tutar zincirde görünür (ZIP 318 turnike kuralı). Para üstü Orchard’da kalır, bu yüzden ondan yapılan her yeni ödeme yeniden geçer. Celari henüz Ironwood’a gizli ve kademeli bir taşıma sunmuyor.',
