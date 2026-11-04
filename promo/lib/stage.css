@@ -1,0 +1,136 @@
+/* Celari video stage: 1920 x 1080, the wallet's own "Obsidian & Gold" tokens (src/styles.css, dark).
+   Everything is positioned in canvas pixels; scenes animate through lib/stage.js (a pure function of time). */
+
+@font-face { font-family: 'Geist Variable'; font-style: normal; font-weight: 100 900; src: url('/assets/fonts/geist-latin-ext-wght-normal.woff2') format('woff2-variations');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: 'Geist Variable'; font-style: normal; font-weight: 100 900; src: url('/assets/fonts/geist-latin-wght-normal.woff2') format('woff2-variations');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'Geist Mono Variable'; font-style: normal; font-weight: 100 900; src: url('/assets/fonts/geist-mono-latin-ext-wght-normal.woff2') format('woff2-variations');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: 'Geist Mono Variable'; font-style: normal; font-weight: 100 900; src: url('/assets/fonts/geist-mono-latin-wght-normal.woff2') format('woff2-variations');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'Fraunces Variable'; font-style: normal; font-weight: 100 900; src: url('/assets/fonts/fraunces-latin-ext-opsz-normal.woff2') format('woff2-variations');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: 'Fraunces Variable'; font-style: normal; font-weight: 100 900; src: url('/assets/fonts/fraunces-latin-opsz-normal.woff2') format('woff2-variations');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'Fraunces Variable'; font-style: italic; font-weight: 100 900; src: url('/assets/fonts/fraunces-latin-ext-opsz-italic.woff2') format('woff2-variations');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: 'Fraunces Variable'; font-style: italic; font-weight: 100 900; src: url('/assets/fonts/fraunces-latin-opsz-italic.woff2') format('woff2-variations');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+
+:root {
+  color-scheme: dark;
+  /* The wallet's tokens (src/styles.css, dark). */
+  --bg: #0d0c0a;
+  --side: #11100e;
+  --surface: #161512;
+  --surface-2: #1c1a17;
+  --raised: #24221d;
+  --inset: #100f0d;
+  --border: #26241f;
+  --border-2: #33302a;
+  --text: #eee8dc;
+  --muted: #b8af9f;
+  --subtle: #a0978a;
+  --accent: #f4b728;
+  --accent-hover: #f7c54d;
+  --accent-text: #1a1407;
+  --accent-fg: #f0be4e;
+  --accent-line: rgba(244, 183, 40, 0.36);
+  --brand-facet: #f4b728;
+  --ok: #8fc3a1; /* shielded: sage */
+  --shielded: #8fc3a1;
+  --transparent: #e59b6e; /* transparent: copper */
+  --warn: #d2ac80;
+  --error: #ee8576;
+  --info: #a9b8c9;
+  --shadow-2: inset 0 1px 0 rgba(255, 244, 222, 0.04), 0 1px 2px rgba(0, 0, 0, 0.4), 0 18px 44px -26px rgba(0, 0, 0, 0.75);
+  --font-ui: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Fraunces Variable', ui-serif, Georgia, serif;
+  --font-mono: 'Geist Mono Variable', ui-monospace, Menlo, monospace;
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; width: 1920px; height: 1080px; overflow: hidden; background: var(--bg); }
+body { color: var(--text); font-family: var(--font-ui); font-size: 28px; line-height: 1.4; -webkit-font-smoothing: antialiased; }
+svg { display: block; }
+img { display: block; max-width: none; }
+
+#stage { position: relative; width: 1920px; height: 1080px; overflow: hidden; background: var(--bg); isolation: isolate; }
+.abs { position: absolute; left: 0; top: 0; }
+.fill { position: absolute; inset: 0; }
+.cam { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; transform-origin: 0 0; }
+.center { display: flex; align-items: center; justify-content: center; }
+.col { display: flex; flex-direction: column; }
+.row { display: flex; flex-direction: row; }
+.nowrap { white-space: nowrap; }
+.hidden { opacity: 0; visibility: hidden; }
+
+/* Ambient: a warm gold glow and a static film grain (dithers dark gradients so they do not band after H.264). */
+.glow { position: absolute; inset: 0; background:
+  radial-gradient(60% 55% at 50% 42%, rgba(244, 183, 40, 0.085), rgba(244, 183, 40, 0) 70%),
+  radial-gradient(90% 80% at 50% 120%, rgba(244, 183, 40, 0.05), rgba(244, 183, 40, 0) 60%); pointer-events: none; }
+.vignette { position: absolute; inset: 0; background: radial-gradient(120% 100% at 50% 50%, rgba(0,0,0,0) 55%, rgba(0,0,0,0.38) 100%); pointer-events: none; }
+.grain { position: absolute; inset: -64px; pointer-events: none; opacity: 0.07; mix-blend-mode: overlay; z-index: 999;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='256' height='256'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 1.4 -0.2'/></filter><rect width='256' height='256' filter='url(%23n)'/></svg>"); }
+
+/* Type */
+.display { font-family: var(--font-display); font-optical-sizing: auto; font-variant-numeric: lining-nums; font-weight: 400; letter-spacing: -0.02em; line-height: 1.08; }
+.display em { font-style: italic; color: var(--accent-fg); }
+.eyebrow { font-size: 22px; font-weight: 560; letter-spacing: 0.14em; line-height: 1.2; text-transform: uppercase; color: var(--muted); display: inline-flex; align-items: center; gap: 16px; }
+.eyebrow::before { content: ''; width: 36px; height: 2px; background: var(--accent); display: block; }
+.eyebrow.plain::before { display: none; }
+.lede { font-size: 34px; line-height: 1.42; color: var(--muted); font-weight: 400; text-wrap: pretty; }
+.mono { font-family: var(--font-mono); font-variant-ligatures: none; }
+.gold { color: var(--accent-fg); }
+.sage { color: var(--shielded); }
+.copper { color: var(--transparent); }
+.muted { color: var(--muted); }
+
+/* Chips and badges (the wallet's privacy labels: words and a shape, not only colour) */
+.chip { display: inline-flex; align-items: center; gap: 12px; padding: 10px 22px; border-radius: 999px; border: 1.5px solid var(--border-2); background: var(--surface); font-size: 24px; font-weight: 520; color: var(--text); white-space: nowrap; }
+.chip.sage { border-color: rgba(143,195,161,0.45); color: var(--shielded); background: rgba(143,195,161,0.08); }
+.chip.copper { border-color: rgba(229,155,110,0.45); color: var(--transparent); background: rgba(229,155,110,0.08); }
+.chip.gold { border-color: var(--accent-line); color: var(--accent-fg); background: rgba(244,183,40,0.07); }
+.dot { width: 14px; height: 14px; border-radius: 50%; background: currentColor; display: inline-block; }
+.dot.hollow { background: transparent; border: 3px solid currentColor; }
+
+.card { background: var(--surface); border: 1.5px solid var(--border-2); border-radius: 28px; box-shadow: var(--shadow-2); }
+.card.hair { border-color: var(--accent-line); }
+.icon { width: 1em; height: 1em; stroke: currentColor; fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+
+/* Browser frame: .browser > .bar + .screen (the screen is the plate's own CSS-pixel size; scale the whole frame with a track). */
+.browser { position: absolute; border-radius: 16px; overflow: hidden; background: var(--bg); border: 1.5px solid var(--border-2);
+  box-shadow: 0 60px 120px -40px rgba(0,0,0,0.85), 0 0 0 1px rgba(255,244,222,0.03), 0 0 160px -50px rgba(244,183,40,0.18); transform-origin: 0 0; }
+.browser .bar { height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 16px; background: #1a1815; border-bottom: 1px solid var(--border); }
+.browser .bar i { width: 12px; height: 12px; border-radius: 50%; background: #3a362f; display: block; }
+.browser .url { margin: 0 auto; transform: translateX(-34px); height: 28px; min-width: 360px; padding: 0 16px; display: flex; align-items: center; justify-content: center; gap: 8px; border-radius: 8px; background: #100f0d; color: var(--muted); font-size: 14px; font-family: var(--font-ui); letter-spacing: 0.01em; }
+.browser .url svg { width: 13px; height: 13px; stroke: var(--shielded); fill: none; stroke-width: 1.8; }
+.browser .screen { position: relative; overflow: hidden; background: var(--bg); }
+.screen > img, .screen > .layer { position: absolute; left: 0; top: 0; }
+
+/* Phone frame: .phone > .screen (390 x 844 CSS px) */
+.phone { position: absolute; padding: 14px; border-radius: 62px; background: linear-gradient(160deg, #2a2722, #15130f); border: 2px solid #3a362f;
+  box-shadow: 0 60px 120px -40px rgba(0,0,0,0.9), 0 0 140px -50px rgba(244,183,40,0.16); transform-origin: 0 0; }
+.phone .screen { position: relative; overflow: hidden; border-radius: 48px; background: var(--bg); }
+.phone .island { position: absolute; left: 50%; top: 22px; width: 112px; height: 30px; margin-left: -56px; border-radius: 20px; background: #000; z-index: 5; }
+
+/* Cursor, click ripple, spotlight, callout */
+.cursor { position: absolute; left: 0; top: 0; width: 0; height: 0; z-index: 50; transform-origin: 0 0; }
+.cursor svg { position: absolute; left: -3px; top: -2px; width: 34px; height: 40px; filter: drop-shadow(0 3px 6px rgba(0,0,0,0.55)); }
+.ripple { position: absolute; left: -36px; top: -36px; width: 72px; height: 72px; border-radius: 50%; border: 3px solid var(--accent); background: rgba(244,183,40,0.18); z-index: 49; opacity: 0; pointer-events: none; }
+.spot { position: absolute; left: 0; top: 0; border-radius: 16px; border: 2.5px solid var(--accent); box-shadow: 0 0 0 9999px rgba(13,12,10,0.62), 0 0 40px rgba(244,183,40,0.35); pointer-events: none; z-index: 40; }
+.hl { position: absolute; left: 0; top: 0; border-radius: 14px; border: 3px solid var(--accent); box-shadow: 0 0 36px rgba(244,183,40,0.32); pointer-events: none; z-index: 40; }
+.callout { position: absolute; display: flex; align-items: flex-start; gap: 18px; padding: 20px 26px 20px 20px; border-radius: 22px; background: rgba(28,26,23,0.94); border: 1.5px solid var(--accent-line); box-shadow: 0 24px 60px -24px rgba(0,0,0,0.8); font-size: 27px; line-height: 1.35; max-width: 520px; backdrop-filter: none; }
+.callout b { color: var(--text); font-weight: 600; }
+.callout .n { flex: none; width: 42px; height: 42px; border-radius: 50%; background: var(--accent); color: var(--accent-text); font-weight: 700; font-size: 23px; display: flex; align-items: center; justify-content: center; }
+
+/* Step header (tutorial): "ADIM 2 / 7" + title */
+.stepbadge { display: inline-flex; align-items: center; gap: 14px; font-size: 22px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent-fg); }
+.stepbadge .num { width: 54px; height: 54px; border-radius: 50%; background: var(--accent); color: var(--accent-text); display: flex; align-items: center; justify-content: center; font-size: 28px; letter-spacing: 0; font-weight: 700; }
+
+/* Lower-third caption */
+.caption { position: absolute; left: 50%; bottom: 56px; transform: translateX(-50%); padding: 16px 34px; border-radius: 18px; background: rgba(13,12,10,0.82); border: 1.5px solid var(--border-2); font-size: 30px; font-weight: 480; color: var(--text); white-space: nowrap; }
+
+.caret { display: inline-block; width: 0.09em; height: 1em; margin-left: 0.06em; background: var(--accent); vertical-align: -0.12em; }

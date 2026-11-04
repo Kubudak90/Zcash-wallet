@@ -7,3 +7,7 @@ playwright-report/
 *.log
 .DS_Store
 engine/**/target/
+
+# Celari promo video: rendered output and frame scratch (regenerate with promo/assemble.mjs)
+promo/out/
+promo/.frames/

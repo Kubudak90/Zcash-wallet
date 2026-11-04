@@ -1,0 +1,57 @@
+{
+  "fps": 30,
+  "size": [1920, 1080],
+  "defaultOverlap": 0.5,
+  "cuts": {
+    "full": ["s01-open","s02-default","s03-promises","s04-how","s05-bumper","s06-open-wallet","s07-recovery","s08-verify","s09-password","s10-receive","s11-send","s12-shield","s13-history-settings","s14-phone","s15-closing"],
+    "promo": ["s01-open","s02-default","s03-promises","s04-how","s14-phone","s15-closing"],
+    "tutorial": ["s05-bumper","s06-open-wallet","s07-recovery","s08-verify","s09-password","s10-receive","s11-send","s12-shield","s13-history-settings","s15-closing"]
+  },
+  "scenes": [
+    { "id": "s01-open", "act": "promo", "target": 7, "vo": {
+      "tr": "Celari: Zcash için açık kaynak, gizlilik öncelikli bir tarayıcı cüzdanı. Adı Latince “celare”den gelir: gizlemek.",
+      "en": "Celari is an open-source, privacy-first Zcash wallet that runs in your browser. Its name comes from the Latin “celare”: to hide." } },
+    { "id": "s02-default", "act": "promo", "target": 10, "vo": {
+      "tr": "Şeffaf bir adreste her işlem zincirde herkese açıktır. Gizli havuzda ise tutar ve taraflar görünmez. Celari gizli olanı varsayılan yapar: Al ekranı her açılışta yeni, yalnızca gizli bir adres gösterir.",
+      "en": "On a transparent address, every transaction is public on the chain. In the shielded pool, amounts and parties are not visible. Celari makes shielded the default: Receive shows a new, shielded-only address every time you open it." } },
+    { "id": "s03-promises", "act": "promo", "target": 13, "vo": {
+      "tr": "Anahtarların cihazında, şifreli kalır. Her ödeme gizli mi, kısmen gizli mi, herkese açık mı, nedeniyle söylenir. Hepsi açık kaynak: token yok, hesap yok, airdrop vaadi yok.",
+      "en": "Your keys stay on your device, encrypted. Every payment says whether it is shielded, partly shielded or public, and why. Everything is open source: no token, no account, no airdrop promises." } },
+    { "id": "s04-how", "act": "promo", "target": 14, "vo": {
+      "tr": "Bloklar bir sunucudan iner ama senin tarayıcında taranır. Gizli bakiyen ve kurtarma kelimelerin sende kalır. Sunucu IP adresini, şeffaf adreslerini ve yayınladığın işlemleri görür. Her ödeme tarayıcında oluşturulur, imzalanır, kanıtlanır ve yayınlanır.",
+      "en": "Blocks are downloaded from a server but scanned in your browser. Your shielded balance and your recovery phrase stay with you. The server sees your IP address, your transparent addresses and the transactions you broadcast. Every payment is created, signed, proved and broadcast from your browser." } },
+    { "id": "s05-bumper", "act": "tutorial", "target": 5, "vo": {
+      "tr": "Şimdi Celari’yi sekiz adımda kullanalım. Ekrandaki bakiyeler, adresler ve kelimeler demo verisidir.",
+      "en": "Now let’s use Celari in eight steps. The balances, addresses and words on screen are demo data." } },
+    { "id": "s06-open-wallet", "act": "tutorial", "target": 10, "vo": {
+      "tr": "app.celariwallet.com adresini aç. Hesap açmana gerek yok: “Yeni cüzdan oluştur”u seç.",
+      "en": "Go to app.celariwallet.com. There is no account to make: choose “Create a new wallet”." } },
+    { "id": "s07-recovery", "act": "tutorial", "target": 10, "vo": {
+      "tr": "Celari sana 24 kurtarma kelimesi gösterir. Bunlar cüzdanının tek yedeği: sırayla kağıda yaz, kimseyle paylaşma, ekran görüntüsü alma.",
+      "en": "Celari shows you 24 recovery words. They are the only backup of your wallet: write them down in order, never share them, and do not screenshot them." } },
+    { "id": "s08-verify", "act": "tutorial", "target": 9, "vo": {
+      "tr": "Yazdığını doğrula: Celari kağıttan üç kelimeyi tekrar ister.",
+      "en": "Verify what you wrote down: Celari asks for three of the words again." } },
+    { "id": "s09-password", "act": "tutorial", "target": 11, "vo": {
+      "tr": "Bir şifre belirle. Şifre cüzdanı bu tarayıcıda kilitler ve her harcamada sorulur. Unutursan kurtarma kelimelerinle yeniden yüklersin.",
+      "en": "Set a password. It locks the wallet in this browser and is asked on every spend. If you forget it, you restore from your recovery phrase." } },
+    { "id": "s10-receive", "act": "tutorial", "target": 12, "vo": {
+      "tr": "Al ekranı yalnızca gizli bir adres gösterir ve her açışında yenisini verir; eskileri de çalışmaya devam eder. Şeffaf adres sadece birleşik adresi desteklemeyen borsalar için.",
+      "en": "Receive shows a shielded-only address and gives you a new one every time; earlier ones keep working. The transparent address is only for exchanges that do not support unified addresses." } },
+    { "id": "s11-send", "act": "tutorial", "target": 17, "vo": {
+      "tr": "Göndermek için adresi ve tutarı gir, istersen şifreli bir not ekle. Gözden geçir, şifrenle onayla. Sıfır bilgi kanıtı tarayıcında üretilir, ödeme ağa gönderilir.",
+      "en": "To send, enter an address and an amount, and add an encrypted memo if you like. Review it and confirm with your password. The zero-knowledge proof is generated in your browser and the payment is sent to the network." } },
+    { "id": "s12-shield", "act": "tutorial", "target": 11, "vo": {
+      "tr": "Şeffaf bakiyen varsa Celari bunu gösterir. “Gizliye aktar” hepsini tek işlemde gizli havuza taşır. Bu işlemde tutar ve şeffaf adres zincirde görünür.",
+      "en": "If you have a transparent balance, Celari points it out. “Shield funds” moves all of it into the shielded pool in one transaction. In that transaction the amount and the transparent address are visible on chain." } },
+    { "id": "s13-history-settings", "act": "tutorial", "target": 15, "vo": {
+      "tr": "Geçmiş’te her işlemin gizlilik etiketini görürsün. Göz düğmesi bakiyeleri gizler. Ayarlar’da otomatik kilidi, sunucuyu ve görüntüleme anahtarını yönetirsin. Kilitle’ye basınca cüzdan şifreyle kapanır.",
+      "en": "History labels how private every transaction is. The eye button hides balances. In Settings you manage auto-lock, the server and the viewing key. Press Lock and the wallet closes behind your password." } },
+    { "id": "s14-phone", "act": "closing", "target": 7, "vo": {
+      "tr": "Telefonun tarayıcısında da aynı cüzdan: geniş ekranda kenar çubuğu, telefonda alt sekmeler.",
+      "en": "The same wallet in your phone’s browser: a sidebar on wide screens, bottom tabs on phones." } },
+    { "id": "s15-closing", "act": "closing", "target": 10, "overlapIn": 0.7, "vo": {
+      "tr": "Celari: işini kendine saklayan bir Zcash cüzdanı. Ama dürüst olalım: henüz bağımsız bir güvenlik denetiminden geçmedi. Kaybetmeyi göze alabileceğin tutarlarla başla. Cüzdan app.celariwallet.com’da, kaynak kod GitHub’da.",
+      "en": "Celari: a Zcash wallet that keeps your business your own. To be honest, it has not had an independent security audit yet. Start with amounts you can afford to lose. The wallet is at app.celariwallet.com and the source is on GitHub." } }
+  ]
+}
