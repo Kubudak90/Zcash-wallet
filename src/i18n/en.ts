@@ -227,7 +227,7 @@ export const en = {
   'send.max': 'Max',
   'send.available': 'Spendable shielded balance: {amount} ZEC',
   'send.fee':
-    'Network fee at least {amount} ZEC: ZIP 317 adds 0.00005 ZEC for each further note the payment spends or creates. History shows the fee paid.',
+    'Network fee at least {amount} ZEC. ZIP 317 charges 0.00005 ZEC per step: each shielded pool the payment uses counts the larger of the notes it spends and creates there, and at least two; each transparent output counts one. History shows the fee paid.',
   'send.atLeast': 'at least {amount} ZEC',
   'send.review': 'Review',
   'send.confirmTitle': 'Confirm sending',
@@ -388,6 +388,7 @@ export const en = {
     'Celari believes what this server says about the chain: a dishonest server can show payments that never happened, hide real ones, or not pass on what you send. Save it only if you trust it, and check a large incoming payment on another server or a block explorer before you rely on it.',
   'settings.serverShort': 'Server',
   'settings.serverSave': 'Save and restart',
+  'settings.serverConfirmSave': 'I trust this server, save and restart',
   'settings.serverReset': 'Reset to default',
   'settings.serverInvalid': 'Enter a valid address starting with https://, without a user name, “?” or “#”.',
   'settings.privacy': 'Privacy',

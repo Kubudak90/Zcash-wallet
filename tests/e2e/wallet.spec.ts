@@ -124,11 +124,31 @@ test('settings: reveal recovery phrase and viewing key, then wipe', async ({ pag
   // (review round 7, PLAT-4): the first "Save and restart" only says so.
   await expect(server).toHaveAccessibleDescription(/a dishonest server can show payments that never happened/);
   await server.fill('https://other.example');
-  await page.getByRole('button', { name: 'Save and restart' }).click();
+  const save = page.getByRole('button', { name: 'Save and restart', exact: true });
+  await save.click();
   const trust = page.locator('.notice', { has: page.getByTestId('server-trust') });
   await expect(trust).toContainText('Celari believes what this server says about the chain');
+  // Focus moves to the note, so a screen reader reads it; Save stays focusable but inert
+  // meanwhile, and the button that saves says what it confirms (4 November 2026).
+  await expect(page.getByTestId('server-trust')).toBeFocused();
+  expect(await save.evaluate((b) => (b as HTMLButtonElement).disabled)).toBe(false);
+  await expect(save).toHaveAttribute('aria-disabled', 'true');
+  const trustSave = trust.getByRole('button', { name: 'I trust this server, save and restart' });
+  await expect(trustSave).toHaveAccessibleDescription(/Celari believes what this server says about the chain/);
+  // Playwright waits on aria-disabled; force clicks it anyway, and nothing happens.
+  await save.click({ force: true });
+  await expect(page.getByTestId('server-trust')).toHaveCount(1);
   await trust.getByRole('button', { name: 'Cancel' }).click();
   await expect(page.getByTestId('server-trust')).toHaveCount(0);
+  await expect(save).toBeFocused();
+  // Typing in the field closes the note and leaves the focus where the typing is.
+  await save.click();
+  await expect(page.getByTestId('server-trust')).toBeFocused();
+  await server.press('End');
+  await page.keyboard.type('x');
+  await expect(page.getByTestId('server-trust')).toHaveCount(0);
+  await expect(server).toBeFocused();
+  await expect(server).toHaveValue('https://other.examplex');
   await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
   await page.getByRole('button', { name: 'Reset to default' }).click();
   await page.getByLabel('Auto-lock').selectOption('30');

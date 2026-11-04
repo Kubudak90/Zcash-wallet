@@ -228,7 +228,7 @@ export const tr: Record<MessageKey, string> = {
   'send.max': 'Tümü',
   'send.available': 'Gönderilebilir gizli bakiye: {amount} ZEC',
   'send.fee':
-    'Ağ ücreti en az {amount} ZEC: ZIP 317, ödemenin harcadığı ya da oluşturduğu her ek not için 0,00005 ZEC ekler. Ödenen ücret Geçmiş’te görünür.',
+    'Ağ ücreti en az {amount} ZEC. ZIP 317 adım başına 0,00005 ZEC alır: ödemenin kullandığı her gizli havuz, orada harcanan ve oluşturulan notlardan hangisi çoksa o kadar adım sayılır, en az iki; her şeffaf çıktı da bir adımdır. Ödenen ücret Geçmiş’te görünür.',
   'send.atLeast': 'en az {amount} ZEC',
   'send.review': 'Gözden geçir',
   'send.confirmTitle': 'Gönderimi onayla',
@@ -389,6 +389,7 @@ export const tr: Record<MessageKey, string> = {
     'Celari bu sunucunun zincir hakkında söylediklerine inanır: dürüst olmayan bir sunucu hiç olmamış ödemeleri gösterebilir, gerçek ödemeleri gizleyebilir ya da gönderdiklerini iletmeyebilir. Yalnızca güveniyorsan kaydet ve büyük bir gelen ödemeye güvenmeden önce onu başka bir sunucuda ya da bir blok gezgininde kontrol et.',
   'settings.serverShort': 'Sunucu',
   'settings.serverSave': 'Kaydet ve yeniden başlat',
+  'settings.serverConfirmSave': 'Bu sunucuya güveniyorum, kaydet ve yeniden başlat',
   'settings.serverReset': 'Varsayılana dön',
   'settings.serverInvalid': 'https:// ile başlayan, kullanıcı adı, “?” ve “#” içermeyen geçerli bir adres gir.',
   'settings.privacy': 'Gizlilik',

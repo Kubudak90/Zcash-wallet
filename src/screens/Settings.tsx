@@ -281,6 +281,14 @@ export function Settings() {
   const saveServer = () => {
     if (serverUrl !== null) void controller.saveSettings({ ...settings, serverUrl }, { restart: true });
   };
+  const serverSaveRef = useRef<HTMLButtonElement>(null);
+  const serverTrustRef = useRef<HTMLParagraphElement>(null);
+  const serverTrustId = useId();
+  // The trust note opens below the button that had focus, so focus moves to it and a
+  // screen reader reads it at once; Cancel gives focus back to Save (the PasswordGate pattern).
+  useEffect(() => {
+    if (serverConfirm) serverTrustRef.current?.focus();
+  }, [serverConfirm]);
   const serverId = useId();
   const serverHelpId = useId();
   const serverErrorId = useId();
@@ -455,8 +463,12 @@ export function Settings() {
                 <button
                   type="button"
                   className="secondary"
-                  disabled={!serverValid || serverUrl === savedServer || serverConfirm}
+                  ref={serverSaveRef}
+                  disabled={!serverValid || serverUrl === savedServer}
+                  // Not disabled while the trust note is open: that would drop the focus it has.
+                  aria-disabled={serverConfirm || undefined}
                   onClick={() => {
+                    if (serverConfirm) return;
                     // The server decides what Celari believes about the chain (review round 7,
                     // PLAT-4): another one than the default is saved only after saying so.
                     if (serverUrl !== DEFAULT_SERVER) setServerConfirm(true);
@@ -468,13 +480,22 @@ export function Settings() {
               </div>
               {serverConfirm && (
                 <Notice tone="warn">
-                  <p data-testid="server-trust">{t('settings.serverTrust')}</p>
+                  <p id={serverTrustId} ref={serverTrustRef} tabIndex={-1} data-testid="server-trust">
+                    {t('settings.serverTrust')}
+                  </p>
                   <div className="row">
-                    <button type="button" className="secondary" onClick={() => setServerConfirm(false)}>
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() => {
+                        setServerConfirm(false);
+                        serverSaveRef.current?.focus();
+                      }}
+                    >
                       {t('common.cancel')}
                     </button>
-                    <button type="button" className="primary" onClick={saveServer}>
-                      {t('settings.serverSave')}
+                    <button type="button" className="primary" aria-describedby={serverTrustId} onClick={saveServer}>
+                      {t('settings.serverConfirmSave')}
                     </button>
                   </div>
                 </Notice>

@@ -99,6 +99,11 @@ test('a failed spend says whether it is safe to try again', async ({ page }) => 
   await page.getByRole('button', { name: /Back/ }).click();
   await expect(page.getByLabel('Recipient address')).toHaveValue(UA);
   await expect(page.getByLabel('Amount (ZEC)')).toHaveValue('0.0333');
+  // The fee note counts as ZIP 317 does: per shielded pool the larger of the notes spent and
+  // created, at least two, not every further note (4 November 2026).
+  await expect(page.getByLabel('Amount (ZEC)')).toHaveAccessibleDescription(
+    /Network fee at least 0\.0001 ZEC\. ZIP 317 charges 0\.00005 ZEC per step: each shielded pool the payment uses counts the larger of the notes it spends and creates there, and at least two; each transparent output counts one\./,
+  );
 
   // Broadcasting fails: the payment may be out, so no retry is offered and no fix is suggested.
   await page.getByLabel('Amount (ZEC)').fill('0.0666');
