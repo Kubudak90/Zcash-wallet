@@ -15,11 +15,11 @@
       "tr": "Şeffaf bir adreste her işlem zincirde herkese açıktır. Gizli havuzda ise tutar ve taraflar görünmez. Celari gizli olanı varsayılan yapar: Al ekranı her açılışta yeni, yalnızca gizli bir adres gösterir.",
       "en": "On a transparent address, every transaction is public on the chain. In the shielded pool, amounts and parties are not visible. Celari makes shielded the default: Receive shows a new, shielded-only address every time you open it." } },
     { "id": "s03-promises", "act": "promo", "target": 13, "vo": {
-      "tr": "Anahtarların cihazında, şifreli kalır. Her ödeme gizli mi, kısmen gizli mi, herkese açık mı, nedeniyle söylenir. Hepsi açık kaynak: token yok, hesap yok, airdrop vaadi yok.",
+      "tr": "Anahtarların cihazında, şifreli kalır. Her ödeme gizli mi, kısmen gizli mi, herkese açık mı olduğunu ve nedenini söyler. Hepsi açık kaynak: token yok, hesap yok, airdrop vaadi yok.",
       "en": "Your keys stay on your device, encrypted. Every payment says whether it is shielded, partly shielded or public, and why. Everything is open source: no token, no account, no airdrop promises." } },
     { "id": "s04-how", "act": "promo", "target": 14, "vo": {
-      "tr": "Bloklar bir sunucudan iner ama senin tarayıcında taranır. Gizli bakiyen ve kurtarma kelimelerin sende kalır. Sunucu IP adresini, şeffaf adreslerini ve yayınladığın işlemleri görür. Her ödeme tarayıcında oluşturulur, imzalanır, kanıtlanır ve yayınlanır.",
-      "en": "Blocks are downloaded from a server but scanned in your browser. Your shielded balance and your recovery phrase stay with you. The server sees your IP address, your transparent addresses and the transactions you broadcast. Every payment is created, signed, proved and broadcast from your browser." } },
+      "tr": "Bloklar bir sunucudan iner ama senin tarayıcında taranır. Gizli bakiyen ve kurtarma kelimelerin sende kalır. Sunucu IP adresini, şeffaf adreslerini ve yayınladığın işlemleri görür. Her ödeme tarayıcında kanıtlanan bir PCZT’dir.",
+      "en": "Blocks are downloaded from a server but scanned in your browser. Your shielded balance and your recovery phrase stay with you. The server sees your IP address, your transparent addresses and the transactions you broadcast. Every payment is a PCZT, proved in your browser." } },
     { "id": "s05-bumper", "act": "tutorial", "target": 5, "vo": {
       "tr": "Şimdi Celari’yi sekiz adımda kullanalım. Ekrandaki bakiyeler, adresler ve kelimeler demo verisidir.",
       "en": "Now let’s use Celari in eight steps. The balances, addresses and words on screen are demo data." } },

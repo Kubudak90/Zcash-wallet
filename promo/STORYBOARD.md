@@ -74,11 +74,12 @@ with a cursor that clicks through them. Do not narrate the obvious: the cursor s
 ### s05-bumper (5 s) · free-form
 Chapter card. TR `Nasıl kullanılır` / `Sekiz adımda Celari.` EN `How to use it` / `Celari in eight steps.` The eight step names appear as a
 numbered list (gold numerals 01-08 in Geist Mono, names in Geist 30 px), stagger 0.15 s:
-TR Cüzdanı aç · Kelimeleri yaz · Yedeği doğrula · Şifre belirle · ZEC al · ZEC gönder · Gizliye aktar · Geçmiş, ayarlar, kilit
-EN Open the wallet · Write the words · Verify the backup · Set a password · Receive ZEC · Send ZEC · Shield funds · History, settings, lock.
-A chip bottom-left: TR `Gerçek arayüz · demo verisi` EN `Real interface · demo data`. The engraved C sits large and faint behind.
+TR Cüzdanı aç · 24 kelimeyi yaz · Yedeğini doğrula · Şifre belirle · ZEC al · ZEC gönder · Gizliye aktar · Geçmiş, ayarlar, kilit
+EN Open the wallet · Write the 24 words · Verify the backup · Set a password · Receive ZEC · Send ZEC · Shield funds · History, settings, lock.
+(Each name is exactly the panel title of the scene it introduces.)
+A chip bottom-left: TR `Gerçek arayüz · demo verisi` EN `Real interface · demo data`. The engraved C sits large and faint behind (about 750 px wide, centred between the headline and the card). The lockup, title and sub are composed from t=0 (the first 0.5 s dissolves with s04); the card and its rows arrive after 0.5 s.
 
-### s06-open-wallet (10 s) · step 1 · `first: true`
+### s06-open-wallet (10 s) · step 1 · composed from t=0 (the shell without `first`, panel entrance overridden: s05 dissolves into it)
 Title TR `Cüzdanı aç` EN `Open the wallet`. Sub TR `app.celariwallet.com adresini aç. Hesap açmana gerek yok.` EN `Go to app.celariwallet.com. There is no account to make.`
 Plates: `welcome` -> `create-seed-hidden`. Ring + callout on the URL bar (real address; the bar is part of the shell; use `sh.WIN` coordinates), then cursor to
 `welcome.create` and click, plates swap. Notes: TR `Dil sağ üstten değişir: English / Türkçe` EN `Switch language top right: English / Türkçe` (target `welcome.language`) ·
@@ -91,14 +92,14 @@ Plates: `create-seed-hidden` -> `create-seed-revealed` -> `create-seed-checked`.
 Notes (appear one by one): TR `Kimseyle paylaşma` · `Ekran görüntüsü alma` · `Kaybedersen paran kurtarılamaz` EN `Never share them` · `Do not screenshot them` · `If you lose them, your funds cannot be recovered` (create.seedWarn1-3).
 
 ### s08-verify (9 s) · step 3
-Title TR `Yedeğini doğrula` EN `Verify the backup`. Sub TR `Celari kağıttan üç kelimeyi tekrar ister.` EN `Celari asks for three of the words again.` (create.verifyIntro)
+Title TR `Yedeğini doğrula` EN `Verify the backup`. Sub TR `Celari kağıttan üç kelimeyi tekrar ister.` EN `Celari asks for three of the words again.` (paraphrase of create.verifyIntro; three fields)
 Plates: `create-verify` -> `create-verify-filled`; `s.reveal` the filled plate over each of the three fields left to right with a caret (typing imitation; field boxes are inside `create-verify.form`, find the three inputs visually and use sub-rects of `form`), then the `next` button gets a ring and a click.
 Note: TR `Yanlışsa devam edemezsin: kağıdına bak` EN `A wrong word stops you: check your paper` (create.verifyError: "Kelimeler eşleşmedi. Kağıdını kontrol et." / "The words did not match. Check your paper.").
 
 ### s09-password (11 s) · step 4
 Title TR `Şifre belirle` EN `Set a password`. Sub TR `Şifre cüzdanını bu tarayıcıda kilitler.` EN `The password locks the wallet in this browser.` (password.intro)
 Plates: `password` -> `password-filled` -> `home`. Type the password (dots appear via `s.reveal` of the filled plate over `pw1` then `pw2`), the strength bar shows `Güçlü`/`Strong`, click `submit`; the Home plate fades in (balance visible).
-Notes: TR `Unutursan kurtarma kelimelerinle yeniden yüklersin` EN `If you forget it, restore from your recovery phrase` (password.intro) · TR `Her harcamada şifren sorulur` EN `It is asked on every spend` (landing features[1]).
+Notes: TR `Unutursan kurtarma kelimelerinle yeniden yüklersin` EN `If you forget it, restore from your recovery phrase` (password.intro) · TR `Her harcamada şifren sorulur` EN `Your password is asked on every spend` (landing features[1]).
 End on `home` with a ring around `home.total`.
 
 ### s10-receive (12 s) · step 5

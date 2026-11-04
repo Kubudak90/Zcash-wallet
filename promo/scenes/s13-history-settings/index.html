@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <title>s13-history-settings</title>
+  <link rel="stylesheet" href="/lib/stage.css" />
+  <style>
+    /* numbered pins on the History rows and the legend under the table (static styles only; all motion is in scene.js) */
+    .pin { position: absolute; flex: none; display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 50%;
+      background: var(--accent); color: var(--accent-text); font: 700 22px/1 var(--font-ui); font-style: normal; z-index: 41; }
+    .lg { display: flex; align-items: center; gap: 12px; color: var(--text); }
+    .lg .pin { position: static; }
+    .lg .sage { display: inline-flex; color: var(--shielded); }
+  </style>
+</head>
+<body>
+  <div id="stage"></div>
+  <script type="module" src="./scene.js"></script>
+</body>
+</html>

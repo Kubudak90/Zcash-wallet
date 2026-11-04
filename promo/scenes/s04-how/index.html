@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <title>s04-how</title>
+  <link rel="stylesheet" href="/lib/stage.css" />
+  <style>
+    /* scene-only styles (static; every movement goes through lib/stage.js) */
+    .node { position: absolute; width: 440px; height: 168px; border-radius: 28px; overflow: hidden; background: var(--surface); border: 1.5px solid var(--border-2); box-shadow: var(--shadow-2); }
+    .node .icw { z-index: 1; position: absolute; left: 28px; top: 46px; width: 76px; height: 76px; border-radius: 50%; border: 1.5px solid var(--border-2); background: var(--surface-2); display: flex; align-items: center; justify-content: center; color: var(--text); }
+    .node .tx { z-index: 1; position: absolute; left: 124px; right: 20px; top: 0; bottom: 0; display: flex; flex-direction: column; justify-content: center; gap: 6px; }
+    .node .nm { font-size: 36px; font-weight: 600; line-height: 1.15; color: var(--text); white-space: nowrap; }
+    .node .nm.mono { font-family: var(--font-mono); font-weight: 500; font-size: 34px; letter-spacing: -0.01em; }
+    .node .sb { font-size: 26px; line-height: 1.28; color: var(--muted); }
+    .node .sweep { z-index: 0; position: absolute; left: 0; top: 0; width: 150px; height: 100%; opacity: 0;
+      background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 0%, transparent), color-mix(in srgb, var(--accent) 7%, transparent) 60%, color-mix(in srgb, var(--accent) 20%, transparent)); border-right: 2px solid color-mix(in srgb, var(--accent) 70%, transparent); }
+    .ring { position: absolute; width: 456px; height: 184px; border-radius: 34px; border: 2.5px solid; opacity: 0; pointer-events: none; }
+    .blk { position: absolute; width: 42px; height: 42px; opacity: 0; }
+
+    .col { position: absolute; width: 840px; border-radius: 28px; background: var(--surface); border: 1.5px solid; box-shadow: var(--shadow-2); overflow: hidden; }
+    .col.sage { border-color: color-mix(in srgb, var(--shielded) 42%, transparent); }
+    .col.copper { border-color: color-mix(in srgb, var(--transparent) 42%, transparent); }
+    .col .hd { position: absolute; left: 40px; right: 40px; top: 32px; display: flex; align-items: center; gap: 18px; font-family: var(--font-display); font-size: 50px; line-height: 1.1; letter-spacing: -0.015em; }
+    .col .hd .dot { width: 22px; height: 22px; }
+    .col .hd .dot.hollow { border-width: 4px; }
+    .col.sage .hd { color: var(--shielded); }
+    .col.copper .hd { color: var(--transparent); }
+    .col .rule { position: absolute; left: 40px; right: 40px; top: 108px; height: 1.5px; background: var(--border-2); transform-origin: 0 50%; }
+    .col .rows { position: absolute; left: 40px; right: 40px; top: 128px; display: flex; flex-direction: column; }
+    /* rows are centred in a fixed 108 px band: one- and two-line rows keep the same rhythm, and sage / copper rows line up */
+    .col .row3 { display: flex; align-items: center; gap: 22px; height: 108px; font-size: 31px; line-height: 1.36; color: var(--text); }
+    .col .row3 .b { flex: none; width: 16px; height: 16px; }
+    .col.sage .row3 .b { color: var(--shielded); }
+    .col.copper .row3 .b { color: var(--transparent); }
+    .col .row3 .m { color: var(--muted); }
+    .col .row3 > span:last-child { text-wrap: balance; }
+    .col .edge { position: absolute; left: 0; top: 0; width: 100%; height: 2px; transform-origin: 0 50%; }
+    .col.sage .edge { background: linear-gradient(90deg, color-mix(in srgb, var(--shielded) 0%, transparent), color-mix(in srgb, var(--shielded) 80%, transparent) 40%, color-mix(in srgb, var(--shielded) 20%, transparent)); }
+    .col.copper .edge { background: linear-gradient(90deg, color-mix(in srgb, var(--transparent) 0%, transparent), color-mix(in srgb, var(--transparent) 80%, transparent) 40%, color-mix(in srgb, var(--transparent) 20%, transparent)); }
+
+    .step { position: absolute; top: 0; width: 399px; height: 108px; border-radius: 22px; background: var(--surface); border: 1.5px solid var(--border-2); display: flex; align-items: center; gap: 16px; padding: 0 20px; box-shadow: var(--shadow-2); }
+    .step .n { flex: none; width: 50px; height: 50px; border-radius: 50%; border: 1.5px solid var(--border-2); background: var(--surface-2); display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-weight: 600; font-size: 26px; color: var(--muted); position: relative; }
+    .step .n .fl { position: absolute; inset: -1.5px; border-radius: 50%; background: var(--accent); opacity: 0; }
+    .step .n b { position: relative; font-weight: 600; }
+    .step .nm { font-size: 36px; font-weight: 600; line-height: 1.1; color: var(--text); }
+    .step .sb { margin-top: 4px; font-size: 24px; line-height: 1.25; color: var(--muted); white-space: nowrap; }
+    /* gold marks the active step only (outline + number disc); a step that has run keeps a neutral outline */
+    .step .lit { position: absolute; inset: -1.5px; border-radius: 22px; border: 2px solid color-mix(in srgb, var(--accent) 75%, transparent); opacity: 0; }
+    .step .dn { position: absolute; inset: -1.5px; border-radius: 22px; border: 2px solid color-mix(in srgb, var(--text) 42%, transparent); opacity: 0; }
+  </style>
+</head>
+<body>
+  <div id="stage"></div>
+  <script type="module" src="./scene.js"></script>
+</body>
+</html>
