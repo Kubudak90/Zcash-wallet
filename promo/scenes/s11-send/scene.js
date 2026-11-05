@@ -149,7 +149,7 @@ function note(text, tAt, opts, tOut) {
 }
 note(t.n1, 2.5, { icon: 'external', tone: 'gold' }, T_PROVE);
 note(t.n2, 5.75, { icon: 'lock', tone: 'sage' }, T_PROVE);
-note(t.n3, 8.1, { icon: 'key', tone: 'gold' }, T_PROVE);
+note(t.n3, 6.8, { icon: 'key', tone: 'gold' }, T_PROVE); // 6.8 (was 8.1): 4.2 s on screen before the stage list takes the panel (EN: 9 words = 4.2 s)
 
 // the four stages, ticking one after another (the plate holds only one frame of them)
 const proof = document.createElement('div');

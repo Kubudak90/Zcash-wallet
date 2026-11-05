@@ -15,7 +15,7 @@ const T = {
   en: {
     title: 'Verify the backup',
     sub: 'Celari asks for three of the words again.', // paraphrase of en.ts create.verifyIntro ("Looking at your paper, enter these words:"); three fields: CreateWallet.tsx pickVerificationPositions(3)
-    n1: 'A wrong word stops you: check your paper',
+    n1: 'If a word is wrong, you can’t continue. Check your paper', // en.ts create.verifyError: 'The words do not match. Check your paper.'; CreateWallet.tsx: only a match goes on
   },
 };
 const t = pick(T);

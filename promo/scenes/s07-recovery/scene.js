@@ -1,7 +1,8 @@
 // s07-recovery: step 2 of 8. The 24 recovery words.
 // Beats: the cursor (carried over from s06's click) presses "Reveal words"; the grid appears and the camera pushes onto the
-// lower half of the card; the words stay readable for about 2 s, then blur (they are a throwaway demo phrase) under a
-// "Demo words" chip; the cursor ticks the checkbox and presses Continue; the camera pulls back on the next screen (s08's first frame).
+// lower half of the card; the "Demo words" chip comes in just above the grid's top edge while the words are still readable (about 2 s),
+// then the words blur (they are a throwaway demo phrase) and the chip slides to the grid's centre; the cursor ticks the checkbox and
+// presses Continue; the camera pulls back on the next screen (s08's first frame).
 import { Scene, pick, loadPlates, plateEl } from '/lib/stage.js';
 import { tutorialShell } from '/lib/layout.js';
 import { iconSVG } from '/lib/brand.js';
@@ -32,7 +33,7 @@ const sh = tutorialShell(s, document.getElementById('stage'), { P, step: 2, tota
 // ---- plates --------------------------------------------------------------------------------------------
 const hidden = sh.plate('create-seed-hidden'), revealed = sh.plate('create-seed-revealed'), checked = sh.plate('create-seed-checked');
 const verify = sh.plate('create-verify'); // the next screen: s08 starts on it
-const T_REVEAL = 1.35, T_TICK = 5.6, T_NEXT = 7.0, T_BLUR = 3.7;
+const T_REVEAL = 1.35, T_TICK = 5.6, T_NEXT = 7.0, T_BLUR = 3.4; // the words are fully sharp 1.75 - 3.4 s, gone into the blur by ~3.7 s
 s.swap([hidden, revealed, checked], [0, T_REVEAL + 0.1, T_TICK + 0.1], { fade: 0.3 });
 verify.style.zIndex = '6';
 s.track(verify, { opacity: [[T_NEXT + 0.1, 0], [T_NEXT + 0.45, 1, 'inOut']] });
@@ -86,12 +87,22 @@ sh.camera([
 sh.ring(chk, 5.0, T_TICK + 0.5, { pad: 7 });
 sh.ring(nxt, 6.3, T_NEXT + 0.35, { pad: 8 });
 const gz = sh.toZoom(grid);
+const CHIP_IN = T_REVEAL + 0.4;   // the chip says "demo words" while they are readable: above the grid's top edge, never on the words
+// Above the grid there are only ~35 px (screen, at the 2x camera) between the grid's top edge and the card above, and the card's last
+// line of text sits just over that, so up there the chip is 0.8 x its size (about 58 px tall, 24 px type on screen at 2x) and stays clear
+// of both the first row of words and that line; after the blur it grows to 1.0 as it slides to the grid's centre.
+const CH = 18.25, CS = 0.8;                      // half the chip's height at scale 1 (zoom px); its size above the grid
+const UP = -(gz.h / 2 + 2 + CH * CS);           // the chip's centre relative to the grid's centre: its bottom edge 2 px above the grid's top edge
 const chip = document.createElement('div');
 chip.className = 'abs';
 chip.style.cssText = `left:${gz.x + gz.w / 2}px;top:${gz.y + gz.h / 2}px;translate:-50% -50%;z-index:45`;
 chip.innerHTML = `<span class="chip gold" style="font-size:15px;padding:7px 16px;gap:9px;background:rgba(22,21,18,.96)"><span style="display:flex">${iconSVG('eyeOff', 20)}</span>${t.demo}</span>`;
 sh.overlays.append(chip);
-s.track(chip, { opacity: [[T_BLUR + 0.35, 0], [T_BLUR + 0.8, 1], [T_NEXT - 0.1, 1], [T_NEXT + 0.2, 0]], y: [[T_BLUR + 0.35, 10], [T_BLUR + 0.9, 0, 'out']] });
+s.track(chip, {
+  opacity: [[CHIP_IN, 0], [CHIP_IN + 0.4, 1], [T_NEXT - 0.1, 1], [T_NEXT + 0.2, 0]],
+  y: [[CHIP_IN, UP + 10], [CHIP_IN + 0.5, UP, 'out'], [T_BLUR + 0.05, UP], [T_BLUR + 0.75, 0, 'inOut']], // up there until the blur has set in, then to the grid's centre
+  scale: [[0, CS], [T_BLUR + 0.05, CS], [T_BLUR + 0.75, 1, 'inOut']],
+});
 
 // ---- panel notes, one by one --------------------------------------------------------------------------------
 const bal = (n) => (n.lastElementChild.style.textWrap = 'balance', n); // two even lines, never a one-word last line

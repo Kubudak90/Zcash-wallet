@@ -18,7 +18,7 @@ const T = {
     title: 'Set a password',
     sub: 'The password locks the wallet in this browser.', // en.ts password.intro
     n1: 'If you forget it, restore from your recovery phrase',
-    n2: 'Your password is asked on every spend', // landing en: features[1] ("asked for with your password on every spend")
+    n2: 'Celari asks for your password on every spend', // landing en: features[1] ("asked for with your password on every spend"); README "Password on every spend"
   },
 };
 const t = pick(T);

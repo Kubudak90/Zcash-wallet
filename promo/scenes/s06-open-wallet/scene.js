@@ -19,9 +19,9 @@ const T = {
   },
   en: {
     title: 'Open the wallet',
-    sub: 'Go to app.celariwallet.com. There is no account to make.',
+    sub: 'Go to app.celariwallet.com. There is no\u00a0account\u00a0to\u00a0make.', // nbsp: no lone word on the last line
     callLabel: 'Wallet',
-    n1: 'Switch language top right: <span style="white-space:nowrap">English / Türkçe</span>',
+    n1: 'Switch language top\u00a0right: <span style="white-space:nowrap">English / Türkçe</span>',
     n2: 'Your keys never leave your browser',
   },
 };

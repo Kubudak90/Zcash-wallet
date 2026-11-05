@@ -2,7 +2,8 @@
 // A calm landing: the engraved C large and faint, the lockup, the closing headline, three quiet link "buttons"
 // (the wallet in gold, the website, the source), and the honest caution card. The last 2.5 s hold still: only the
 // lockup's facet (a slow breath) and the wallet button (glow and a slow light sweep) stay alive, everything else rests.
-// The headline is in place by ~0.15 s, the lockup by ~0.9 s (after the dissolve's midpoint: s14's headline sits at the same spot).
+// The engraved C, its echoes and the glow stand composed from t = 0; the lockup (0.4-0.9 s) and the headline words (from 0.3 s, all in by ~1.15 s)
+// come in after the 0.7 s dissolve's midpoint, so the 100 px headline is never printed over the previous scene's content.
 import { Scene, lang, pick } from '/lib/stage.js';
 import { engravedCSVG, lockupHTML, iconSVG } from '/lib/brand.js';
 
@@ -109,13 +110,13 @@ s.track(fill, { opacity: [[1.0, 0], [1.7, 0.55, 'out'], [3.2, 0.16, 'inOut']] })
 s.track(document.querySelector('.ec-echoes'), { scale: [[0, 0.97], [10, 1.05, 'linear']] }, { origin: '600px 600px' });
 s.track($('motif'), { opacity: [[0, 0.9], [1.0, 1]], scale: [[0, 1], [10, 1.03, 'linear']] });
 
-// ---- lockup, headline (words rise in one by one; the emphasised phrase last)
+// ---- lockup, headline (words rise in one by one; the emphasised phrase last), both after the dissolve's midpoint
 // The lockup sits where s14's headline stands (top left), and the 0.7 s dissolve from s14 spans t = 0 - 0.7 s here: the lockup is 0 until
 // 0.4 s (past the dissolve's midpoint, 0.35 s) and rises with a soft start, so the big 'Celari' never prints over s14's 'Telefonda'
 // (s14 is at 21 % weight at 0.55 s, the lockup at ~15 %); it is fully up by ~0.9 s.
 s.track($('lock'), { opacity: [[0.4, 0], [0.9, 1, 'soft']], y: [[0.4, 16], [1.0, 0, 'out']], blur: [[0.4, 6], [0.75, 0, 'out']] });
 document.querySelectorAll('#head .w').forEach((w, i) => {
-  const a = -0.65 + i * 0.035; // 6 (TR) / 9 (EN) words: the last one is in by ~0.15 s, the dissolve zone is composed
+  const a = 0.3 + i * 0.035; // 6 (TR) / 9 (EN) words: they start after the dissolve's midpoint (0.35 s); the last one is in by ~1.1 s
   s.track(w, { opacity: [[a, 0], [a + 0.5, 1, 'out']], y: [[a, 24], [a + 0.55, 0, 'out']], blur: [[a, 7], [a + 0.45, 0, 'out']] });
 });
 

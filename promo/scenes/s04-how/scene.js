@@ -17,7 +17,7 @@ const T = {
     brName: 'Senin tarayıcın', brSub: 'WebAssembly ile tarar',             // landing tr: diagram[2]
     staysH: 'Sende kalanlar',                                              // landing tr: stays_h
     stays: [                                                               // landing tr: stays
-      'Gizli bakiyen ve sana gizli havuzda ödeme yapanlar',
+      'Gizli bakiyen ve sana gizli havuzda ödeme yapanlar',
       'Kurtarma kelimelerin ve harcama anahtarların',
       'Notların (memo): yalnızca sen ve alıcı okuyabilirsiniz',
     ],
@@ -25,7 +25,7 @@ const T = {
     sees: [                                                                // landing tr: sees
       'IP adresin, şeffaf adreslerin ve yayınladığın işlemler',
       'Geçmiş için işlemlerin tamamı getirildiği sürece hangi işlemlerin senin olduğu <span class="m">(bunu kapatabilirsin)</span>', // tr.ts: home.serverSeesHistory ('Geçmiş için işlemlerin tamamı getirildiğinden hangi işlemlerin senin olduğunu da bilir'), shortened to fit 2 lines; landing tr: sees[1]
-      'Celari’nin hangi blokları göreceğine o karar verir: güvendiğin sunucuyu kullan', // landing tr: sees[2]
+      'Celari’nin hangi blokları göreceğine o karar verir: güvendiğin sunucuyu kullan', // landing tr: sees[2]
     ],
     flowLead: 'Her ödeme <em>tarayıcında</em> kanıtlanan bir PCZT’dir.',     // landing tr: flow_note ('Her ödeme tarayıcında kanıtlanan bir PCZT’dir.'); README.md:67
     flow: [['Oluştur', 'Notlarından bir PCZT'], ['İmzala', 'Şifrenle'], ['Kanıtla', 'Tarayıcında'], ['Yayınla', 'Sunucun üzerinden']], // landing tr: flow (the server only appears at step 4, and in the copper column)
@@ -46,7 +46,7 @@ const T = {
     sees: [                                                                // landing en: sees
       'Your IP address, your transparent addresses and the transactions you broadcast',
       'Which transactions are yours, while History fetches them in full <span class="m">(you can turn that off)</span>',
-      'It decides which blocks Celari sees: use a server you trust',
+      'It decides which blocks Celari sees: use a server you trust',
     ],
     flowLead: 'Every payment is a PCZT, proved in <em>your browser</em>.',     // landing en: flow_note ('Every payment is a PCZT, proved in your browser.'); README.md:67
     flow: [['Create', 'A PCZT from your notes'], ['Sign', 'With your password'], ['Prove', 'In your browser'], ['Broadcast', 'Through your server']], // landing en: flow

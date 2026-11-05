@@ -18,7 +18,7 @@ const T = {
     sub: 'A transparent balance is public. Move it to the shielded pool in one click.', // home.transparentHelp ("Public on chain"), landing features[0]
     n1: 'All of it, in one transaction, into the Ironwood pool', // README Features: One-click shielding; shield.toIronwood
     n2: 'The fee comes out of that amount', // shield.intro ("The network fee is deducted"), shield.fee
-    n3: 'In this transaction the amount and the transparent address are visible on chain', // shield.intro
+    n3: 'In this transaction, the amount and the transparent address are visible on chain', // shield.intro
   },
 };
 const t = pick(T);

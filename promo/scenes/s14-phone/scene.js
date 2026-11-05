@@ -2,9 +2,11 @@
 // "The same wallet on your phone." Three real phone plates (home, receive, send-filled) in a gentle staggered
 // arrangement with slow parallax drift; a faint real desktop window beside them with its sidebar ringed (1),
 // and a ring on each phone's bottom tabs (2) with one tap ripple on the first. The sub line carries the legend.
-// The phones and the faint desktop window stand composed from t = 0 (the previous scene dissolves into them); the headline and its
-// sub come in at 0.35-1.3 s, after the dissolve's midpoint, so two headlines are never printed over each other. Gold stays on the
-// number badges, the emphasised word and the one tap ripple, the rings are the light text tone.
+// The glow stands composed from t = 0; the phones and the faint desktop window fade in over 0.15-0.65 s (the phones 0.08 s apart), so the
+// previous scene's big content does not ghost over them in the dissolve; the headline and its sub come in at 0.35-1.3 s, after the
+// dissolve's midpoint, so two headlines are never printed over each other. In the last 0.45 s the headline, the sub and the top-right chip
+// fade out (the phones stay composed to the end), so this scene's title is gone before the closing scene's headline has any weight.
+// Gold stays on the number badges, the emphasised word and the one tap ripple, the rings are the light text tone.
 import { Scene, lang, pick, loadPlates, plateEl, rectOf } from '/lib/stage.js';
 
 document.documentElement.lang = lang; // so Turkish i / İ casing is right
@@ -99,7 +101,9 @@ const gscreen = document.querySelector('#gbrowser .screen');
 const gplate = plateEl(D, 'home');
 gscreen.append(gplate);
 s.track($('gbrowser'), { scale: [[0, GK]] }, { origin: '0 0' });
-s.track($('ghostbox'), { opacity: [[-0.6, 0], [0.1, 0.74, 'out']], y: [[-0.6, 26], [0.3, 0, 'out']] });
+// the silhouette is NOT there at t = 0 (the previous scene's content would ghost over it in the dissolve): it fades in 0.15 -> 0.65 s
+const IN0 = 0.15, IN_LEN = 0.5, IN_GAP = 0.08;
+s.track($('ghostbox'), { opacity: [[IN0, 0], [IN0 + IN_LEN, 0.74, 'out']], y: [[IN0, 20], [IN0 + 0.7, 0, 'out']] });
 s.track($('gw'), { y: [[0, -14], [7.2, 14, 'linear']] });
 
 // ring (1) on the real sidebar: the `nav` box of the desktop home plate (plate px -> canvas)
@@ -158,11 +162,11 @@ PHONES.forEach((ph, i) => {
   }
   holder.append(pw);
 
-  // the phones are in place when the previous scene dissolves into this one: the entrance ends by 0.2 s, only a hair of settle remains at t = 0
-  const a = -0.6 + i * 0.05;
+  // the phones are invisible at t = 0 and fade in over 0.15 -> 0.65 s (+0.08 s per phone) while they settle into place
+  const a = IN0 + i * IN_GAP;
   s.track(pw, { y: [[0, ph.d[0]], [7.2, ph.d[1], 'linear']] });
   s.track(phone, {
-    opacity: [[a, 0], [a + 0.6, 1, 'out']],
+    opacity: [[a, 0], [a + IN_LEN, 1, 'out']],
     y: [[a, 36], [a + 0.8, 0, 'out']],
     rotate: [[a, ph.tilt], [a + 0.8, 0, 'out']],
     scale: [[0, PS]],
@@ -174,7 +178,8 @@ PHONES.forEach((ph, i) => {
 });
 s.track(document.querySelector('.sn2'), { scale: [[2.6, 1], [2.78, 1.28, 'out'], [3.1, 1, 'inOut']] });
 
-s.track($('chiptop'), { opacity: [[0.3, 0], [0.8, 1]] });   // top right, where the previous usage scene's step badge ('ADIM 8 / 8') still fades: it arrives after the dissolve's midpoint too
+const DUR = 7.2, OUT0 = DUR - 0.45, OUT1 = DUR - 0.1; // headline, sub and chip are gone before the next scene's headline has weight (its dissolve is 0.7 s)
+s.track($('chiptop'), { opacity: [[0.3, 0], [0.8, 1], [OUT0, 1], [OUT1, 0, 'inOut']] });   // top right, where the previous usage scene's step badge ('ADIM 8 / 8') still fades: it arrives after the dissolve's midpoint too
 
 // ---- headline words, sub, ambient --------------------------------------------------------------------------
 // the headline and its sub do NOT stand at t = 0: the previous scene's headline sits at the same spot, and two headlines at 50 % each
@@ -184,7 +189,8 @@ document.querySelectorAll('#head .w').forEach((w, i) => {
   const a = 0.35 + i * 0.07; // the last word (EN: 6 words) starts at 0.70 s and is in by ~1.25 s
   s.track(w, { opacity: [[a, 0], [a + 0.55, 1, 'out']], y: [[a, 24], [a + 0.6, 0, 'out']], blur: [[a, 7], [a + 0.5, 0, 'out']] });
 });
-s.track($('sub'), { opacity: [[0.55, 0], [1.25, 1, 'out']], y: [[0.55, 16], [1.35, 0, 'out']] });
+s.track($('sub'), { opacity: [[0.55, 0], [1.25, 1, 'out'], [OUT0, 1], [OUT1, 0, 'inOut']], y: [[0.55, 16], [1.35, 0, 'out']] });
+s.track($('head'), { opacity: [[OUT0, 1], [OUT1, 0, 'inOut']] }); // the container: the words keep their own entrance tracks
 s.track($('hl'), { opacity: [[0, 0.9], [1.0, 1]], x: [[0, 30], [7.2, -30, 'linear']] });
 s.grain($('grain'));
 await s.start();

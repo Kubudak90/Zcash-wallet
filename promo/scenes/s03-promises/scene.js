@@ -40,7 +40,7 @@ const T = {
       { icon: 'shield', h: 'Shielded by default',                     // landing en: features[0]
         p: 'Transparent funds are one click from the shielded pool.' },
       { icon: 'eye', h: 'Honest labels',                              // landing en: features[3]
-        p: 'Each payment says whether it is shielded, partly shielded or public, and why.' },
+        p: 'Each payment says whether it is shielded, partly shielded or public, and why.' },
       { icon: 'code', h: 'Open source',                               // landing en: lede + ticker (No token / No account / No airdrop) + features[5] (MIT / Apache-2.0)
         p: 'No token, no account, no airdrop promises.' },
     ],

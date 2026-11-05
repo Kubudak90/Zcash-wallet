@@ -14,8 +14,8 @@ const T = {
     sub: 'Al ekranı varsayılan olarak yeni, yalnızca gizli bir adres gösterir.', // README Features ("Receive shows a new shielded-only unified address every time it opens"); the transparent one is shown separately, on request (button)
     safe: 'Güvenle paylaşabilirsin: kimse bununla paranı\u00a0harcayamaz', // receive.safeToShare
     exch: 'Bu adrese gelen para herkese\u00a0açıktır', // receive.transparentHelp, sentence 2 (the plate's paragraph already says who it is for)
-    fresh: 'Her açışta yeni adres. Eskileri de çalışır.', // receive.freshNote (shortened)
-    verify: 'Yapıştırdığın adresin ilk ve son karakterlerinin buradakilerle aynı olduğunu kontrol\u00a0et.', // receive.verifyHint
+    fresh: 'Her açışta yeni adres. Eskileri de çalışır', // receive.freshNote (shortened)
+    verify: 'Yapıştırdığın adresin ilk ve son karakterlerinin buradakilerle aynı olduğunu kontrol\u00a0et', // receive.verifyHint
     prev: 'Önceki', // earlier address
     now: 'Yeni', // new address
     // first characters of the two shielded addresses in the plates (receive / receive-second)
@@ -26,8 +26,8 @@ const T = {
     sub: 'Receive shows a new, shielded-only address by default.', // README Features; the transparent one is shown separately, on request (button)
     safe: 'Safe to share: nobody can spend your funds with\u00a0it', // receive.safeToShare
     exch: 'Funds sent here are\u00a0public', // receive.transparentHelp, sentence 2 (the plate's paragraph already says who it is for)
-    fresh: 'A new address every time. Earlier ones keep working.', // receive.freshNote (shortened)
-    verify: 'Wherever you paste it, check that its first and last characters match the ones shown\u00a0here.', // receive.verifyHint
+    fresh: 'A new address every time. Earlier ones keep working', // receive.freshNote (shortened)
+    verify: 'Wherever you paste it, check that its first and last characters match the ones shown\u00a0here', // receive.verifyHint
     prev: 'Earlier',
     now: 'New',
     a1: 'u19q 9kwc', a2: 'u1rj mlu7',
@@ -36,7 +36,8 @@ const T = {
 const t = pick(T);
 
 const P = await loadPlates('desktop');
-const s = new Scene({ duration: 13.2 });
+const DUR = 14.7; // 13.2 -> 14.7: the "new address" card and note (11.0 s) get ~3.5 s before the lib fades the panel at DUR - 0.5
+const s = new Scene({ duration: DUR });
 const sh = tutorialShell(s, document.getElementById('stage'), { P, step: 5, total: 8, title: t.title, sub: t.sub });
 const { WIN } = sh;
 const mid = (r) => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
@@ -142,8 +143,8 @@ sh.ring(addrT, 7.0, 8.6, { pad: 10 });
 
 // ---- 4. away and back: a new address ------------------------------------------------------------------------
 const f1 = firstLine(addr2);
-marker(f1, 11.15, 14, 1);
-marker(lastLine(addr2), 11.45, 14, 1);
+marker(f1, 11.15, DUR + 1, 1); // t1 past the end: the markers (and the card) hold to the last frame
+marker(lastLine(addr2), 11.45, DUR + 1, 1);
 // the two first-character groups side by side, as a card where the callouts stood
 {
   const p = sh.toZoom({ x: qr.x - 22, y: qr.y + qr.h + 26, w: 322, h: 0 });

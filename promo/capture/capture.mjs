@@ -4,6 +4,7 @@
 //
 //   VITE_FAKE_ENGINE=1 npx vite --port 5199 --strictPort &
 //   node promo/capture/capture.mjs [tr|en|all] [desktop|phone|all]
+//   CAPTURE_ONLY=home-hidden,history node promo/capture/capture.mjs tr all   (whole flow runs, only those plates are written)
 //
 // Output: promo/plates/<lang>/<device>/<name>.png and promo/plates/plates.json:
 //   { "<lang>.<device>": { "<name>": { file, w, h, scale, targets: { key: {x,y,w,h} } } } }
@@ -39,6 +40,9 @@ const MEMO = { tr: 'Kahve için teşekkürler ☕', en: 'Thanks for the coffee �
 const langs = process.argv[2] && process.argv[2] !== 'all' ? [process.argv[2]] : ['tr', 'en'];
 const devices = process.argv[3] && process.argv[3] !== 'all' ? [process.argv[3]] : ['desktop', 'phone'];
 
+// CAPTURE_ONLY=name1,name2: the whole flow still runs (the wallet state depends on it), but only these plates are written
+// and only their manifest entries are touched. The manifest is merged with the existing file, so partial runs keep the other sets.
+const ONLY = process.env.CAPTURE_ONLY ? new Set(process.env.CAPTURE_ONLY.split(',').map((x) => x.trim()).filter(Boolean)) : null;
 const manifestPath = join(ROOT, 'plates', 'plates.json');
 const manifest = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, 'utf8')) : {};
 
@@ -50,7 +54,7 @@ async function run(lang, device) {
   const outDir = join(ROOT, 'plates', lang, device);
   mkdirSync(outDir, { recursive: true });
   const key = `${lang}.${device}`;
-  manifest[key] = {};
+  manifest[key] = ONLY ? (manifest[key] ?? {}) : {};
 
   const browser = await chromium.launch();
   const ctx = await browser.newContext({
@@ -59,6 +63,16 @@ async function run(lang, device) {
     locale: lang === 'tr' ? 'tr-TR' : 'en-US',
     timezoneId: 'Europe/Istanbul',
   });
+  // The scripted fake engine (src/engine/fake.ts, dev only) gives the welcome transaction the constant memo 'Hoş geldin!'.
+  // The English plates must not show a Turkish memo: serve the module Vite builds for it with the string replaced.
+  // Installed on the context, before any page loads; Vite's URL may carry query strings (?t=..., ?v=...).
+  if (lang === 'en') {
+    await ctx.route(/\/src\/engine\/fake\.ts(\?.*)?$/, async (route) => {
+      const res = await route.fetch();
+      const body = (await res.text()).replaceAll('Hoş geldin!', 'Welcome!');
+      await route.fulfill({ response: res, body });
+    });
+  }
   const page = await ctx.newPage();
   page.on('pageerror', (e) => console.log(`  [pageerror ${key}]`, e.message));
 
@@ -78,6 +92,7 @@ async function run(lang, device) {
   }
 
   async function shot(name, targets = {}, { keepScroll = false } = {}) {
+    if (ONLY && !ONLY.has(name)) return;
     await page.mouse.move(0, 0);
     if (!keepScroll) await page.evaluate(() => window.scrollTo(0, 0));
     await page.waitForTimeout(450);
@@ -170,10 +185,6 @@ async function run(lang, device) {
     hero: page.locator('.hero').first(),
   };
   await shot('home', homeTargets);
-  await page.locator('.eye-toggle').click();
-  await shot('home-hidden', homeTargets);
-  await page.locator('.eye-toggle').click();
-  await page.waitForTimeout(200);
 
   // 6. Receive (a fresh address on every opening)
   await nav(S['nav.receive']).click();
@@ -200,7 +211,7 @@ async function run(lang, device) {
   await page.waitForTimeout(400);
   const secondAddr = await page.getByTestId('receive-address').textContent();
   await shot('receive-second', receiveTargets);
-  manifest[key]['receive-second'].note = `first address ${firstAddr?.slice(0, 16)}… vs second ${secondAddr?.slice(0, 16)}…`;
+  if (!ONLY || ONLY.has('receive-second')) manifest[key]['receive-second'].note = `first address ${firstAddr?.slice(0, 16)}… vs second ${secondAddr?.slice(0, 16)}…`;
 
   // 7. Send
   await nav(S['nav.send']).click();
@@ -267,6 +278,12 @@ async function run(lang, device) {
   if (await closeBtn.count()) await closeBtn.first().click();
   await page.waitForTimeout(400);
   await shot('home-final', homeTargets);
+  // The hidden-balance capture is taken here, on the post-shielding Home that s12 ends on and s13 starts on (no notice, no
+  // shield button, the pending row and the recent rows): the eye click in s13 then only changes the balances.
+  await page.locator('.eye-toggle').click();
+  await shot('home-hidden', homeTargets);
+  await page.locator('.eye-toggle').click();
+  await page.waitForTimeout(200);
 
   // 9. History
   await nav(S['nav.history']).click();
