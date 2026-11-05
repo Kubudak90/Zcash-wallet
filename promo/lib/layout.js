@@ -118,7 +118,7 @@ export function tutorialShell(s, stage, { P, step, total = 8, title, sub = '', f
     note(html, t, { icon = 'okCircle', tone = 'gold' } = {}) {
       const el = document.createElement('div');
       el.className = 'callout';
-      el.style.cssText = 'position:relative;max-width:576px;font-size:26px;align-items:center;gap:16px;padding:18px 24px 18px 20px';
+      el.style.cssText = 'position:relative;max-width:576px;font-size:28px;align-items:center;gap:16px;padding:18px 24px 18px 20px';
       const col = tone === 'sage' ? 'var(--shielded)' : tone === 'copper' ? 'var(--transparent)' : 'var(--accent-fg)';
       el.innerHTML = `<span style="color:${col};flex:none">${iconSVG(icon, 34)}</span><span>${html}</span>`;
       $('notes').append(el);
