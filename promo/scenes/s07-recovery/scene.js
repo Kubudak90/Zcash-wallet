@@ -64,7 +64,7 @@ const mid = (r) => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
 sh.cursor(
   [
     { t: 0.1, x: create.x + create.w / 2, y: create.y + create.h / 2 },
-    { t: T_REVEAL, ...mid(rev), click: true },
+    { t: T_REVEAL, ...mid(rev), click: true, from: 0.5 }, // rests (as in s06's last frame) until the s06 -> s07 dissolve is over, then moves
     { t: 2.4, x: 890, y: 872 }, // out of the way while the words are being read
     { t: T_TICK, ...mid(chk), click: true, from: 4.5 },
     { t: T_NEXT, ...mid(nxt), click: true, from: 6.2 },

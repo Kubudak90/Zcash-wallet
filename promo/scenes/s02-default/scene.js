@@ -1,4 +1,4 @@
-// s02-default (10 s) · free-form · act 1, "privacy is the default".
+// s02-default (11.5 s) · free-form · act 1, "privacy is the default".
 // Two payment rows built like the wallet's History rows (same tokens, chips and proportions; motion graphics, not
 // a UI screenshot): row A transparent, everything readable; row B shielded, the same scan finds nothing.
 // Starts from the faint C + echo field that s01-open ends on, so the 0.5 s dissolve is only a text swap.
@@ -14,11 +14,11 @@ const T = {
     sent: 'Gönderildi',                                   // tr.ts history.type.sent
     confirmed: 'Onaylandı',                               // tr.ts history.status.confirmed
     chipA: 'Şeffaf · herkese açık',                       // tr.ts history.privacy.transparent
-    chipB: 'Gizli',                                       // tr.ts history.privacy.shielded
+    chipB: 'Gizli (shielded)',                            // tr.ts history.privacy.shielded 'Gizli' + the required first-use gloss (tr.ts welcome.pillar2 'gizli (shielded)'): the chip is where the viewer first meets the word
     capA: 'Zincirde herkese açık.',                       // tr.ts home.transparentHelp (first sentence)
     capB: 'Tutar ve taraflar zincirde görünmez.',         // tr.ts home.shieldedHelp
     noteB: 'Bir havuzdan diğerine geçen değer hariç.',    // tr.ts home.shieldedHelp ("... dışında")
-    foot: 'Al ekranı her açılışta yeni, yalnızca gizli (shielded) bir adres gösterir.', // README Features "Private by default"; "(shielded)" = the gloss for the first Turkish use, as in tr.ts welcome pillar2
+    foot: 'Al ekranı her açılışta yeni, yalnızca gizli (shielded) bir adres gösterir.', // README Features "Private by default"; "(shielded)" is repeated here (the first-use gloss is already on chipB), as in tr.ts welcome.pillar2
     demo: 'Örnek ödeme · demo verisi',                    // BUILD.md "Plates": demo data, as the s05 chip
     num: (v) => v,
   },
@@ -103,6 +103,7 @@ stage.innerHTML = `
   <div class="glow"></div>
   <div id="motif" class="abs" style="left:${960 - SIZE / 2}px;top:${540 - SIZE / 2}px;width:${SIZE}px;height:${SIZE}px;color:var(--text)">${engravedCSVG(SIZE)}</div>
   <div id="scrim" class="abs" style="left:160px;top:190px;width:1600px;height:700px;background:radial-gradient(50% 50% at 50% 50%, rgba(13,12,10,.9), rgba(13,12,10,.62) 52%, rgba(13,12,10,0) 100%)"></div>
+  <div id="content" class="abs" style="left:0;top:0;width:1920px;height:1080px">
   <div id="head" class="abs display" style="left:${X}px;top:92px;font-size:104px;line-height:1.08;white-space:nowrap">
     <div id="h1">${words(t.head[0])}</div><div id="h2">${words(t.head[1])}</div>
   </div>
@@ -112,9 +113,10 @@ stage.innerHTML = `
     <div style="width:68px;height:68px;border-radius:50%;border:1.5px solid rgba(143,195,161,.45);background:rgba(143,195,161,.08);color:var(--shielded);display:flex;align-items:center;justify-content:center">${iconSVG('receive', 36)}</div>
     <div style="font-size:38px;font-weight:480;color:var(--text);white-space:nowrap">${t.foot}</div>
   </div>
+  </div>
   <div class="vignette"></div><div class="grain" id="grain"></div>`;
 const $ = (id) => document.getElementById(id);
-const s = new Scene({ duration: 10 });
+const s = new Scene({ duration: 11.5 });
 
 // ---- measure (before any seek, so nothing is transformed yet): masks match the real fields' widths ------
 const rel = (el, host) => { const a = el.getBoundingClientRect(), b = host.getBoundingClientRect(); return { x: a.left - b.left, w: a.width }; };
@@ -136,12 +138,14 @@ fill.setAttribute('fill-opacity', '1');
 s.track(fill, { opacity: [[0, 0.1], [1.6, 0.1]] });
 // the facet outline starts where s01-open leaves it (0.15) and lights up again as the C moves aside
 s.track(document.querySelector('.ec-facet'), { opacity: [[0.2, 0.15], [1.6, 1, 'inOut']] });
-s.track(document.querySelector('.ec-echoes'), { scale: [[0, 1.06], [10, 1.13, 'linear']] }, { origin: '600px 600px' });
+s.track(document.querySelector('.ec-echoes'), { scale: [[0, 1.06], [11.5, 1.13, 'linear']] }, { origin: '600px 600px' });
 s.track($('motif'), {
   x: [[0.2, 0], [1.6, 640, 'inOut']], y: [[0.2, 0], [1.6, -335, 'inOut']],
   scale: [[0.2, 1.9], [1.6, 0.62, 'inOut']], opacity: [[0, 0.55], [1.6, 0.9, 'inOut']],
 });
 s.track($('scrim'), { opacity: [[0, 1], [1.2, 0, 'inOut']] });
+// a very slow push on all the text content (the C is parked after 1.6 s, so this keeps the calm tail alive; same as s03-promises)
+s.track($('content'), { scale: [[0, 1], [11.5, 1.012, 'linear']] }, { origin: '960px 540px' });
 
 // ---- headline: words rise in (after the 0.5 s dissolve from s01)
 [...document.querySelectorAll('#head .w')].forEach((w, i) => {
@@ -166,24 +170,24 @@ function caption(k, t0, noteAt) {
   if (noteAt != null) s.track($('noteB'), { opacity: [[noteAt, 0], [noteAt + 0.7, 1, 'out']] });
 }
 // the scan line sweeps the row; lineX(t) is also what the underlines / dots follow
-const SCAN = { A: [2.35, 3.85], B: [5.55, 7.05] };
+const SCAN = { A: [2.0, 3.4], B: [5.0, 6.3] };
 const lineX = (k, t) => sample([[SCAN[k][0], -6], [SCAN[k][1], W + 6, 'inOut']], t);
 function scan(k) {
   const [a, b] = SCAN[k];
   s.track($('scan' + k), { x: [[a, -6], [b, W + 6, 'inOut']], opacity: [[a, 0], [a + 0.2, 1], [b - 0.25, 1], [b + 0.05, 0]] });
 }
 
-// row A: in (0.7), read (2.35 - 3.85), caption
+// row A: in (0.75), read (2.0 - 3.4), caption
 enter('A', 0.75);
 // the demo-data label appears with row A and stays (the rows are an illustration, not a real payment)
 s.track($('demo'), { opacity: [[0.95, 0], [1.55, 1, 'out']], y: [[0.95, 10], [1.6, 0, 'out']] });
 scan('A');
-caption('A', 3.75);
+caption('A', 3.3);
 
-// row B: in (4.2), the same sweep finds nothing, caption + footnote
-enter('B', 4.3);
+// row B: in (3.9), the same sweep finds nothing (5.0 - 6.3), caption + footnote (opaque by ~7.0 s)
+enter('B', 3.9);
 scan('B');
-caption('B', 6.9, 7.2);   // the qualifier fades in WITH the caption, never after it
+caption('B', 6.0, 6.3);   // the qualifier fades in WITH the caption, never after it
 
 // ---- the sweep drives the underlines of row A and the shimmer of the masks of row B
 const ulAddr = $('ulAddr'), ulAmt = $('ulAmt');
@@ -200,8 +204,8 @@ s.on((t) => {
   });
 });
 
-// ---- last 2 s: the bottom line
-s.track($('foot'), { opacity: [[7.9, 0], [8.6, 1, 'out']], y: [[7.9, 22], [8.7, 0, 'out']] });
+// ---- the bottom line (from 7.1 s; both captions and the line stay up ~3.2 s before the dissolve at 11.0 s)
+s.track($('foot'), { opacity: [[7.1, 0], [7.8, 1, 'out']], y: [[7.1, 22], [7.9, 0, 'out']] });
 
 s.grain($('grain'));
 await s.start();

@@ -2,7 +2,7 @@
 // A calm landing: the engraved C large and faint, the lockup, the closing headline, three quiet link "buttons"
 // (the wallet in gold, the website, the source), and the honest caution card. The last 2.5 s hold still: only the
 // lockup's facet (a slow breath) and the wallet button (glow and a slow light sweep) stay alive, everything else rests.
-// The lockup and the headline are in place by 0.3 s, so the previous scene dissolves into a composed frame.
+// The headline is in place by ~0.15 s, the lockup by ~0.9 s (after the dissolve's midpoint: s14's headline sits at the same spot).
 import { Scene, lang, pick } from '/lib/stage.js';
 import { engravedCSVG, lockupHTML, iconSVG } from '/lib/brand.js';
 
@@ -17,7 +17,7 @@ const T = {
     cautionHead: 'Dikkat',                                                       // landing tr: warn_icon
     caution: ['Erken aşamada ve henüz bağımsız bir güvenlik denetiminden geçmedi.', 'Kaybetmeyi göze alabileceğin tutarlar kullan.'], // landing tr: caution (two sentences)
     phrase: 'Kurtarma kelimelerin tek yedeğin.',                                 // README Features: "The recovery phrase is the only backup" / welcome copy
-    footer: 'MIT / Apache-2.0 · ChainSafe WebZjs tabanlı',                       // tr.ts: welcome.footer
+    footer: 'MIT / Apache-2.0 · ChainSafe WebZjs tabanlı · Electric Coin Company ya da Zcash Foundation ile bağı yoktur.', // tr.ts: welcome.footer; landing tr: footer (its last sentence, build.py:319)
   },
   en: {
     h: ['A Zcash wallet that keeps', 'your business *your own.*'],               // landing en: closing_h
@@ -25,7 +25,7 @@ const T = {
     cautionHead: 'Caution',                                                      // landing en: warn_icon
     caution: ['Early software, not yet independently audited.', 'Use amounts you can afford to lose.'], // landing en: caution (two sentences)
     phrase: 'Your recovery phrase is the only backup.',
-    footer: 'MIT / Apache-2.0 · Built on ChainSafe’s WebZjs',                    // en.ts: welcome.footer
+    footer: 'MIT / Apache-2.0 · Built on ChainSafe’s WebZjs · Not affiliated with the Electric Coin Company or the Zcash Foundation.', // en.ts: welcome.footer; landing en: footer (its last sentence, build.py:243)
   },
 };
 const t = pick(T);
@@ -110,7 +110,10 @@ s.track(document.querySelector('.ec-echoes'), { scale: [[0, 0.97], [10, 1.05, 'l
 s.track($('motif'), { opacity: [[0, 0.9], [1.0, 1]], scale: [[0, 1], [10, 1.03, 'linear']] });
 
 // ---- lockup, headline (words rise in one by one; the emphasised phrase last)
-s.track($('lock'), { opacity: [[-0.7, 0], [0.1, 1, 'out']], y: [[-0.7, 16], [0.2, 0, 'out']], blur: [[-0.7, 6], [0.0, 0, 'out']] });
+// The lockup sits where s14's headline stands (top left), and the 0.7 s dissolve from s14 spans t = 0 - 0.7 s here: the lockup is 0 until
+// 0.4 s (past the dissolve's midpoint, 0.35 s) and rises with a soft start, so the big 'Celari' never prints over s14's 'Telefonda'
+// (s14 is at 21 % weight at 0.55 s, the lockup at ~15 %); it is fully up by ~0.9 s.
+s.track($('lock'), { opacity: [[0.4, 0], [0.9, 1, 'soft']], y: [[0.4, 16], [1.0, 0, 'out']], blur: [[0.4, 6], [0.75, 0, 'out']] });
 document.querySelectorAll('#head .w').forEach((w, i) => {
   const a = -0.65 + i * 0.035; // 6 (TR) / 9 (EN) words: the last one is in by ~0.15 s, the dissolve zone is composed
   s.track(w, { opacity: [[a, 0], [a + 0.5, 1, 'out']], y: [[a, 24], [a + 0.55, 0, 'out']], blur: [[a, 7], [a + 0.45, 0, 'out']] });
@@ -130,7 +133,8 @@ s.track($('chd'), { opacity: [[3.0, 0], [3.5, 1]] });
 s.track($('ctx'), { opacity: [[3.0, 0], [3.6, 1, 'out']], y: [[3.0, 10], [3.8, 0, 'out']] });
 s.track($('crule'), { opacity: [[4.8, 0], [5.3, 1]], scaleY: [[4.8, 0.2], [5.4, 1, 'out']] });
 s.track($('cph'), { opacity: [[4.9, 0], [5.6, 1, 'out']], x: [[4.9, 14], [5.6, 0, 'out']] });
-s.track($('foot'), { opacity: [[6.0, 0], [6.8, 1, 'out']] });
+// the footer is long (the non-affiliation sentence): it comes in right after the caution card is complete (3.8 s) so it is readable for ~5 s
+s.track($('foot'), { opacity: [[4.0, 0], [4.6, 1, 'out']] });
 
 // ---- the last 2.5 s: everything rests; only the lockup's facet breathes, and the wallet button glows while a slow light crosses it
 s.track($('lock').querySelector('.facet'), { opacity: [[7.0, 1], [8.6, 0.7, 'inOut'], [10, 1, 'inOut']] });

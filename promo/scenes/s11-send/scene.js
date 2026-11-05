@@ -15,8 +15,8 @@ import { iconSVG } from '/lib/brand.js';
 const T = {
   tr: {
     title: 'ZEC gönder', // send.title
-    sub: 'Adresi ve tutarı gir, istersen şifreli bir not ekle.', // storyboard (send.memo: "Not (isteğe bağlı)")
-    n1: 'zcash: bağlantıları okunur', // send.toPlaceholder ("u1…, zs1…, t1… veya zcash: bağlantısı"), send.uriFilled
+    sub: 'Adresi ve tutarı gir, istersen şifreli\u00a0bir\u00a0not\u00a0ekle.', // storyboard (send.memo: "Not (isteğe bağlı)")
+    n1: 'Adres yerine zcash:\u00a0bağlantısı da yapıştırabilirsin', // send.toPlaceholder ("u1…, zs1…, t1… veya zcash: bağlantısı"), send.uriFilled ("Tutar ödeme bağlantısından dolduruldu.")
     n2: 'Not şifrelidir: yalnızca sen ve alıcı\u00a0okuyabilir', // send.memoHelp
     n3: 'Şifrenle onaylayana kadar hiçbir şey\u00a0gönderilmez', // send.confirmNote
     n4: 'Sıfır bilgi kanıtı tarayıcında üretilir', // tr.ts send.stage.proving (the proof); landing tr: chips[1] 'Tarayıcında kanıtlanır', flow 'Kanıtla / Tarayıcında', flow_note
@@ -30,7 +30,7 @@ const T = {
   en: {
     title: 'Send ZEC', // send.title
     sub: 'Enter an address and an amount, and add an encrypted memo if you like.',
-    n1: 'zcash: payment links are read', // send.toPlaceholder ("u1…, zs1…, t1… or a zcash: link"), send.uriFilled
+    n1: 'You can paste a zcash:\u00a0payment\u00a0link instead', // send.toPlaceholder ("u1…, zs1…, t1… or a zcash: link"), send.uriFilled
     n2: 'The memo is encrypted: only you and the recipient can\u00a0read\u00a0it', // send.memoHelp
     n3: 'Nothing is sent until you confirm with your\u00a0password', // send.confirmNote
     n4: 'The zero-knowledge proof is generated in your browser', // en.ts send.stage.proving (the proof); landing en: chips[1] 'Proved in your browser', flow 'Prove / In your browser', flow_note
@@ -81,8 +81,8 @@ const cuts = [fTo.y, lineY + pitch * 0.5, lineY + pitch * 1.5, lineY + pitch * 2
 for (let r = 0; r < 5; r++) {
   const img = sh.plate('send-filled');
   img.style.zIndex = String(3 + r);
-  const t0 = T_ROWS + r * 0.11;
-  s.reveal(img, { x: fTo.x - 2, y: cuts[r], w: fTo.w + 4, h: cuts[r + 1] - cuts[r] }, t0, t0 + 0.16);
+  const t0 = T_ROWS + r * 0.2; // about 1 s for the whole address (2.3 .. 3.34 s), done before the click on the amount (3.55 s)
+  s.reveal(img, { x: fTo.x - 2, y: cuts[r], w: fTo.w + 4, h: cuts[r + 1] - cuts[r] }, t0, t0 + 0.24);
 }
 // the form reflows: ONE short cut to the whole filled plate (z 8). The old two-column fade blended two layouts
 // of different height (chip over the amount box, doubled fee paragraph).

@@ -1,5 +1,5 @@
 // s06-open-wallet: step 1 of 8, the first tutorial scene (it comes after the bumper, which dissolves into it).
-// Beats: the window and panel stand composed from the first frame (the first 0.5 s is cross-dissolved with s05); ring + callout
+// Beats: the window stands composed from the first frame (the first 0.5 s is cross-dissolved with s05; the panel text follows from 0.3 s); ring + callout
 // on the real address in the URL bar; ring on the language switch (note 1); ring on the first pillar (note 2); the camera pushes
 // onto the "Get started" cards, the cursor goes to "Create a new wallet", clicks, the recovery-phrase screen takes over, the camera
 // pulls back and the cursor rests where it clicked (s07 starts from that exact frame, camera at rest).
@@ -10,7 +10,7 @@ const T = {
   tr: {
     title: 'Cüzdanı aç',
     // landing tr: lede ("açılacak bir hesap yoktur"); README: "Wallet: https://app.celariwallet.com"
-    sub: 'app.celariwallet.com adresini aç. Hesap açmana gerek yok.',
+    sub: 'app.celariwallet.com adresini aç. Hesap\u00a0açmana\u00a0gerek\u00a0yok.', // nbsp: the sentence never breaks inside
     callLabel: 'Cüzdan',
     // plate welcome: the English / Türkçe switch top right (en.ts settings.language); target welcome.language
     n1: 'Dil sağ üstten değişir: <span style="white-space:nowrap">English / Türkçe</span>',
@@ -29,16 +29,17 @@ const t = pick(T);
 const P = await loadPlates('desktop');
 const s = new Scene({ duration: 10 });
 const stage = document.getElementById('stage');
-// first: false = the window is in place from t=0 (lib's `first: true` fades and lifts it in over the first 0.7-1.0 s, which would
-// leave the s05 -> s06 dissolve half empty); the panel's entrance tracks are overridden below for the same reason
+// first: false (the default) = the window is in place from t=0 (lib's `first: true` fades and lifts it in over the first 0.7-1.0 s,
+// which would leave the s05 -> s06 dissolve half empty); the panel follows the lib default: s05's text is gone by its last 0.45 s,
+// this scene's badge / title / sub come in from 0.3 s
 const sh = tutorialShell(s, stage, { P, step: 1, total: 8, title: t.title, sub: t.sub });
-for (const id of ['badge', 'title', 'sub']) s.track(document.getElementById(id), { opacity: [[0, 1]], y: [[0, 0]] }); // composed at t=0
 const K = WIN.scale;
 
 // ---- plates: welcome -> create-seed-hidden ----------------------------------------------------------
 const welcome = sh.plate('welcome'), seed = sh.plate('create-seed-hidden');
 const TCLICK = 8.0; // the click on "Create a new wallet"
-s.swap([welcome, seed], [0, TCLICK + 0.1], { fade: 0.4 });
+// the new screen takes over while the camera is already pulling back (from TCLICK + 0.1), so the zoomed frame is never shown with it underneath
+s.swap([welcome, seed], [0, TCLICK + 0.3], { fade: 0.3 });
 
 // ---- the real address in the URL bar (shell chrome, outside the plate): its box in plate px --------------
 const ob = sh.overlays.getBoundingClientRect(), ub = stage.querySelector('.url').getBoundingClientRect();
@@ -83,8 +84,8 @@ sh.camera([
   { t: 0, rect: null },
   { t: 6.25, rect: null },
   { t: 7.35, rect: frame, fill: 0.6 },
-  { t: TCLICK + 0.6, rect: frame, fill: 0.6 },
-  { t: 9.4, rect: null },
+  { t: TCLICK + 0.1, rect: frame, fill: 0.6 }, // the click; the pull-back starts here
+  { t: TCLICK + 0.6, rect: null },               // at rest from here to the end (s07 starts at rest)
 ]);
 
 await s.start();

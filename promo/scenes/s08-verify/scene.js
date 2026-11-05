@@ -96,7 +96,7 @@ const nx = sh.rect('create-verify-filled', 'next');
 sh.cursor(
   [
     { t: 0.1, x: prev.x + prev.w / 2, y: prev.y + prev.h / 2 },
-    { t: T_F1, ...at(0, 0.62), click: true },
+    { t: T_F1, ...at(0, 0.62), click: true, from: 0.5 }, // rests (as in s07's last frame) until the s07 -> s08 dissolve is over, then moves
     { t: T_F2, ...at(1, 0.7), click: true, from: 2.12 },
     { t: T_F3, ...at(2, 0.7), click: true, from: 3.3 },
     { t: T_NEXT, x: nx.x + nx.w / 2, y: nx.y + nx.h / 2, click: true, from: 4.95 },

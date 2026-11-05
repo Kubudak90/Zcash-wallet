@@ -2,7 +2,8 @@
 // "The same wallet on your phone." Three real phone plates (home, receive, send-filled) in a gentle staggered
 // arrangement with slow parallax drift; a faint real desktop window beside them with its sidebar ringed (1),
 // and a ring on each phone's bottom tabs (2) with one tap ripple on the first. The sub line carries the legend.
-// The scene starts settled (everything is in place by 0.5 s: the previous scene dissolves into it); gold stays on the
+// The phones and the faint desktop window stand composed from t = 0 (the previous scene dissolves into them); the headline and its
+// sub come in at 0.35-1.3 s, after the dissolve's midpoint, so two headlines are never printed over each other. Gold stays on the
 // number badges, the emphasised word and the one tap ripple, the rings are the light text tone.
 import { Scene, lang, pick, loadPlates, plateEl, rectOf } from '/lib/stage.js';
 
@@ -173,14 +174,17 @@ PHONES.forEach((ph, i) => {
 });
 s.track(document.querySelector('.sn2'), { scale: [[2.6, 1], [2.78, 1.28, 'out'], [3.1, 1, 'inOut']] });
 
-s.track($('chiptop'), { opacity: [[-0.4, 0], [0.3, 1]] });
+s.track($('chiptop'), { opacity: [[0.3, 0], [0.8, 1]] });   // top right, where the previous usage scene's step badge ('ADIM 8 / 8') still fades: it arrives after the dissolve's midpoint too
 
 // ---- headline words, sub, ambient --------------------------------------------------------------------------
+// the headline and its sub do NOT stand at t = 0: the previous scene's headline sits at the same spot, and two headlines at 50 % each
+// are unreadable. The phones and the faint desktop window are composed from t = 0 (the dissolve lands on them); the words follow once
+// the dissolve is half over, like s03 / s04 do.
 document.querySelectorAll('#head .w').forEach((w, i) => {
-  const a = -0.65 + i * 0.05; // every word is in by ~0.2 s (the dissolve zone is composed)
+  const a = 0.35 + i * 0.07; // the last word (EN: 6 words) starts at 0.70 s and is in by ~1.25 s
   s.track(w, { opacity: [[a, 0], [a + 0.55, 1, 'out']], y: [[a, 24], [a + 0.6, 0, 'out']], blur: [[a, 7], [a + 0.5, 0, 'out']] });
 });
-s.track($('sub'), { opacity: [[-0.5, 0], [0.2, 1, 'out']], y: [[-0.5, 16], [0.3, 0, 'out']] });
+s.track($('sub'), { opacity: [[0.55, 0], [1.25, 1, 'out']], y: [[0.55, 16], [1.35, 0, 'out']] });
 s.track($('hl'), { opacity: [[0, 0.9], [1.0, 1]], x: [[0, 30], [7.2, -30, 'linear']] });
 s.grain($('grain'));
 await s.start();

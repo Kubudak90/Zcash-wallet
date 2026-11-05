@@ -16,6 +16,8 @@
       background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 0%, transparent), color-mix(in srgb, var(--accent) 7%, transparent) 60%, color-mix(in srgb, var(--accent) 20%, transparent)); border-right: 2px solid color-mix(in srgb, var(--accent) 70%, transparent); }
     .ring { position: absolute; width: 456px; height: 184px; border-radius: 34px; border: 2.5px solid; opacity: 0; pointer-events: none; }
     .blk { position: absolute; width: 42px; height: 42px; opacity: 0; }
+    /* the gold italic at the display size: the inherited -0.02em tracking closes 'ı' and 'n' into an 'm' ('tarayıcında') */
+    #head em { letter-spacing: 0.01em; }
 
     .col { position: absolute; width: 840px; border-radius: 28px; background: var(--surface); border: 1.5px solid; box-shadow: var(--shadow-2); overflow: hidden; }
     .col.sage { border-color: color-mix(in srgb, var(--shielded) 42%, transparent); }

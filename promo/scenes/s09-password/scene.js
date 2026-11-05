@@ -83,7 +83,7 @@ const sub = sh.rect('password-filled', 'submit');
 sh.cursor(
   [
     { t: 0.1, x: prev.x + prev.w / 2, y: prev.y + prev.h / 2 },
-    { t: T_PW1, x: pw1.x + 120, y: pw1.y + pw1.h / 2, click: true },
+    { t: T_PW1, x: pw1.x + 120, y: pw1.y + pw1.h / 2, click: true, from: 0.5 }, // rests (as in s08's last frame) until the s08 -> s09 dissolve is over, then moves
     { t: T_PW2, x: 700, y: 470, click: true, from: 3.0 }, // inside the second field both before (432-481) and after (460-509) the re-flow
     { t: T_SUBMIT, x: sub.x + sub.w / 2, y: sub.y + sub.h / 2, click: true, from: 6.0 },
   ],

@@ -11,7 +11,7 @@ import { iconSVG } from '/lib/brand.js';
 const T = {
   tr: {
     title: 'ZEC al', // receive.title
-    sub: 'Al ekranı yalnızca gizli bir adres gösterir.', // README Features (Receive shows a shielded-only address)
+    sub: 'Al ekranı varsayılan olarak yeni, yalnızca gizli bir adres gösterir.', // README Features ("Receive shows a new shielded-only unified address every time it opens"); the transparent one is shown separately, on request (button)
     safe: 'Güvenle paylaşabilirsin: kimse bununla paranı\u00a0harcayamaz', // receive.safeToShare
     exch: 'Bu adrese gelen para herkese\u00a0açıktır', // receive.transparentHelp, sentence 2 (the plate's paragraph already says who it is for)
     fresh: 'Her açışta yeni adres. Eskileri de çalışır.', // receive.freshNote (shortened)
@@ -23,7 +23,7 @@ const T = {
   },
   en: {
     title: 'Receive ZEC', // receive.title
-    sub: 'Receive shows a shielded-only address.', // README Features
+    sub: 'Receive shows a new, shielded-only address by default.', // README Features; the transparent one is shown separately, on request (button)
     safe: 'Safe to share: nobody can spend your funds with\u00a0it', // receive.safeToShare
     exch: 'Funds sent here are\u00a0public', // receive.transparentHelp, sentence 2 (the plate's paragraph already says who it is for)
     fresh: 'A new address every time. Earlier ones keep working.', // receive.freshNote (shortened)
@@ -136,7 +136,7 @@ panelNote(t.verify, 3.4, { icon: 'info', tone: 'sage' });
 sh.ring(showT, 5.1, 6.3, { pad: 8 });
 // under the QR on the transparent screen, where the "safe" callout stood (sage -> copper): only the part the plate
 // does not already shout, and only once the transparent plate is fully in (6.05 + 0.12)
-callout({ x: qr.x - 22, y: qrT.y + qrT.h + 26, w: 312, text: t.exch, icon: 'eye', tone: 'copper', t0: 6.3, t1: 9.3 });
+callout({ x: qr.x - 22, y: qrT.y + qrT.h + 26, w: 312, text: t.exch, icon: 'eye', tone: 'copper', t0: 6.2, t1: 9.4 }); // 3.2 s on screen: reading time of the statement
 // a calm beat on the transparent address itself (it fills the 6.4-9 s stretch that was only a cursor drift)
 sh.ring(addrT, 7.0, 8.6, { pad: 10 });
 

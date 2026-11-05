@@ -24,8 +24,8 @@ const T = {
     seesH: 'Sunucunun gördükleri',                                         // landing tr: sees_h
     sees: [                                                                // landing tr: sees
       'IP adresin, şeffaf adreslerin ve yayınladığın işlemler',
-      'Geçmiş işlemlerin tamamını getirdiği sürece hangi işlemlerin senin olduğu <span class="m">(bunu kapatabilirsin)</span>',
-      'Hangi blokları göreceğine o karar verir: güvendiğin sunucuyu kullan',
+      'Geçmiş için işlemlerin tamamı getirildiği sürece hangi işlemlerin senin olduğu <span class="m">(bunu kapatabilirsin)</span>', // tr.ts: home.serverSeesHistory ('Geçmiş için işlemlerin tamamı getirildiğinden hangi işlemlerin senin olduğunu da bilir'), shortened to fit 2 lines; landing tr: sees[1]
+      'Celari’nin hangi blokları göreceğine o karar verir: güvendiğin sunucuyu kullan', // landing tr: sees[2]
     ],
     flowLead: 'Her ödeme <em>tarayıcında</em> kanıtlanan bir PCZT’dir.',     // landing tr: flow_note ('Her ödeme tarayıcında kanıtlanan bir PCZT’dir.'); README.md:67
     flow: [['Oluştur', 'Notlarından bir PCZT'], ['İmzala', 'Şifrenle'], ['Kanıtla', 'Tarayıcında'], ['Yayınla', 'Sunucun üzerinden']], // landing tr: flow (the server only appears at step 4, and in the copper column)
@@ -160,7 +160,7 @@ const MOVE = [3.7, 4.9];
 s.track($('diagram'), {
   scale: [[0, 1.3], [MOVE[0], 1.3], [MOVE[1], 1, 'inOut']],
   y: [[0, 250], [MOVE[0], 250], [MOVE[1], 0, 'inOut']],
-  opacity: [[0, 1], [10.0, 1], [10.5, 0, 'inOut']],       // fully gone at 10.5: the lead line (10.7) never meets the fading diagram
+  opacity: [[0, 1], [9.6, 1], [10.1, 0, 'inOut']],        // fully gone at 10.1: the lead line (10.2) never meets the fading diagram
 }, { origin: `960px ${NYC}px` });
 s.track($('nL'), { opacity: [[1.0, 0], [1.6, 1, 'out']], y: [[1.0, 28], [1.8, 0, 'out']] });
 s.track($('nR'), { opacity: [[1.25, 0], [1.85, 1, 'out']], y: [[1.25, 28], [2.05, 0, 'out']] });
@@ -199,9 +199,9 @@ column('colR', 'rR', 'kR', MOVE[1]);
 column('colL', 'rL', 'kL', MOVE[1] + 1.4);   // copper follows 1.4 s after sage: both are complete well before the diagram leaves
 
 // ---- the pipeline: the diagram steps aside, the life of a payment takes its place; the steps light up one by one
-s.track($('plead'), { opacity: [[10.7, 0], [11.4, 1, 'out']], y: [[10.7, 16], [11.5, 0, 'out']] });
+s.track($('plead'), { opacity: [[10.2, 0], [10.9, 1, 'out']], y: [[10.2, 16], [11.0, 0, 'out']] });
 t.flow.forEach((_, i) => {
-  const st = $('st' + i), a = 11.0 + i * 0.28, g = 11.9 + i * 0.5, gn = g + 0.5;   // gn: when the next step takes over
+  const st = $('st' + i), a = 10.5 + i * 0.28, g = 11.2 + i * 0.7, gn = g + 0.7;   // gn: when the next step takes over (each step is lit for 0.7 s; the last one is lit by 13.65, so the final hold is calm for ~1.6 s)
   s.track(st, { opacity: [[a, 0], [a + 0.5, 1, 'out']], y: [[a, 22], [a + 0.6, 0, 'out']] });
   s.track(st.querySelector('.dn'), { opacity: [[g, 0], [g + 0.35, 1, 'out']] });   // neutral outline: stays once the step has run
   const act = (el, on, off) => s.track(el, i < 3

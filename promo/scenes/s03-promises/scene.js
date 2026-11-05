@@ -17,8 +17,9 @@ const T = {
       { icon: 'shield', h: 'Varsayılan olarak gizli',                 // landing tr: features[0]
         p: 'Şeffaf bakiye tek tıkla gizli (shielded) havuza aktarılır.' },
       { icon: 'eye', h: 'Dürüst etiketler',                          // landing tr: features[3]
-        // landing tr says "..., nedeniyle söyler." (a literal calque of "and why"); reworded here, copy owner: fix landing/build.py:283 too
-        p: 'Her ödeme gizli mi, kısmen gizli mi, herkese açık mı, ve nedenini de söyler.' },
+        // landing tr says "..., nedeniyle söyler." (a literal calque of "and why"); the Turkish here is a smoothed form of the site line
+        // ("... olduğunu ve nedenini söyler", as in the storyboard VO); copy owner: fix landing/build.py:283 too
+        p: 'Her ödeme gizli mi, kısmen gizli mi, herkese açık mı olduğunu ve nedenini söyler.' },
       { icon: 'code', h: 'Açık kaynak',                              // landing tr: lede + ticker (Token yok / Hesap yok / Airdrop yok) + features[5] (MIT / Apache-2.0)
         p: 'Token yok, hesap yok, airdrop vaadi yok.' },
     ],

@@ -8,7 +8,7 @@ import { tutorialShell } from '/lib/layout.js';
 const T = {
   tr: {
     title: 'Gizliye aktar', // shield.title
-    sub: 'Şeffaf bakiye herkese açıktır. Tek tıkla gizli havuza taşı.', // home.transparentHelp ("Zincirde herkese açık"), landing features[0]
+    sub: 'Şeffaf bakiye herkese açıktır. Tek tıkla gizli\u00a0havuza\u00a0taşı.', // home.transparentHelp ("Zincirde herkese açık"), landing features[0]
     n1: 'Hepsi tek işlemde, Ironwood havuzuna', // README Features: One-click shielding ("all of it, in one transaction", in Ironwood); shield.toIronwood
     n2: 'Ücret bu tutardan düşülür', // shield.intro ("Ağ ücreti bu tutardan düşülür"), shield.fee
     n3: 'Bu işlemde tutar ve şeffaf adres zincirde görünür', // shield.intro ("Tutar ve şeffaf adresin zincirde görünür")

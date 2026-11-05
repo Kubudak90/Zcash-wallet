@@ -8,10 +8,10 @@ import { tutorialShell } from '/lib/layout.js';
 const T = {
   tr: {
     title: 'Geçmiş, ayarlar, kilit',
-    sub: 'Gizliliğini görmek ve yönetmek için.',
+    sub: 'Gizliliğini buradan görür ve yönetirsin.', // storyboard (the History labels and the Settings screen)
     n1: 'Tek tıkla ekrandaki bakiyeler ve tutarlar gizlenir', // README Features "Privacy in plain sight" (the eye button hides balances and amounts on screen, not a guarantee); home.hideBalances
-    n2: 'Her ödeme gizli mi, kısmen gizli mi, herkese açık mı, nedenini de söyler', // landing features[3] "Dürüst etiketler" (same claim; the site's "nedeniyle söyler" reworded)
-    n3: 'Kilitle’ye bas ya da bekle: kilit kendiliğinden kapanır', // nav.lock; settings.autoLockHelp; landing features "Kendini kilitler"
+    n2: 'Her ödeme gizli, kısmen gizli ya\u00a0da herkese açık diye etiketlenir', // history.privacy.shielded / partial / transparent (the History rows show the labels only); the idea: landing features[3] "Dürüst etiketler"
+    n3: 'Kilitle’ye bas ya da bekle: cüzdan kendiliğinden kilitlenir', // nav.lock; settings.autoLockHelp; landing features "Kendini kilitler"
     shielding: 'Gizliye aktarıldı · tutar herkese açık', // history.privacy.shielding
     shielded: 'Gizli', // history.privacy.shielded
     autoLock: 'Boşta kalınca kendini kilitler', // settings.autoLock + settings.autoLockHelp
@@ -21,9 +21,9 @@ const T = {
   },
   en: {
     title: 'History, settings, lock',
-    sub: 'To see and manage your privacy.',
+    sub: 'Here you see and manage your privacy.', // storyboard (the History labels and the Settings screen)
     n1: 'One click hides balances and amounts on screen', // README Features "Privacy in plain sight" (an on-screen toggle, not a guarantee); home.hideBalances
-    n2: 'Each payment says whether it is shielded, partly shielded or public, and why', // landing features[3] "Honest labels"
+    n2: 'Each payment is labelled shielded, partly shielded or public', // history.privacy.shielded / partial / transparent (the History rows show the labels only); the idea: landing features[3] "Honest labels"
     n3: 'Press Lock, or just wait: it locks itself', // nav.lock; settings.autoLockHelp; landing features "Locks itself"
     shielding: 'Shielded · amount public', // history.privacy.shielding
     shielded: 'Shielded', // history.privacy.shielded
@@ -36,7 +36,7 @@ const T = {
 const t = pick(T);
 
 const P = await loadPlates('desktop');
-const s = new Scene({ duration: 16.3 });
+const s = new Scene({ duration: 17.3 });
 const sh = tutorialShell(s, document.getElementById('stage'), { P, step: 8, total: 8, title: t.title, sub: t.sub });
 const R = (name, key) => sh.rect(name, key);
 const mid = (r) => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
@@ -46,8 +46,8 @@ const K = sh.WIN.scale; // plate px -> window px
 const T_EYE = 1.45; // click the "hide balances" switch
 const T_HIST = 3.1; // click History
 const T_SET = 6.75; // click Settings
-const SC0 = 10.3, SC1 = 11.1; // the page scrolls from the top of Settings to Privacy / Server
-const T_LOCK = 13.75; // click Lock
+const SC0 = 11.3, SC1 = 12.1; // the page scrolls from the top of Settings to Privacy / Server
+const T_LOCK = 14.75; // click Lock
 const SCROLL = 560; // px the settings page is scrolled in the `settings-privacy` plate (plates.json: scrollY)
 
 // ---- plate layers (explicit z: the cursor is 50, overlays are above everything) ------------------------
@@ -144,8 +144,9 @@ const grp = document.createElement('div');
 grp.className = 'abs';
 sh.overlays.append(grp);
 s.track(grp, { y: [[0, 0], [SC0, 0], [SC1, -SCROLL * K, 'inOut']] });
-// Each callout sits in free space next to its ring, never on the setting's own title or help text (plate px, measured on the plates):
-//  autoLock   above-left of the dropdown, in the empty middle of the "Dil" row (right edge left of the language switch)
+// Each callout sits right next to its ring (plate px, measured on the plates), never on a setting's title:
+//  autoLock   directly left of the dropdown (its right edge 18 px from the ring), on the row's own help text, which it restates in
+//             short (that text is what this callout explains); it is NOT up in the "Dil" row, where it read as a note on the language switch
 //  viewingKey above the button, in the gap between the Genel and Güvenlik cards (two lines)
 //  seed       below the button, in the gap under the Güvenlik card
 const zx = (x) => x * K, zy = (y) => (sh.WIN.bar + y) * K;
@@ -153,6 +154,8 @@ function tag(rect, text, t0, t1, host, at) {
   const ring = sh.ring(rect, t0, t1, { pad: 8 });
   const call = wide(sh.callout(rect, text, t0 + 0.12, t1, { side: 'above', maxWidth: at.maxWidth ?? 560 }));
   call.style.padding = at.pad ?? '16px 24px 16px 22px';
+  if (at.lineHeight) call.style.lineHeight = String(at.lineHeight);
+  if (at.width) call.style.width = `${zx(at.width)}px`; // a fixed width (the card is a banner over the row's help text)
   call.style.textWrap = 'balance';
   // anchored by its right edge and by its top or bottom edge, at the given plate position
   call.style.left = `${zx(at.right)}px`;
@@ -164,33 +167,33 @@ function tag(rect, text, t0, t1, host, at) {
   return call;
 }
 const TAG_END = SC0; // all three leave just before the scroll
-tag(autoLock, t.autoLock, 7.2, TAG_END, grp, { right: 1038, bottom: 226 });
-tag(viewingKey, t.viewingKey, 7.35, TAG_END, grp, { right: 1207, bottom: 399, maxWidth: 500, pad: '12px 22px' });
+tag(autoLock, t.autoLock, 7.2, TAG_END, grp, { right: 1004, top: 259, width: 459, pad: '6px 22px' });
+tag(viewingKey, t.viewingKey, 7.35, TAG_END, grp, { right: 1207, bottom: 404, maxWidth: 500, pad: '8px 22px', lineHeight: 1.3 });
 tag(seed, t.seed, 7.5, TAG_END, grp, { right: 1207, top: 600 });
 // server: after the scroll, on the `settings-privacy` page
-sh.ring(server, 11.0, 13.8, { pad: 8 });
+sh.ring(server, 12.0, 14.8, { pad: 8 });
 // (hangs under the field, right-aligned, over the "Reset / Save" buttons, in the free band above the long explanation)
-const srvCall = wide(sh.callout({ x: server.x + server.w + 24, y: server.y + 92, w: 0, h: 0 }, t.server, 11.15, 13.8, { side: 'left', maxWidth: 700 }));
+const srvCall = wide(sh.callout({ x: server.x + server.w + 24, y: server.y + 92, w: 0, h: 0 }, t.server, 12.15, 14.8, { side: 'left', maxWidth: 700 }));
 srvCall.style.padding = '10px 22px';
-s.track(srvCall, { opacity: [[11.15, 0], [11.55, 1], [13.6, 1], [13.8, 0]] });
+s.track(srvCall, { opacity: [[12.15, 0], [12.55, 1], [14.6, 1], [14.8, 0]] });
 
 // ---- notes ------------------------------------------------------------------------------------------------------
 const bal = (x) => `<span style="display:block;text-wrap:balance">${x}</span>`;
 sh.note(bal(t.n1), 1.8, { icon: 'eyeOff', tone: 'gold' });
 sh.note(bal(t.n2), 4.3, { icon: 'eye', tone: 'sage' });
-sh.note(bal(t.n3), 12.3, { icon: 'lock', tone: 'gold' });
+sh.note(bal(t.n3), 13.3, { icon: 'lock', tone: 'gold' });
 
 // ---- eye ring, lock ring and the cursor ------------------------------------------------------------------------------
 sh.ring(eye, 0.6, 2.2, { pad: 8 });
-sh.ring(lockBtn, 13.1, 14.0, { pad: 8 });
+sh.ring(lockBtn, 14.1, 15.0, { pad: 8 });
 const cEye = mid(eye), cHist = mid(nav.hist), cSet = mid(nav.set), cLock = mid(lockBtn);
 sh.cursor([
   { t: 0.8, x: 620, y: 340 },
   { t: T_EYE, x: cEye.x, y: cEye.y, click: true },
   { from: 2.5, t: T_HIST, x: cHist.x, y: cHist.y, click: true },
   { from: 6.2, t: T_SET, x: cSet.x, y: cSet.y, click: true },
-  { from: 13.0, t: T_LOCK, x: cLock.x, y: cLock.y, click: true },
-], { leave: 14.0 });
+  { from: 14.0, t: T_LOCK, x: cLock.x, y: cLock.y, click: true },
+], { leave: 15.0 });
 
 // ---- camera ---------------------------------------------------------------------------------------------------------------
 const EH = { x: 300, y: 180, w: 930, h: 540 }; // the same frame (and fill) s12 ends on, on the same plate: the dissolve between the two scenes shows one screen
@@ -210,9 +213,10 @@ sh.camera([
   { t: 6.6, rect: null },
   { t: 7.0, rect: null },
   { t: 7.8, rect: S, fill: 0.97 },
-  { t: 12.9, rect: S, fill: 0.97 },
-  { t: 13.5, rect: null },
-  { t: 14.1, rect: null },
-  { t: 15.0, rect: U, fill: 0.8 },
+  { t: 11.2, rect: S, fill: 0.985 }, // a very slow push over the reading hold (the beat would otherwise be static for ~3 s)
+  { t: 13.9, rect: S, fill: 0.985 },
+  { t: 14.5, rect: null },
+  { t: 15.1, rect: null },
+  { t: 16.0, rect: U, fill: 0.8 },
 ]);
 await s.start();

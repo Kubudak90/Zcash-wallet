@@ -1,5 +1,5 @@
 // s05-bumper: the chapter card that opens the how-to act. Free-form (template: _template-promo).
-// Beats: the lockup, title and sub stand composed from the first frame (the first 0.5 s is cross-dissolved with s04); a large,
+// Beats: the lockup, title and sub come up at 0.4-0.9 s (s04's text sits at the same coordinates, so the cross-dissolve shows only s04 until it is nearly over); a large,
 // faint engraved C behind them is already mostly drawn at t=0 and finishes; after 0.5 s the numbered card arrives and its eight
 // steps stagger in 0.15 s apart; the numerals light up one by one; a chip says the screens are the real interface with demo data.
 import { Scene, pick } from '/lib/stage.js';
@@ -55,7 +55,8 @@ stage.innerHTML = `
   </div>
   <div class="vignette"></div><div class="grain" id="grain"></div>`;
 const $ = (id) => document.getElementById(id);
-const s = new Scene({ duration: 5 });
+const D = 5;                       // scene duration
+const s = new Scene({ duration: D });
 
 // the engraved C: already mostly drawn at t=0 (negative start times), it finishes while the dissolve from s04 ends; the facet
 // lights after the dissolve; a slow drift to the end
@@ -64,8 +65,17 @@ document.querySelectorAll('.ec-echo').forEach((p) => s.track(p, { draw: [[-0.3 +
 s.track(document.querySelector('.ec-facet'), { draw: [[0.7, 0], [1.6, 1, 'out']] });
 s.track($('motif'), { x: [[0, 36], [5, -14, 'linear']], scale: [[0, 1.0], [5, 1.035, 'linear']] });
 
-// lockup, title and sub are composed from the first frame (no entrance): the card follows once the dissolve is over
-s.track($('card'), { opacity: [[0.5, 0], [1.0, 1]], y: [[0.5, 26], [1.25, 0, 'out']] });
+// lockup, title and sub sit at the same coordinates as s04's text, so they stay at 0 until the dissolve from s04 is nearly over (0.4 s;
+// s04's end frame stays alone there, then they come up on the faint C + echo field in a 0.5 s rise); the card follows at 0.5 s.
+// At the end they leave EARLIER than the card and the chip (4.2 -> 4.6 s): they sit over s06's window headline and logo, which show
+// through the 4.5-4.9 s dissolve, while the card and the chip land on s06's empty panel area (the C field and the card stay composed).
+const FADE = [D - 0.5, D - 0.1];   // the card and the chip leave over the last 0.4 s: s06's window and panel arrive under them (the C field stays)
+const TXT_OUT = [D - 0.8, D - 0.4];
+const txt = (el) => s.track(el, { opacity: [[0.4, 0], [0.9, 1, 'out'], [TXT_OUT[0], 1], [TXT_OUT[1], 0, 'linear']] });
+txt($('lock'));   // the lockup leaves too: s06's own window carries the same logo at nearly the same spot
+txt($('h1'));
+txt($('sub'));
+s.track($('card'), { opacity: [[0.5, 0], [1.0, 1], [FADE[0], 1], [FADE[1], 0, 'linear']], y: [[0.5, 26], [1.25, 0, 'out']] });
 document.querySelectorAll('.row-i').forEach((r, i) => {
   const t0 = 0.75 + i * 0.15;
   s.track(r, { opacity: [[t0, 0], [t0 + 0.55, 1]], x: [[t0, 34], [t0 + 0.75, 0, 'out']] });
@@ -74,6 +84,6 @@ document.querySelectorAll('.row-i').forEach((r, i) => {
   const t1 = 2.35 + i * 0.16;
   s.track(n, { opacity: [[0, 0.5], [t1, 0.5], [t1 + 0.45, 1]] });
 });
-s.track($('chip'), { opacity: [[1.7, 0], [2.2, 1]], y: [[1.7, 16], [2.3, 0, 'out']] });
+s.track($('chip'), { opacity: [[1.7, 0], [2.2, 1], [FADE[0], 1], [FADE[1], 0, 'linear']], y: [[1.7, 16], [2.3, 0, 'out']] });
 s.grain($('grain'));
 await s.start();
