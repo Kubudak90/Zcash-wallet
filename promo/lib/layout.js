@@ -19,7 +19,7 @@ import { iconSVG } from '/lib/brand.js';
 
 export const WIN = { x: 48, y: 41, w: 1178, h: 998, scale: 0.92, bar: 44, plateW: 1280, plateH: 1040 };
 const WORDS = { tr: 'Adım', en: 'Step' };
-const DEMO = { tr: 'Ekrandaki bakiyeler, adresler ve kelimeler demo verisidir.', en: 'Balances, addresses and words on screen are demo data.' };
+const DEMO = { tr: 'Ekrandaki bakiyeler, adresler, işlemler ve kelimeler demo verisidir.', en: 'Balances, addresses, transactions and words on screen are demo data.' };
 
 const CURSOR_SVG = `<svg viewBox="0 0 34 40"><path d="M3 2 L3 31 L10.5 24.5 L15.5 36 L20.5 34 L15.6 22.8 L25.5 22.2 Z" fill="#fff" stroke="#111" stroke-width="2" stroke-linejoin="round"/></svg>`;
 
@@ -38,12 +38,15 @@ export function tutorialShell(s, stage, { P, step, total = 8, title, sub = '', f
       </div>
     </div>
     <div id="panel" style="position:absolute;left:1296px;top:0;width:576px;height:1080px;display:flex;flex-direction:column;padding-top:92px">
-      <div id="badge" class="stepbadge"><span class="num">${step}</span><span>${WORDS[lang]} ${step} / ${total}</span></div>
-      <h2 id="title" class="display" style="margin:34px 0 0;font-size:62px">${title}</h2>
-      <p id="sub" class="lede" style="margin:26px 0 0;font-size:29px;line-height:1.45">${sub}</p>
-      <div id="notes" style="margin-top:36px;display:flex;flex-direction:column;gap:16px"></div>
-      <div id="demo" style="position:absolute;left:0;bottom:22px;width:576px;font-size:20px;color:var(--subtle);letter-spacing:.01em">${DEMO[lang]}</div>
-      <div id="rail" style="position:absolute;left:0;bottom:62px;width:576px;display:flex;gap:10px">${Array.from({ length: total }, (_, i) => `<i style="flex:1;height:5px;border-radius:3px;background:${i + 1 < step ? 'rgba(244,183,40,.45)' : i + 1 === step ? 'var(--accent)' : 'var(--border-2)'}"></i>`).join('')}</div>
+      <div id="pbody" style="display:flex;flex-direction:column">
+        <div id="badge" class="stepbadge"><span class="num">${step}</span><span>${WORDS[lang]} ${step} / ${total}</span></div>
+        <h2 id="title" class="display" style="margin:34px 0 0;font-size:62px">${title}</h2>
+        <p id="sub" class="lede" style="margin:26px 0 0;font-size:29px;line-height:1.45">${sub}</p>
+        <div id="notes" style="margin-top:36px;display:flex;flex-direction:column;gap:16px"></div>
+      </div>
+      <!-- the demo-data statement and the rail stay inside the 80 px safe margin (text bottom 1004 px, right edge 1840 px) -->
+      <div id="demo" style="position:absolute;left:0;bottom:76px;width:544px;font-size:22px;line-height:1.35;color:var(--muted);text-wrap:balance">${DEMO[lang]}</div>
+      <div id="rail" style="position:absolute;left:0;bottom:156px;width:544px;display:flex;gap:10px">${Array.from({ length: total }, (_, i) => `<i style="flex:1;height:5px;border-radius:3px;background:${i + 1 < step ? 'rgba(244,183,40,.45)' : i + 1 === step ? 'var(--accent)' : 'var(--border-2)'}"></i>`).join('')}</div>
     </div>
     <div class="vignette"></div><div class="grain" id="grain"></div>`;
   const $ = (id) => stage.querySelector('#' + id);
@@ -55,7 +58,10 @@ export function tutorialShell(s, stage, { P, step, total = 8, title, sub = '', f
     s.track($('winshadow'), { opacity: [[0, 0], [0.7, 1, 'inOut']] });
     s.track($('winclip'), { opacity: [[0, 0], [0.7, 1, 'inOut']], y: [[0, 36], [1.0, 0, 'out']] });
   }
-  const pa = first ? 0.35 : 0.05;
+  // Panel text at a hand-over: the old title/notes fade out inside the last dissolve (0.5 s) and the new ones come in
+  // after its midpoint, so two big titles are never printed over each other. The window itself keeps dissolving.
+  const pa = first ? 0.35 : 0.3;
+  s.track($('pbody'), { opacity: [[s.duration - 0.5, 1], [s.duration - 0.12, 0]] });
   s.track($('badge'), { opacity: [[pa, 0], [pa + 0.45, 1]], y: [[pa, 14], [pa + 0.55, 0, 'out']] });
   s.track($('title'), { opacity: [[pa + 0.1, 0], [pa + 0.6, 1]], y: [[pa + 0.1, 18], [pa + 0.75, 0, 'out']] });
   s.track($('sub'), { opacity: [[pa + 0.25, 0], [pa + 0.75, 1]], y: [[pa + 0.25, 18], [pa + 0.9, 0, 'out']] });

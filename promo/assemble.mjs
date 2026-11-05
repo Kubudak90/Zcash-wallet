@@ -76,14 +76,19 @@ function join_(ids, clips, name) {
   const parts = [];
   let last = '[0:v]';
   for (let i = 1; i < ids.length; i++) {
-    const out = i === ids.length - 1 ? '[v]' : `[x${i}]`;
-    parts.push(`${last}[${i}:v]xfade=transition=fade:duration=${ov[i]}:offset=${starts[i].toFixed(3)}${out}`);
+    const fadeIn = SB.fadeIn?.[name];
+    const out = i === ids.length - 1 ? (fadeIn ? '[vj]' : '[v]') : `[x${i}]`;
+    // a join can name its own xfade transition in storyboard.json "transitions": { "<from>><to>": "fadeblack" }
+    const kind = SB.transitions?.[`${ids[i - 1]}>${ids[i]}`] ?? 'fade';
+    parts.push(`${last}[${i}:v]xfade=transition=${kind}:duration=${ov[i]}:offset=${starts[i].toFixed(3)}${out}`);
     last = out;
   }
   const file = join(OUT, `celari-${name}.${opt.lang}.mp4`);
-  const filter = ids.length === 1 ? '[0:v]null[v]' : parts.join(';');
+  // optional fade-in from black on the first frame of a cut (storyboard.json "fadeIn": { "<cut>": seconds }), for cuts that open on a composed scene
+  const fin = SB.fadeIn?.[name];
+  const filter = ids.length === 1 ? (fin ? `[0:v]fade=t=in:st=0:d=${fin}[v]` : '[0:v]null[v]') : parts.join(';') + (fin ? `;[vj]fade=t=in:st=0:d=${fin}[v]` : '');
   run('ffmpeg', ['-y', '-loglevel', 'error', ...inputs, '-filter_complex', filter, '-map', '[v]', '-c:v', 'libx264', '-preset', 'slow', '-crf', '16',
-    '-profile:v', 'high', '-pix_fmt', 'yuv420p', '-x264-params', 'aq-mode=3:aq-strength=0.9', '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709',
+    '-profile:v', 'high', '-level', '4.1', '-pix_fmt', 'yuv420p', '-x264-params', 'aq-mode=3:aq-strength=0.9:keyint=60:min-keyint=30', '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709',
     '-r', String(SB.fps), '-movflags', '+faststart', file]);
   // narration script on the timeline: one cue per scene, inside its own (non-overlapped) part
   const cues = ids.map((id, i) => {
@@ -92,6 +97,9 @@ function join_(ids, clips, name) {
     return `${i + 1}\n${srtTime(a)} --> ${srtTime(b)}\n${sceneById[id].vo[opt.lang]}\n`;
   });
   writeFileSync(join(OUT, `celari-${name}.${opt.lang}.vo.srt`), cues.join('\n'));
+  // poster frame (a settled moment; storyboard.json "posters": { "<cut>": seconds }) for players and uploads that need a thumbnail
+  const pt = SB.posters?.[name];
+  if (pt != null) run('ffmpeg', ['-y', '-loglevel', 'error', '-ss', String(pt), '-i', file, '-frames:v', '1', '-q:v', '2', join(OUT, `celari-${name}.${opt.lang}.poster.jpg`)]);
   console.log(`\n${name}.${opt.lang}: ${total.toFixed(1)} s, ${ids.length} scenes -> ${file}`);
   return { file, total, starts, durs };
 }
