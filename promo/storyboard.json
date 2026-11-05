@@ -4,7 +4,7 @@
   "defaultOverlap": 0.5,
   "transitions": { "s04-how>s14-phone": "fadeblack" },
   "fadeIn": { "tutorial": 0.4 },
-  "posters": { "full": 6.9, "promo": 6.9, "tutorial": 12.5 },
+  "posters": { "full": 6.9, "promo": 6.9, "tutorial": 3.4 },
   "cuts": {
     "full": ["s01-open","s02-default","s03-promises","s04-how","s05-bumper","s06-open-wallet","s07-recovery","s08-verify","s09-password","s10-receive","s11-send","s12-shield","s13-history-settings","s14-phone","s15-closing"],
     "promo": ["s01-open","s02-default","s03-promises","s04-how","s14-phone","s15-closing"],
