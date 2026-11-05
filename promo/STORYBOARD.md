@@ -102,7 +102,7 @@ Plates: `password` -> `password-filled` -> `home`. Type the password (dots appea
 Notes: TR `Unutursan kurtarma kelimelerinle yeniden yüklersin` EN `If you forget it, restore from your recovery phrase` (password.intro) · TR `Her harcamada şifren sorulur` EN `Your password is asked on every spend` (landing features[1]).
 End on `home` with a ring around `home.total`.
 
-### s10-receive (12 s) · step 5
+### s10-receive (14.7 s) · step 5
 Title TR `ZEC al` EN `Receive ZEC`. Sub TR `Al ekranı varsayılan olarak yeni, yalnızca gizli bir adres gösterir.` EN `Receive shows a new, shielded-only address by default.`
 Plates: `home` -> `receive` -> `receive-transparent` -> `receive-second` (the second is the same screen opened again: a new address). Cursor clicks `home.navReceive`;
 ring on `receive.address` and the QR; callout TR `Güvenle paylaşabilirsin: kimse bununla paranı harcayamaz` EN `Safe to share: nobody can spend your money with it` (receive.safeToShare);
@@ -127,12 +127,12 @@ Plates: `home-after-send` -> `shield-confirm` -> `shield-confirm-filled` -> `shi
 Beats: ring on `home-after-send.transparent` and the notice (`notice`), click `shieldButton`; the confirm screen: ring `form` (Kaynak: Şeffaf bakiye → Hedef: Gizli bakiye · Ironwood), type password, click `confirm`; success; end on `home-final` where `transparent` shows 0,00 and the bar is all sage.
 Notes: TR `Hepsi tek işlemde, Ironwood havuzuna` EN `All of it, in one transaction, into the Ironwood pool` (README) · TR `Ücret bu tutardan düşülür` EN `The fee comes out of that amount` (shield.intro) · TR `Bu işlemde tutar ve şeffaf adres zincirde görünür` EN `In this transaction the amount and the transparent address are visible on chain` (shield.intro; honesty note, copper tone).
 
-### s13-history-settings (17.3 s) · step 8
+### s13-history-settings (17.8 s) · step 8
 Title TR `Geçmiş, ayarlar, kilit` EN `History, settings, lock`. Sub TR `Gizliliğini buradan görür ve yönetirsin.` EN `Here you see and manage your privacy.`
 Plates: `home` -> `home-hidden` -> `history` -> `settings` -> `settings-privacy` -> `settings-bottom` -> `unlock` (all `desktop`).
 Beats: (1) cursor clicks `home.eye` (TR `Bakiyeleri gizle`): amounts turn to dots (`home-hidden`), note TR `Göz düğmesi bakiyeleri ve tutarları gizler` EN `The eye button hides balances and amounts`. (2) click `navHistory`: ring on the three rows' privacy column; callouts for the real labels
 TR `Gizli` · `Gizliye aktarıldı · tutar herkese açık` · `Şeffaf · herkese açık` EN `Shielded` · `Shielded · amount public` · `Transparent · public` (history.privacy.*); read what the three rows actually say in the plate and match them.
-(3) click `navSettings`: scroll to Privacy/Server: ring `autoLock` (TR `Boşta kalınca kendini kilitler` EN `Locks itself when idle`), `server` (TR `İstersen kendi sunucunu kullan` EN `Use your own server if you like`), `viewingKey` (TR `Görüntüleme anahtarı: harcayamaz, sadece izler` EN `Viewing key: can watch, cannot spend`), `seed` (TR `Kurtarma kelimeleri şifreyle açılır` EN `The recovery phrase opens only with your password`).
+(3) click `navSettings`: scroll to Privacy/Server: ring `autoLock` (TR `Boşta kalınca kendini kilitler` EN `Locks itself when idle`), `server` (TR `İstersen kendi sunucunu kullan` EN `Use your own server if you like`), `viewingKey` (TR `Görüntüleme anahtarı: görür, harcayamaz` EN `Viewing key: can watch, cannot spend`), `seed` (TR `Kurtarma kelimeleri şifreyle açılır` EN `The recovery phrase opens only with your password`).
 (4) click `lock`: `unlock` plate, title TR `Cüzdanın kilitli` stays as the last frame; note TR `Kilitle’ye bas ya da bekle: cüzdan kendiliğinden kilitlenir` EN `Press Lock, or just wait: it locks itself`. The second panel note now reads TR `Her ödeme gizli, kısmen gizli ya da herkese açık diye etiketlenir` EN `Each payment is labelled shielded, partly shielded or public` (the History rows show labels, not reasons).
 Plates `settings-privacy` and `settings-bottom` are scrolled screenshots: crossfade or slide between them like a scroll.
 

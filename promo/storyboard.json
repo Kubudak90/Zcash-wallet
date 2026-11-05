@@ -38,7 +38,7 @@
     { "id": "s09-password", "act": "tutorial", "target": 11, "vo": {
       "tr": "Bir şifre belirle. Şifre cüzdanı bu tarayıcıda kilitler ve her harcamada sorulur. Unutursan kurtarma kelimelerinle yeniden yüklersin.",
       "en": "Set a password. It locks the wallet in this browser and is asked on every spend. If you forget it, you restore from your recovery phrase." } },
-    { "id": "s10-receive", "act": "tutorial", "target": 12, "vo": {
+    { "id": "s10-receive", "act": "tutorial", "target": 14.7, "vo": {
       "tr": "Al ekranı varsayılan olarak yalnızca gizli bir adres gösterir ve her açışında yenisini verir; eskileri de çalışmaya devam eder. Şeffaf adres sadece birleşik adresi desteklemeyen borsalar için.",
       "en": "Receive shows a shielded-only address by default and gives you a new one every time; earlier ones keep working. The transparent address is only for exchanges that do not support unified addresses." } },
     { "id": "s11-send", "act": "tutorial", "target": 17, "vo": {
@@ -47,7 +47,7 @@
     { "id": "s12-shield", "act": "tutorial", "target": 11, "vo": {
       "tr": "Şeffaf bakiyen varsa Celari bunu gösterir. “Gizliye aktar” hepsini tek işlemde gizli havuza taşır. Bu işlemde tutar ve şeffaf adres zincirde görünür.",
       "en": "If you have a transparent balance, Celari points it out. “Shield funds” moves all of it into the shielded pool in one transaction. In that transaction the amount and the transparent address are visible on chain." } },
-    { "id": "s13-history-settings", "act": "tutorial", "target": 17.3, "vo": {
+    { "id": "s13-history-settings", "act": "tutorial", "target": 17.8, "vo": {
       "tr": "Geçmiş’te ödemelerin gizlilik etiketini görürsün. Göz düğmesi bakiyeleri gizler. Ayarlar’da otomatik kilidi, sunucuyu ve görüntüleme anahtarını yönetirsin. Kilitle’ye basınca cüzdan şifreyle kapanır.",
       "en": "History labels how private each payment is. The eye button hides balances. In Settings you manage auto-lock, the server and the viewing key. Press Lock and the wallet closes behind your password." } },
     { "id": "s14-phone", "act": "closing", "target": 7, "vo": {

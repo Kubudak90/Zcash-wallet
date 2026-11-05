@@ -36,9 +36,9 @@ Output (`promo/out/`, git-ignored; rebuild with `assemble.mjs`), 1920x1080, 30 f
 
 | cut | length | scenes |
 | --- | --- | --- |
-| `celari-full.<lang>.mp4` | about 2:41 | s01-s15 |
+| `celari-full.<lang>.mp4` | about 2:43 | s01-s15 |
 | `celari-promo.<lang>.mp4` | about 1:02 | s01-s04, s14, s15 |
-| `celari-tutorial.<lang>.mp4` | about 1:49 | s05-s13, s15 (0.4 s fade-in from black) |
+| `celari-tutorial.<lang>.mp4` | about 1:51 | s05-s13, s15 (0.4 s fade-in from black) |
 
 `celari-<cut>.<lang>.poster.jpg` is a settled frame to use as the player poster / thumbnail (times in `storyboard.json` `posters`).
 `storyboard.json` also holds per-join transitions (`transitions`, e.g. the promo cut dips through black between s04 and s14)
