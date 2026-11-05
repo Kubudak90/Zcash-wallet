@@ -2,9 +2,9 @@
   "fps": 30,
   "size": [1920, 1080],
   "defaultOverlap": 0.5,
-  "transitions": { "s04-how>s14-phone": "fadeblack" },
+  "transitions": {},
   "fadeIn": { "tutorial": 0.4 },
-  "posters": { "full": 6.9, "promo": 6.9, "tutorial": 3.4 },
+  "posters": { "full": 6.9, "promo": 6.9, "tutorial": 4.0 },
   "cuts": {
     "full": ["s01-open","s02-default","s03-promises","s04-how","s05-bumper","s06-open-wallet","s07-recovery","s08-verify","s09-password","s10-receive","s11-send","s12-shield","s13-history-settings","s14-phone","s15-closing"],
     "promo": ["s01-open","s02-default","s03-promises","s04-how","s14-phone","s15-closing"],
@@ -15,8 +15,8 @@
       "tr": "Celari: Zcash için açık kaynak, gizlilik öncelikli bir tarayıcı cüzdanı. Adı Latince “celare”den gelir: gizlemek.",
       "en": "Celari is an open-source, privacy-first Zcash wallet that runs in your browser. Its name comes from the Latin “celare”: to hide." } },
     { "id": "s02-default", "act": "promo", "target": 11.5, "vo": {
-      "tr": "Şeffaf bir adreste her işlem zincirde herkese açıktır. Gizli havuzda ise tutar ve taraflar zincirde görünmez. Celari gizli olanı varsayılan yapar: Al ekranı her açılışta yeni, yalnızca gizli bir adres gösterir.",
-      "en": "On a transparent address, every transaction is public on the chain. In the shielded pool, amounts and parties are not visible on chain. Celari makes shielded the default: Receive shows a new, shielded-only address every time you open it." } },
+      "tr": "Şeffaf bir adreste her işlem zincirde herkese açıktır. Gizli havuzda ise, bir havuzdan diğerine geçen değer dışında, tutar ve taraflar zincirde görünmez. Celari gizli olanı varsayılan yapar: Al ekranı her açılışta yeni, yalnızca gizli bir adres gösterir.",
+      "en": "On a transparent address, every transaction is public on the chain. In the shielded pool, apart from value that crosses between pools, amounts and parties are not visible on chain. Celari makes shielded the default: Receive shows a new, shielded-only address every time you open it." } },
     { "id": "s03-promises", "act": "promo", "target": 13, "vo": {
       "tr": "Anahtarların cihazında, şifreli kalır. Her ödeme gizli mi, kısmen gizli mi, herkese açık mı olduğunu ve nedenini söyler. Hepsi açık kaynak: token yok, hesap yok, airdrop vaadi yok.",
       "en": "Your keys stay on your device, encrypted. Every payment says whether it is shielded, partly shielded or public, and why. Everything is open source: no token, no account, no airdrop promises." } },

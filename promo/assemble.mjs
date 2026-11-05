@@ -97,9 +97,9 @@ function join_(ids, clips, name) {
     return `${i + 1}\n${srtTime(a)} --> ${srtTime(b)}\n${sceneById[id].vo[opt.lang]}\n`;
   });
   writeFileSync(join(OUT, `celari-${name}.${opt.lang}.vo.srt`), cues.join('\n'));
-  // poster frame (a settled moment; storyboard.json "posters": { "<cut>": seconds }) for players and uploads that need a thumbnail
+  // poster frame (JPEG decoders assume BT.601, so convert the bt709 tv-range frame accordingly; a settled moment; storyboard.json "posters": { "<cut>": seconds }) for players and uploads that need a thumbnail
   const pt = SB.posters?.[name];
-  if (pt != null) run('ffmpeg', ['-y', '-loglevel', 'error', '-ss', String(pt), '-i', file, '-frames:v', '1', '-q:v', '2', join(OUT, `celari-${name}.${opt.lang}.poster.jpg`)]);
+  if (pt != null) run('ffmpeg', ['-y', '-loglevel', 'error', '-ss', String(pt), '-i', file, '-frames:v', '1', '-vf', 'scale=in_range=tv:in_color_matrix=bt709:out_range=pc:out_color_matrix=bt601,format=yuvj420p', '-q:v', '2', join(OUT, `celari-${name}.${opt.lang}.poster.jpg`)]);
   console.log(`\n${name}.${opt.lang}: ${total.toFixed(1)} s, ${ids.length} scenes -> ${file}`);
   return { file, total, starts, durs };
 }
